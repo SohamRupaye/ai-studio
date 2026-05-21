@@ -1,0 +1,34 @@
+{
+  "name": "ai-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Studio - Graph-based AI orchestration desktop platform",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "yarn@4.1.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tooling/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "desktop:dev": "yarn workspace @ai-studio/desktop dev",
+    "desktop:build": "yarn workspace @ai-studio/desktop build",
+    "desktop:package": "yarn workspace @ai-studio/desktop package",
+    "desktop:make": "yarn workspace @ai-studio/desktop make",
+    "db:generate": "yarn workspace @ai-studio/database generate",
+    "db:migrate": "yarn workspace @ai-studio/database migrate"
+  },
+  "devDependencies": {
+    "turbo": "2.3.3",
+    "typescript": "5.7.2"
+  }
+}
