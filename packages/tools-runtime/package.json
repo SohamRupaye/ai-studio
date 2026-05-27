@@ -1,0 +1,47 @@
+{
+  "name": "@ai-studio/tools-runtime",
+  "version": "0.2.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
+    },
+    "./lsp": {
+      "import": "./dist/lsp/index.js",
+      "types": "./dist/lsp/index.d.ts"
+    },
+    "./acp": {
+      "import": "./dist/acp/index.js",
+      "types": "./dist/acp/index.d.ts"
+    },
+    "./skills": {
+      "import": "./dist/skills/index.js",
+      "types": "./dist/skills/index.d.ts"
+    },
+    "./registry": {
+      "import": "./dist/registry.js",
+      "types": "./dist/registry.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ai-studio/providers": "workspace:*",
+    "@ai-studio/shared": "workspace:*",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "5.7.2"
+  }
+}
