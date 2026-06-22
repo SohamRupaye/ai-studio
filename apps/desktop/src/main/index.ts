@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import liquidGlass from "electron-liquid-glass";
 import { Store, GlobalMemory } from "@ai-studio/database";
 import { Router, getConfig, loadConfig } from "@ai-studio/providers";
 import { Agent, CostTracker, createRuntime, classifyAndIndex, loadPending, resumeQueue, loadNodeCounter, extractAndPersistArtifacts, runAgentCooperative } from "@ai-studio/ai-core";
@@ -34,11 +35,13 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280, height: 800, minWidth: 800, minHeight: 600,
     titleBarStyle: "hiddenInset",
+    transparent: true,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true, nodeIntegration: false, sandbox: false,
     },
   });
+  mainWindow.setWindowButtonVisibility(true);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -46,6 +49,14 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
+  mainWindow.webContents.once("did-finish-load", () => {
+    if (mainWindow) {
+      liquidGlass.addView(mainWindow.getNativeWindowHandle(), {
+        cornerRadius: 12,
+        tintColor: "#00000008",
+      });
+    }
+  });
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 

@@ -12,7 +12,8 @@
     "publish": "electron-forge publish",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "clean": "rm -rf dist .vite out"
+    "clean": "rm -rf dist .vite out",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-studio/ai-core": "workspace:*",
@@ -29,6 +30,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-liquid-glass": "1.1.1",
     "electron-squirrel-startup": "1.0.1",
     "lucide-react": "^1.17.0",
     "react": "19.0.0",
@@ -51,6 +53,7 @@
     "@vitejs/plugin-react": "4.3.4",
     "electron": "33.2.1",
     "typescript": "5.7.2",
-    "vite": "6.0.7"
+    "vite": "6.0.7",
+    "vitest": "^3.2.0"
   }
 }
