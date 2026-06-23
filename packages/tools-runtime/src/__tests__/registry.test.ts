@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ToolRegistry, ValidationError } from "../registry.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { ToolRegistry } from "../registry.js";
 import type { ToolContext, ToolDefinition, ToolResult, ToolFilterContext } from "../registry.js";
 
 // ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ describe("ToolRegistry", () => {
   it("legacy {name,...} registration works: has(name) is true", () => {
     registry.register(
       { name: "legacy", description: "Legacy tool", parameters: { type: "object", properties: {}, required: [] } },
-      async (_args) => "done",
+      async (_args: Record<string, unknown>) => "done",
     );
     expect(registry.has("legacy")).toBe(true);
   });
