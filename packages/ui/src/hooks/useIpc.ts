@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import type { IpcEventChannel, IpcEventPayload } from "@ai-studio/event-bus";
 
 /**
@@ -17,6 +17,5 @@ export function useIpcEvent<C extends IpcEventChannel>(
   useEffect(() => {
     const off = window.ipc.on(channel, handler);
     return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel, ...deps]);
 }
