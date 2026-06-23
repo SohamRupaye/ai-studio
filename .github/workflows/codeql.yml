@@ -1,8 +1,7 @@
 name: CodeQL
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # manual trigger only until code scanning is enabled in repo settings
   pull_request:
     branches: [main]
   schedule:
