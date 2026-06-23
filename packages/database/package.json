@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "clean": "rm -rf dist",

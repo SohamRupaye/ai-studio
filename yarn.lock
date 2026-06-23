@@ -94,7 +94,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@ai-studio/eslint-config@workspace:tooling/eslint":
+"@ai-studio/eslint-config@workspace:*, @ai-studio/eslint-config@workspace:tooling/eslint":
   version: 0.0.0-use.local
   resolution: "@ai-studio/eslint-config@workspace:tooling/eslint"
   dependencies:
@@ -3272,7 +3272,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "ai-studio@workspace:."
   dependencies:
+    "@ai-studio/eslint-config": "workspace:*"
     "@vitest/coverage-v8": "npm:^3.2.0"
+    eslint: "npm:9.17.0"
     turbo: "npm:2.3.3"
     typescript: "npm:5.7.2"
     vitest: "npm:^3.2.0"
