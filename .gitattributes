@@ -1,0 +1,10 @@
+# Linguist overrides — keep language stats meaningful
+graphify-out/**        linguist-generated=true
+yarn.lock              linguist-generated=true
+*.tsbuildinfo          linguist-generated=true
+apps/desktop/out/**    linguist-generated=true
+apps/desktop/.vite/**  linguist-generated=true
+
+# Normalize line endings
+* text=auto eol=lf
+*.bat text eol=crlf
