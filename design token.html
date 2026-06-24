@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Studio — Design Tokens</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --g:   #0E1018; --s1: #141721; --s2: #191E2F; --s3: #1D2236;
+  --bd:  #222840; --bd2: #2D3560;
+  --t:   #E2E5F0; --t2: #9BA4C0; --tm: #5E6887;
+  --am:  #C9934A; --ams: rgba(201,147,74,.12); --amb: rgba(201,147,74,.28);
+  --in:  #5B6FE0; --ins: rgba(91,111,224,.12);  --inb: rgba(91,111,224,.28);
+  --su:  #44A870; --sus: rgba(68,168,112,.12);
+  --wa:  #E5A030; --was: rgba(229,160,48,.12);
+  --er:  #E55B4D; --ers: rgba(229,91,77,.12);
+  --nav: #0C0F18; --chip-bg: #1D2236; --chip-bd: #2D3560; --chip-t: #9BA4C0;
+  --toggle-bg: #1D2236;
+  --mono: "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --sans: -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+
+  /* Shadows — dark */
+  --shadow-xs:    0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:    0 1px 4px rgba(0,0,0,.40), 0 0 1px rgba(0,0,0,.30);
+  --shadow-md:    0 4px 12px rgba(0,0,0,.50), 0 0 2px rgba(0,0,0,.30);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,.60), 0 0 2px rgba(0,0,0,.30);
+  --shadow-xl:    0 16px 48px rgba(0,0,0,.70), 0 0 4px rgba(0,0,0,.20);
+  --shadow-float: 0 2px 8px rgba(0,0,0,.50), 0 1px 3px rgba(0,0,0,.30);
+
+  /* Motion — mode-agnostic */
+  --dur-instant: 50ms; --dur-fast: 100ms; --dur-base: 200ms;
+  --dur-slow: 300ms; --dur-slower: 500ms;
+  --ease-std:    cubic-bezier(0.2,0,0,1);
+  --ease-decel:  cubic-bezier(0,0,0,1);
+  --ease-accel:  cubic-bezier(0.3,0,1,1);
+  --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
+
+  /* Z-index — mode-agnostic */
+  --z-base: 0; --z-raised: 1; --z-dropdown: 10; --z-sticky: 20;
+  --z-overlay: 30; --z-modal: 40; --z-toast: 50; --z-tooltip: 60;
+
+  /* Data viz — dark */
+  --viz1: hsl(229,65%,62%); --viz2: hsl(33,55%,54%);  --viz3: hsl(145,42%,47%);
+  --viz4: hsl(270,60%,68%); --viz5: hsl(192,65%,55%); --viz6: hsl(4,70%,58%);
+  --viz7: hsl(80,55%,60%);  --viz8: hsl(228,14%,66%);
+  --vs1: hsl(229,32%,20%);  --vs2: hsl(229,46%,34%);  --vs3: hsl(229,58%,48%);
+  --vs4: hsl(229,65%,62%);  --vs5: hsl(229,72%,76%);
+
+  /* Primitive ramp colors — dark visible (same values; no mode difference for primitives) */
+  --ci50: hsl(229,80%,97%); --ci100:hsl(229,70%,94%); --ci200:hsl(229,68%,87%);
+  --ci300:hsl(229,66%,77%); --ci400:hsl(229,65%,68%); --ci500:hsl(229,65%,62%);
+  --ci600:hsl(232,57%,55%); --ci700:hsl(232,60%,44%); --ci800:hsl(232,62%,32%);
+  --ci900:hsl(232,60%,22%); --ci950:hsl(232,58%,13%);
+  --ca50: hsl(33,100%,97%); --ca100:hsl(33,95%,93%);  --ca200:hsl(33,88%,83%);
+  --ca300:hsl(33,78%,72%);  --ca400:hsl(33,65%,62%);  --ca500:hsl(33,55%,54%);
+  --ca600:hsl(33,55%,44%);  --ca700:hsl(33,55%,35%);  --ca800:hsl(33,50%,26%);
+  --ca900:hsl(33,45%,18%);  --ca950:hsl(33,40%,11%);
+  --cs50: hsl(229,20%,96%); --cs100:hsl(228,20%,93%); --cs200:hsl(228,18%,88%);
+  --cs300:hsl(228,16%,80%); --cs400:hsl(228,14%,66%); --cs500:hsl(228,12%,52%);
+  --cs600:hsl(228,16%,38%); --cs700:hsl(227,22%,25%); --cs800:hsl(226,25%,16%);
+  --cs900:hsl(226,26%,10%); --cs950:hsl(226,28%,7%);
+  --cg50: hsl(145,55%,97%); --cg100:hsl(145,52%,92%); --cg200:hsl(145,50%,82%);
+  --cg300:hsl(145,48%,68%); --cg400:hsl(145,45%,56%); --cg500:hsl(145,42%,47%);
+  --cg600:hsl(145,48%,38%); --cg700:hsl(145,52%,29%); --cg800:hsl(145,50%,21%);
+  --cg900:hsl(145,48%,14%); --cg950:hsl(145,45%,8%);
+  --cr50: hsl(4,100%,97%);  --cr100:hsl(4,90%,93%);   --cr200:hsl(4,80%,85%);
+  --cr300:hsl(4,75%,74%);   --cr400:hsl(4,72%,66%);   --cr500:hsl(4,70%,58%);
+  --cr600:hsl(4,72%,50%);   --cr700:hsl(4,70%,40%);   --cr800:hsl(4,65%,30%);
+  --cr900:hsl(4,60%,20%);   --cr950:hsl(4,55%,12%);
+  --cy50: hsl(35,100%,97%); --cy100:hsl(35,95%,92%);  --cy200:hsl(35,90%,82%);
+  --cy300:hsl(35,84%,70%);  --cy400:hsl(35,80%,62%);  --cy500:hsl(35,75%,58%);
+  --cy600:hsl(35,80%,48%);  --cy700:hsl(35,78%,38%);  --cy800:hsl(35,72%,28%);
+  --cy900:hsl(35,65%,19%);  --cy950:hsl(35,60%,12%);
+}
+
+body.light {
+  --g:#F2F3F8; --s1:#FFFFFF; --s2:#E8EAF3; --s3:#DDE0EE;
+  --bd:#CFD3E8; --bd2:#B8BDDA;
+  --t:#16192C; --t2:#4A5270; --tm:#737A96;
+  --am:#A56E2A; --ams:rgba(165,110,42,.1);  --amb:rgba(165,110,42,.25);
+  --in:#4050C4; --ins:rgba(64,80,196,.1);   --inb:rgba(64,80,196,.25);
+  --su:#2D9B5C; --sus:rgba(45,155,92,.1);
+  --wa:#C47A10; --was:rgba(196,122,16,.1);
+  --er:#DC2424; --ers:rgba(220,36,36,.1);
+  --nav:#E4E6F3; --chip-bg:#E8EAF3; --chip-bd:#CFD3E8; --chip-t:#4A5270;
+  --toggle-bg:#DDE0EE;
+  --shadow-xs:    0 1px 2px rgba(0,0,0,.06);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md:    0 4px 12px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.08);
+  --shadow-xl:    0 16px 40px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.10);
+  --shadow-float: 0 2px 8px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.08);
+  --viz1:hsl(232,57%,55%); --viz2:hsl(33,55%,44%);  --viz3:hsl(145,48%,38%);
+  --viz4:hsl(270,50%,50%); --viz5:hsl(192,70%,35%); --viz6:hsl(4,72%,50%);
+  --viz7:hsl(80,50%,40%);  --viz8:hsl(228,12%,52%);
+  --vs1:hsl(229,35%,28%);  --vs2:hsl(229,48%,40%);  --vs3:hsl(229,56%,50%);
+  --vs4:hsl(229,62%,58%);  --vs5:hsl(229,70%,72%);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--g); color: var(--t);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background .2s, color .2s;
+}
+.shell { display: flex; min-height: 100vh; }
+
+/* Nav */
+.nav {
+  width: 224px; flex-shrink: 0; background: var(--nav);
+  border-right: 1px solid var(--bd); position: sticky; top: 0;
+  height: 100vh; overflow-y: auto; padding: 24px 0 60px;
+  transition: background .2s, border-color .2s;
+}
+.nav-header { padding: 0 18px 18px; border-bottom: 1px solid var(--bd); margin-bottom: 14px; }
+.nav-brand { font: 600 13px/1 var(--mono); color: var(--am); }
+.nav-version { font-size: 11px; color: var(--tm); margin-top: 4px; }
+.nav-group { font: 600 9px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--tm); padding:10px 18px 5px; }
+.nav-link { display:block; padding:6px 18px; font-size:13px; color:var(--t2); text-decoration:none; border-left:2px solid transparent; transition:all .12s; }
+.nav-link:hover { color:var(--t); background:var(--s2); }
+.nav-link.active { color:var(--am); border-left-color:var(--am); background:var(--ams); }
+.nav-sub { display:block; padding:5px 18px 5px 30px; font-size:12px; color:var(--tm); text-decoration:none; border-left:2px solid transparent; transition:all .12s; }
+.nav-sub:hover { color:var(--t2); }
+.nav-sub.active { color:var(--in); border-left-color:var(--in); }
+::-webkit-scrollbar { width:0; }
+
+/* Content */
+.content { flex:1; min-width:0; padding:40px 60px 100px; }
+.page-hd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:40px; }
+.page-title { font:700 28px/1.1 var(--sans); letter-spacing:-.02em; }
+.page-desc { font-size:14px; color:var(--t2); max-width:560px; line-height:1.6; margin-top:8px; }
+
+/* Mode toggle */
+.mode-toggle { display:flex; background:var(--toggle-bg); border:1px solid var(--bd); border-radius:8px; padding:3px; flex-shrink:0; margin-top:4px; transition:background .2s, border-color .2s; }
+.mode-btn { display:flex; align-items:center; gap:5px; padding:5px 12px; border-radius:6px; font:600 11px/1 var(--mono); color:var(--tm); background:transparent; border:none; cursor:pointer; transition:all .15s; }
+.mode-btn.on { background:var(--s1); color:var(--t); box-shadow:0 1px 3px rgba(0,0,0,.15); }
+
+/* Section */
+.section { margin-bottom:64px; }
+.section-title { font:700 22px/1.2 var(--sans); margin-bottom:6px; scroll-margin-top:28px; }
+.section-desc { font-size:13px; color:var(--t2); max-width:640px; line-height:1.65; margin-bottom:28px; }
+.section-desc code { font-family:var(--mono); font-size:12px; background:var(--s2); border:1px solid var(--bd); border-radius:3px; padding:1px 5px; }
+.subsection { margin-bottom:36px; }
+.sub-title { font:600 15px/1 var(--sans); padding-bottom:12px; margin-bottom:0; border-bottom:1px solid var(--bd); }
+
+/* Token table */
+.tok-table { width:100%; border-collapse:collapse; }
+.tok-head th { font:600 10px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--tm); padding:10px 0; text-align:left; border-bottom:1px solid var(--bd); }
+.tok-head th.right { text-align:right; }
+.tok-row { border-bottom:1px solid var(--bd); }
+.tok-row:last-child { border-bottom:none; }
+.tok-row td { padding:20px 0; vertical-align:top; }
+.tok-meta { padding-right:40px !important; }
+.tok-preview { text-align:right; padding-left:20px !important; white-space:nowrap; min-width:220px; }
+.chip { display:inline-flex; align-items:center; font:500 11.5px/1 var(--mono); background:var(--chip-bg); border:1px solid var(--chip-bd); color:var(--chip-t); border-radius:4px; padding:4px 8px; margin-bottom:7px; }
+.semantic-tag { display:inline-flex; align-items:center; font:600 10px/1 var(--mono); letter-spacing:.06em; background:var(--ins); border:1px solid var(--inb); color:var(--in); border-radius:4px; padding:3px 7px; margin-left:7px; margin-bottom:7px; vertical-align:middle; }
+.tok-desc { font-size:13px; color:var(--t); line-height:1.55; margin-bottom:6px; }
+.tok-desc code, .tok-guide code { font-family:var(--mono); font-size:11.5px; background:var(--s2); border:1px solid var(--bd); border-radius:3px; padding:1px 4px; }
+.tok-guide { font-size:12.5px; color:var(--t2); margin-bottom:5px; }
+.tok-guide strong { color:var(--t); }
+.tok-ver { font:400 11px/1 var(--mono); color:var(--tm); }
+.tok-ver code { font-family:var(--mono); font-size:10.5px; color:var(--tm); }
+
+/* Font previews */
+.pv-h1{font:600 32px/1.1 "SF Mono","JetBrains Mono",monospace;color:var(--t);}
+.pv-h2{font:700 26px/1.15 var(--sans);color:var(--t);}
+.pv-h3{font:600 20px/1.25 var(--sans);color:var(--t);}
+.pv-h4{font:600 16px/1.3 var(--sans);color:var(--t);}
+.pv-h5{font:600 13px/1.4 var(--sans);color:var(--t);}
+.pv-h6{font:600 11px/1.4 "SF Mono","JetBrains Mono",monospace;letter-spacing:.04em;color:var(--t);}
+.pv-bl{font:400 15px/1.6 var(--sans);color:var(--t);}
+.pv-bm{font:400 14px/1.55 var(--sans);color:var(--t);}
+.pv-bs{font:400 13px/1.5 var(--sans);color:var(--t2);}
+.pv-bx{font:400 12px/1.5 var(--sans);color:var(--tm);}
+.pv-ll{font:600 12px/1 "SF Mono","JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);}
+.pv-lm{font:600 11px/1 "SF Mono","JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--tm);}
+.pv-ls{font:600 10px/1 "SF Mono","JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.12em;color:var(--tm);}
+.pv-cl{font:400 14px/1.6 "SF Mono","JetBrains Mono",monospace;color:var(--in);}
+.pv-cm{font:400 13px/1.6 "SF Mono","JetBrains Mono",monospace;color:var(--in);}
+.pv-cs{font:400 12px/1.5 "SF Mono","JetBrains Mono",monospace;color:var(--in);}
+
+/* Border previews */
+.val-wrap { display:inline-flex; align-items:center; gap:12px; }
+.bd-box { width:52px; height:36px; border-radius:5px; background:var(--s2); transition:background .2s; }
+.rd-box { background:var(--s2); border:1px solid var(--bd); transition:background .2s, border-color .2s; }
+.val-num { font:600 13px/1 var(--mono); color:var(--t2); }
+.color-swatch { width:52px; height:36px; border-radius:5px; transition:background .2s, border-color .2s; }
+
+/* Space table */
+.sp-table { width:100%; border-collapse:collapse; }
+.sp-table th { font:600 10px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--tm); padding:10px 0; border-bottom:1px solid var(--bd); text-align:left; }
+.sp-table th:not(:first-child):not(.bar-head) { text-align:right; }
+.sp-table th.bar-head { padding-left:20px; }
+.sp-row { border-bottom:1px solid var(--bd); transition:background .1s; }
+.sp-row:last-child { border-bottom:none; }
+.sp-row:hover { background:var(--s1); }
+.sp-row td { padding:9px 0; vertical-align:middle; }
+.sp-row td:not(:first-child):not(.bar-cell) { text-align:right; }
+.sp-chip { font:500 11.5px/1 var(--mono); color:var(--chip-t); background:var(--chip-bg); border:1px solid var(--chip-bd); border-radius:4px; padding:3px 7px; }
+.sp-chip.hl { background:var(--ins); border-color:var(--inb); color:var(--in); }
+.sp-num { font:400 12px/1 var(--mono); color:var(--t2); }
+.bar-cell { padding-left:20px !important; text-align:left !important; }
+.sp-bar { height:10px; background:var(--in); border-radius:2px; display:inline-block; vertical-align:middle; opacity:.85; }
+
+/* ── Color ramp swatches ─────────────────────────── */
+.ramp-section { margin-bottom:28px; }
+.ramp-label-row { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+.ramp-name { font:600 13px/1 var(--mono); color:var(--t); }
+.ramp-desc { font-size:12px; color:var(--tm); }
+.ramp-row { display:flex; gap:3px; overflow-x:auto; padding-bottom:4px; }
+.swatch-cell { flex:0 0 70px; }
+.swatch-bg { height:56px; border-radius:5px; display:flex; align-items:flex-end; padding:5px 6px; }
+.swatch-step { font:600 10px/1 "SF Mono","JetBrains Mono",monospace; opacity:.75; }
+.swatch-var { font:400 10px/1.4 "SF Mono","JetBrains Mono",monospace; color:var(--tm); margin-top:4px; display:block; }
+
+/* ── Shadows ─────────────────────────────────────── */
+.shadow-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:8px; }
+.shadow-card {
+  background:var(--s1); border-radius:10px; padding:20px 18px 16px;
+  border:1px solid var(--bd); transition:background .2s, border-color .2s;
+}
+.shadow-card.xs    { box-shadow:var(--shadow-xs); }
+.shadow-card.sm    { box-shadow:var(--shadow-sm); }
+.shadow-card.md    { box-shadow:var(--shadow-md); }
+.shadow-card.lg    { box-shadow:var(--shadow-lg); }
+.shadow-card.xl    { box-shadow:var(--shadow-xl); }
+.shadow-card.float { box-shadow:var(--shadow-float); }
+.shadow-chip { font:500 11.5px/1 var(--mono); color:var(--chip-t); background:var(--chip-bg); border:1px solid var(--chip-bd); border-radius:4px; padding:3px 7px; display:inline-block; margin-bottom:10px; }
+.shadow-desc { font-size:12px; color:var(--t2); line-height:1.5; margin-bottom:8px; }
+.shadow-css { font:400 10.5px/1.5 "SF Mono","JetBrains Mono",monospace; color:var(--tm); }
+
+/* ── Motion ─────────────────────────────────────── */
+.motion-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; }
+.dur-table { width:100%; border-collapse:collapse; }
+.dur-table th { font:600 10px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--tm); padding:10px 0; border-bottom:1px solid var(--bd); text-align:left; }
+.dur-table th.r { text-align:right; }
+.dur-row { border-bottom:1px solid var(--bd); }
+.dur-row:last-child { border-bottom:none; }
+.dur-row td { padding:11px 0; vertical-align:middle; }
+.dur-row td.r { text-align:right; }
+.dur-bar-wrap { padding-left:16px !important; }
+.dur-bar { height:8px; background:var(--in); border-radius:2px; display:inline-block; vertical-align:middle; opacity:.85; transition:background .2s; }
+
+.ease-cards { display:flex; flex-direction:column; gap:12px; }
+.ease-card { background:var(--s2); border:1px solid var(--bd); border-radius:8px; padding:14px 16px; transition:background .2s, border-color .2s; }
+.ease-name { font:600 12px/1 var(--mono); color:var(--t); margin-bottom:4px; }
+.ease-val  { font:400 11px/1.5 var(--mono); color:var(--in); margin-bottom:5px; word-break:break-all; }
+.ease-desc { font-size:12px; color:var(--t2); line-height:1.5; }
+
+/* ── Z-index ─────────────────────────────────────── */
+.z-visual { display:flex; align-items:flex-end; gap:6px; height:200px; padding:0 0 20px; overflow-x:auto; }
+.z-layer {
+  flex:0 0 100px; border-radius:8px 8px 4px 4px;
+  display:flex; flex-direction:column; justify-content:flex-end;
+  padding:8px 10px; position:relative;
+  background:var(--s2); border:1px solid var(--bd);
+  transition:background .2s, border-color .2s;
+}
+.z-layer-name { font:600 10px/1 var(--mono); color:var(--t); }
+.z-layer-val  { font:400 10px/1 var(--mono); color:var(--tm); margin-top:3px; }
+.z-csvar { font:400 9.5px/1 var(--mono); color:var(--in); margin-top:2px; word-break:break-all; }
+
+/* ── Viz palette ─────────────────────────────────── */
+.viz-cat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:8px; }
+.viz-cat-card { border-radius:8px; overflow:hidden; border:1px solid var(--bd); transition:border-color .2s; }
+.viz-cat-swatch { height:52px; }
+.viz-cat-meta { padding:8px 10px 10px; background:var(--s1); transition:background .2s; }
+.viz-cat-token { font:600 11px/1 var(--mono); color:var(--t); display:block; margin-bottom:3px; }
+.viz-cat-node  { font:400 11px/1 var(--mono); color:var(--tm); display:block; }
+
+.viz-seq-row { display:flex; gap:0; border-radius:8px; overflow:hidden; margin-bottom:12px; }
+.viz-seq-cell { flex:1; height:48px; display:flex; align-items:center; justify-content:center; }
+.viz-seq-label { font:600 10px/1 "SF Mono","JetBrains Mono",monospace; opacity:.75; }
+.viz-seq-legend { display:flex; justify-content:space-between; }
+.viz-seq-leg-item { font-size:12px; color:var(--tm); }
+
+.anchor { scroll-margin-top:28px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-header">
+    <div class="nav-brand">AI Studio</div>
+    <div class="nav-version">Design Tokens v0.2</div>
+  </div>
+
+  <div class="nav-group">Typography</div>
+  <a class="nav-link" href="#font">Font</a>
+  <a class="nav-sub" href="#font-heading">Heading (H1–H6)</a>
+  <a class="nav-sub" href="#font-body">Body</a>
+  <a class="nav-sub" href="#font-label">Label</a>
+  <a class="nav-sub" href="#font-code">Code</a>
+
+  <div class="nav-group" style="margin-top:8px">Color</div>
+  <a class="nav-link" href="#color">Primitives</a>
+
+  <div class="nav-group" style="margin-top:8px">Structure</div>
+  <a class="nav-link" href="#border">Border</a>
+  <a class="nav-sub" href="#border-width">Width</a>
+  <a class="nav-sub" href="#border-radius">Radius</a>
+  <a class="nav-sub" href="#border-color">Color</a>
+
+  <div class="nav-group" style="margin-top:8px">Elevation</div>
+  <a class="nav-link" href="#shadow">Shadow</a>
+
+  <div class="nav-group" style="margin-top:8px">Motion</div>
+  <a class="nav-link" href="#motion">Motion</a>
+  <a class="nav-sub" href="#motion-duration">Duration</a>
+  <a class="nav-sub" href="#motion-easing">Easing</a>
+
+  <div class="nav-group" style="margin-top:8px">Layering</div>
+  <a class="nav-link" href="#zindex">Z-Index</a>
+
+  <div class="nav-group" style="margin-top:8px">Layout</div>
+  <a class="nav-link" href="#space">Space</a>
+
+  <div class="nav-group" style="margin-top:8px">Visualization</div>
+  <a class="nav-link" href="#viz">Graph Palette</a>
+  <a class="nav-sub" href="#viz-cat">Categorical</a>
+  <a class="nav-sub" href="#viz-seq">Sequential</a>
+</nav>
+
+<!-- Content -->
+<main class="content">
+
+  <!-- Header -->
+  <div class="page-hd">
+    <div>
+      <h1 class="page-title">Design Tokens</h1>
+      <p class="page-desc">Named, versioned building blocks of the AI Studio design system. Every color, spacing value, typeface, elevation, and motion value comes from a token. Apply via CSS custom property or import from <code>@ai-studio/ui/tokens</code>.</p>
+    </div>
+    <div class="mode-toggle">
+      <button class="mode-btn on" id="btnDark" onclick="setMode('dark')"><span>◑</span> Dark</button>
+      <button class="mode-btn" id="btnLight" onclick="setMode('light')"><span>☀</span> Light</button>
+    </div>
+  </div>
+
+  <!-- ═══ FONT -->
+  <div class="section anchor" id="font">
+    <h2 class="section-title">Font</h2>
+    <p class="section-desc">Font tokens encode the complete CSS <code>font</code> shorthand — size, weight, line-height, and family — in a single variable. Always apply using CSS <code>font:</code>, not <code>font-size</code>, so size is never decoupled from its companion weight and typeface.</p>
+
+    <div class="subsection anchor" id="font-heading">
+      <div class="sub-title">Heading</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Preview</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.xxlarge</span><span class="semantic-tag">H1</span></div><div class="tok-desc">Workspace and project titles. Mono face signals structured, authored identity.</div><div class="tok-ver">v0.1 · <code>--font-heading-xxlarge</code> · 32px / 600 / mono</div></td><td class="tok-preview"><div class="pv-h1">AI Studio</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.xlarge</span><span class="semantic-tag">H2</span></div><div class="tok-desc">Primary page titles — project overview, graph view, settings.</div><div class="tok-ver">v0.1 · <code>--font-heading-xlarge</code> · 26px / 700 / sans</div></td><td class="tok-preview"><div class="pv-h2">Knowledge Graph</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.large</span><span class="semantic-tag">H3</span></div><div class="tok-desc">Major section headings — Branches, Artifacts, Memories.</div><div class="tok-ver">v0.1 · <code>--font-heading-large</code> · 20px / 600 / sans</div></td><td class="tok-preview"><div class="pv-h3">Auth implementation</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.medium</span><span class="semantic-tag">H4</span></div><div class="tok-desc">Headers inside cards, dialogs, and floating panels.</div><div class="tok-ver">v0.1 · <code>--font-heading-medium</code> · 16px / 600 / sans</div></td><td class="tok-preview"><div class="pv-h4">New branch</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.small</span><span class="semantic-tag">H5</span></div><div class="tok-desc">Sidebar section headers, compact panel titles.</div><div class="tok-ver">v0.1 · <code>--font-heading-small</code> · 13px / 600 / sans</div></td><td class="tok-preview"><div class="pv-h5">Organisation</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div><span class="chip">font.heading.xsmall</span><span class="semantic-tag">H6</span></div><div class="tok-desc">Tightest heading level — compressed tree nodes, status bars.</div><div class="tok-ver">v0.1 · <code>--font-heading-xsmall</code> · 11px / 600 / mono</div></td><td class="tok-preview"><div class="pv-h6">branch/oauth-flow</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection anchor" id="font-body">
+      <div class="sub-title">Body</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Preview</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.body.large</div><div class="tok-desc">Primary reading content — message stream text, artifact descriptions.</div><div class="tok-ver">v0.1 · <code>--font-body-large</code> · 15px / 400 / sans · lh 1.6</div></td><td class="tok-preview" style="min-width:280px"><div class="pv-bl">Context retrieved from 12 nodes across 3 branches.</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.body.medium</div><div class="tok-desc">Default body text across the entire application.</div><div class="tok-ver">v0.1 · <code>--font-body-medium</code> · 14px / 400 / sans · lh 1.55</div></td><td class="tok-preview"><div class="pv-bm">Decision weight: 0.87 · MMR reranking applied.</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.body.small</div><div class="tok-desc">Secondary content, helper text, supporting descriptions.</div><div class="tok-ver">v0.1 · <code>--font-body-small</code> · 13px / 400 / sans · lh 1.5</div></td><td class="tok-preview"><div class="pv-bs">3,847 nodes · 12 retrieved · 34ms p95</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.body.xsmall</div><div class="tok-desc">Timestamps, version strings, supplementary information.</div><div class="tok-ver">v0.1 · <code>--font-body-xsmall</code> · 12px / 400 / sans · lh 1.5</div></td><td class="tok-preview"><div class="pv-bx">Updated 2 minutes ago · claude-opus-4</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection anchor" id="font-label">
+      <div class="sub-title">Label</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Preview</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.label.large</div><div class="tok-desc">Section category labels and panel eyebrows. Pair with <code>text-transform:uppercase</code> and <code>letter-spacing:0.1em</code>.</div><div class="tok-ver">v0.1 · <code>--font-label-large</code> · 12px / 600 / mono</div></td><td class="tok-preview"><div class="pv-ll">Active Branch</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.label.medium</div><div class="tok-desc">Sidebar headers, form field labels, column headers in tables.</div><div class="tok-ver">v0.1 · <code>--font-label-medium</code> · 11px / 600 / mono</div></td><td class="tok-preview"><div class="pv-lm">Context · 12 nodes</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.label.small</div><div class="tok-desc">Compact labels in dense UI — count badges, status chips, version tags.</div><div class="tok-ver">v0.1 · <code>--font-label-small</code> · 10px / 600 / mono</div></td><td class="tok-preview"><div class="pv-ls">v0.2 · updated</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection anchor" id="font-code">
+      <div class="sub-title">Code</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Preview</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.code.large</div><div class="tok-desc">Code block headers, file path breadcrumbs.</div><div class="tok-ver">v0.1 · <code>--font-code-large</code> · 14px / 400 / mono</div></td><td class="tok-preview"><div class="pv-cl">packages/ai-core/src/agent.ts</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.code.medium</div><div class="tok-desc">Code blocks, shell output, full artifact content.</div><div class="tok-ver">v0.1 · <code>--font-code-medium</code> · 13px / 400 / mono</div></td><td class="tok-preview"><div class="pv-cm">const graph = new GraphEngine();</div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">font.code.small</div><div class="tok-desc">Inline code spans, branch identifiers, node IDs within body text.</div><div class="tok-ver">v0.1 · <code>--font-code-small</code> · 12px / 400 / mono</div></td><td class="tok-preview"><div class="pv-cs">node#4421 · branch/oauth-flow</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ COLOR PRIMITIVES -->
+  <div class="section anchor" id="color">
+    <h2 class="section-title">Primitives</h2>
+    <p class="section-desc">Six perceptually-tuned 11-step color ramps. Semantic tokens (<code>--primary</code>, <code>--highlight</code>…) reference these — never hardcode a hue. Apply via <code>hsl(var(--indigo-500))</code>. Primitive ramps are mode-agnostic; semantic tokens choose the right step per mode.</p>
+
+    <div id="ramps-container"></div>
+  </div>
+
+  <!-- ═══ BORDER -->
+  <div class="section anchor" id="border">
+    <h2 class="section-title">Border</h2>
+    <p class="section-desc">Border tokens cover width, radius, and color. Width and radius are mode-agnostic. Color tokens reference the semantic color system and respond to theme automatically.</p>
+
+    <div class="subsection anchor" id="border-width">
+      <div class="sub-title">Width</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Value</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.width</div><div class="tok-desc">Default width for structural containers, card outlines, and component separators.</div><div class="tok-ver">v0.1 · <code>--border-width</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="bd-box" style="border:1px solid var(--bd)"></div><span class="val-num">1px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.width.selected</div><div class="tok-desc">Active branch, chosen item, selected knowledge node.</div><div class="tok-ver">v0.1 · <code>--border-width-selected</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="bd-box" style="border:2px solid var(--am)"></div><span class="val-num">2px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.width.focused</div><div class="tok-desc">Focus ring — meets WCAG 2.2 focus-visible with 3px transparent gap.</div><div class="tok-ver">v0.1 · <code>--border-width-focused</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="bd-box" style="border:2px solid var(--in);box-shadow:0 0 0 4px var(--ins)"></div><span class="val-num">2px</span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection anchor" id="border-radius">
+      <div class="sub-title">Radius</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Value</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.none</div><div class="tok-desc">Flush edge-to-edge elements, full-width separators.</div><div class="tok-ver">v0.1 · <code>--border-radius-none</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:0"></div><span class="val-num">0px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.small</div><div class="tok-desc">Badges, inline code chips, keyboard shortcut tags.</div><div class="tok-ver">v0.1 · <code>--border-radius-small</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:3px"></div><span class="val-num">3px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.medium</div><div class="tok-desc">Buttons, text inputs, tree row hover states. Default for interactive elements.</div><div class="tok-ver">v0.1 · <code>--border-radius-medium</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:6px"></div><span class="val-num">6px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.large</div><div class="tok-desc">Cards, knowledge node cards, notification banners.</div><div class="tok-ver">v0.1 · <code>--border-radius-large</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:8px"></div><span class="val-num">8px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.xlarge</div><div class="tok-desc">Dialogs, modals, popovers, and floating overlay containers.</div><div class="tok-ver">v0.1 · <code>--border-radius-xlarge</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:12px"></div><span class="val-num">12px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.xxlarge</div><div class="tok-desc">Large floating surfaces — sidesheets and full-height drawers.</div><div class="tok-ver">v0.2 · <code>--border-radius-xxlarge</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:48px;height:36px;border-radius:16px"></div><span class="val-num">16px</span></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.radius.circle</div><div class="tok-desc">Avatars, status dots — perfectly circular regardless of size.</div><div class="tok-ver">v0.1 · <code>--border-radius-circle</code></div></td><td class="tok-preview"><div class="val-wrap"><div class="rd-box" style="width:36px;height:36px;border-radius:9999px"></div><span class="val-num">9999px</span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection anchor" id="border-color">
+      <div class="sub-title">Color</div>
+      <table class="tok-table">
+        <thead class="tok-head"><tr><th>Token and description</th><th class="right">Swatch</th></tr></thead>
+        <tbody>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color</div><div class="tok-desc">Default border for structural containers. <code>hsl(var(--border))</code> / Tailwind: <code>border-border</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:1px solid var(--bd);background:var(--s2)"></div></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color.selected</div><div class="tok-desc">Amber accent for active branch, selected node. <code>hsl(var(--highlight))</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:2px solid var(--am);background:var(--ams)"></div></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color.focused</div><div class="tok-desc">Indigo focus ring on keyboard navigation. <code>hsl(var(--ring))</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:2px solid var(--in);background:var(--ins);box-shadow:0 0 0 3px var(--ins)"></div></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color.danger</div><div class="tok-desc">Error states, destructive action cards. <code>hsl(var(--destructive))</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:1px solid var(--er);background:var(--ers)"></div></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color.success</div><div class="tok-desc">Verified nodes, completed operations. <code>hsl(var(--success))</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:1px solid var(--su);background:var(--sus)"></div></div></td></tr>
+          <tr class="tok-row"><td class="tok-meta"><div class="chip">border.color.warning</div><div class="tok-desc">Approaching limits, pending states. <code>hsl(var(--warning))</code></div><div class="tok-ver">v0.1</div></td><td class="tok-preview"><div class="val-wrap"><div class="color-swatch" style="border:1px solid var(--wa);background:var(--was)"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ SHADOW -->
+  <div class="section anchor" id="shadow">
+    <h2 class="section-title">Shadow</h2>
+    <p class="section-desc">Six elevation levels. Values update when you toggle Dark ↔ Light above — dark mode uses higher opacity since shadows are nearly invisible on near-black surfaces. Apply via <code>box-shadow: var(--shadow-md)</code>.</p>
+    <div class="shadow-grid">
+      <div class="shadow-card xs"><div class="shadow-chip">shadow.xs</div><div class="shadow-desc">Selected row, active chip, hovered icon button.</div><div class="shadow-css">box-shadow: var(--shadow-xs)</div></div>
+      <div class="shadow-card sm"><div class="shadow-chip">shadow.sm</div><div class="shadow-desc">Cards, sidebar panels, tree containers.</div><div class="shadow-css">box-shadow: var(--shadow-sm)</div></div>
+      <div class="shadow-card md"><div class="shadow-chip">shadow.md</div><div class="shadow-desc">Dropdowns, menus, content panels.</div><div class="shadow-css">box-shadow: var(--shadow-md)</div></div>
+      <div class="shadow-card lg"><div class="shadow-chip">shadow.lg</div><div class="shadow-desc">Dialogs and full-height drawer overlays.</div><div class="shadow-css">box-shadow: var(--shadow-lg)</div></div>
+      <div class="shadow-card xl"><div class="shadow-chip">shadow.xl</div><div class="shadow-desc">Command palette and full-screen overlays.</div><div class="shadow-css">box-shadow: var(--shadow-xl)</div></div>
+      <div class="shadow-card float"><div class="shadow-chip">shadow.float</div><div class="shadow-desc">Tooltips and popovers — tight, proximity shadow.</div><div class="shadow-css">box-shadow: var(--shadow-float)</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ MOTION -->
+  <div class="section anchor" id="motion">
+    <h2 class="section-title">Motion</h2>
+    <p class="section-desc">Duration and easing tokens prevent <code>transition: all .2s</code> from spreading across the codebase. Always pair a duration with an easing: <code>transition: opacity var(--dur-base) var(--ease-std)</code>. Motion tokens are mode-agnostic.</p>
+    <div class="motion-grid">
+      <div>
+        <div class="subsection anchor" id="motion-duration">
+          <div class="sub-title" style="margin-bottom:16px">Duration</div>
+          <table class="dur-table">
+            <thead><tr><th>Token</th><th class="r">ms</th><th class="bar-head" style="padding-left:16px">Scale</th></tr></thead>
+            <tbody id="dur-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="subsection anchor" id="motion-easing">
+          <div class="sub-title" style="margin-bottom:16px">Easing</div>
+          <div class="ease-cards">
+            <div class="ease-card"><div class="ease-name">easing.standard</div><div class="ease-val">cubic-bezier(0.2, 0, 0, 1)</div><div class="ease-desc">Default. Elements staying on screen decelerate to rest. Use for color, opacity, shadow.</div></div>
+            <div class="ease-card"><div class="ease-name">easing.decelerate</div><div class="ease-val">cubic-bezier(0, 0, 0, 1)</div><div class="ease-desc">Elements entering the viewport — panels sliding in, dialogs mounting. Arrives softly.</div></div>
+            <div class="ease-card"><div class="ease-name">easing.accelerate</div><div class="ease-val">cubic-bezier(0.3, 0, 1, 1)</div><div class="ease-desc">Elements leaving the viewport — dismissing panels, closing overlays. Exits decisively.</div></div>
+            <div class="ease-card"><div class="ease-name">easing.spring</div><div class="ease-val">cubic-bezier(0.34, 1.56, 0.64, 1)</div><div class="ease-desc">Playful overshoot for emphasis: popover appearance, drag-and-drop snap.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Z-INDEX -->
+  <div class="section anchor" id="zindex">
+    <h2 class="section-title">Z-Index</h2>
+    <p class="section-desc">Named z-index layers prevent stacking conflicts across Electron's multi-overlay UI. Apply via <code>z-index: var(--z-modal)</code> or Tailwind utility <code>z-modal</code>.</p>
+    <div class="z-visual" id="z-layers"></div>
+  </div>
+
+  <!-- ═══ SPACE -->
+  <div class="section anchor" id="space">
+    <h2 class="section-title">Space</h2>
+    <p class="section-desc"><code>space.100</code> is the 4px base unit. Every token is a multiple of this base. Apply via <code>padding: var(--space-400)</code>.</p>
+    <table class="sp-table">
+      <thead><tr><th style="width:130px">Token</th><th>Base ×</th><th>REM</th><th>Pixels</th><th class="bar-head">Visual</th></tr></thead>
+      <tbody id="space-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ═══ VIZ -->
+  <div class="section anchor" id="viz">
+    <h2 class="section-title">Graph Palette</h2>
+    <p class="section-desc">Perceptually distinct colors for knowledge graph node types and edge weight encoding. The categorical palette has 8 hues that remain distinguishable in both light and dark modes. Toggle above to verify contrast.</p>
+
+    <div class="subsection anchor" id="viz-cat">
+      <div class="sub-title">Categorical — Node Types</div>
+      <p style="font-size:13px;color:var(--tm);margin:14px 0 18px;line-height:1.6">8 semantic aliases map human-readable node types onto the categorical slots. Use <code>background: var(--viz-node-code)</code> or Tailwind <code>bg-viz-node-code</code>.</p>
+      <div class="viz-cat-grid" id="viz-cat-grid"></div>
+    </div>
+
+    <div class="subsection anchor" id="viz-seq">
+      <div class="sub-title">Sequential — Edge Weight / Relevance</div>
+      <p style="font-size:13px;color:var(--tm);margin:14px 0 18px;line-height:1.6">5-step indigo scale from lowest (seq.1) to highest (seq.5) relevance or edge weight. Map a 0–1 score to a step. Darker = lower confidence; brighter = stronger connection.</p>
+      <div class="viz-seq-row" id="viz-seq-row"></div>
+      <div class="viz-seq-legend" style="margin-top:8px">
+        <span class="viz-seq-leg-item">← Low relevance</span>
+        <span class="viz-seq-leg-item">viz.seq.1 → viz.seq.5</span>
+        <span class="viz-seq-leg-item">High relevance →</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+/* ── Mode toggle ── */
+let mode = 'dark';
+function setMode(m) {
+  mode = m;
+  document.body.classList.toggle('light', m === 'light');
+  document.getElementById('btnDark').classList.toggle('on', m === 'dark');
+  document.getElementById('btnLight').classList.toggle('on', m === 'light');
+}
+setMode('dark');
+
+/* ── Primitive ramp data ── */
+const RAMPS = [
+  { key:'indigo', vars:['ci50','ci100','ci200','ci300','ci400','ci500','ci600','ci700','ci800','ci900','ci950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Brand primary — electric indigo. semantic.primary references indigo.600 (light) / indigo.500 (dark).' },
+  { key:'amber', vars:['ca50','ca100','ca200','ca300','ca400','ca500','ca600','ca700','ca800','ca900','ca950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Brand accent — warm amber. semantic.highlight references amber.600 (light) / amber.500 (dark).' },
+  { key:'slate', vars:['cs50','cs100','cs200','cs300','cs400','cs500','cs600','cs700','cs800','cs900','cs950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Neutral ground — cool blue-slate. Background, card, sidebar, and border tokens reference this ramp.' },
+  { key:'green', vars:['cg50','cg100','cg200','cg300','cg400','cg500','cg600','cg700','cg800','cg900','cg950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Semantic success. semantic.success references green.600 (light) / green.500 (dark).' },
+  { key:'red', vars:['cr50','cr100','cr200','cr300','cr400','cr500','cr600','cr700','cr800','cr900','cr950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Semantic destructive / error. semantic.destructive references red.600 (light) / red.500 (dark).' },
+  { key:'yellow', vars:['cy50','cy100','cy200','cy300','cy400','cy500','cy600','cy700','cy800','cy900','cy950'],
+    steps:['50','100','200','300','400','500','600','700','800','900','950'],
+    dark:[false,false,false,false,false,true,true,true,true,true,true],
+    desc:'Semantic warning. semantic.warning references yellow.600 (light) / yellow.500 (dark).' },
+];
+const container = document.getElementById('ramps-container');
+RAMPS.forEach(r => {
+  const swatches = r.vars.map((v,i) => `
+    <div class="swatch-cell">
+      <div class="swatch-bg" style="background:var(--${v})">
+        <span class="swatch-step" style="color:${r.dark[i]?'rgba(255,255,255,.7)':'rgba(0,0,0,.55)'}">${r.steps[i]}</span>
+      </div>
+      <span class="swatch-var">--${r.key}-${r.steps[i]}</span>
+    </div>`).join('');
+  container.insertAdjacentHTML('beforeend', `
+    <div class="ramp-section">
+      <div class="ramp-label-row">
+        <span class="ramp-name">${r.key.charAt(0).toUpperCase()+r.key.slice(1)}</span>
+        <span class="ramp-desc">${r.desc}</span>
+      </div>
+      <div class="ramp-row">${swatches}</div>
+    </div>`);
+});
+
+/* ── Duration table ── */
+const DURS = [
+  {n:'duration.instant', css:'--dur-instant', ms:50},
+  {n:'duration.fast',    css:'--dur-fast',    ms:100},
+  {n:'duration.base',    css:'--dur-base',    ms:200},
+  {n:'duration.slow',    css:'--dur-slow',    ms:300},
+  {n:'duration.slower',  css:'--dur-slower',  ms:500},
+];
+const dtbody = document.getElementById('dur-tbody');
+DURS.forEach(d => {
+  const w = Math.round(d.ms / 500 * 160);
+  dtbody.insertAdjacentHTML('beforeend', `
+    <tr class="dur-row">
+      <td><span class="sp-chip" style="font-size:11px">${d.n}</span></td>
+      <td class="r"><span class="sp-num">${d.ms}ms</span></td>
+      <td class="dur-bar-wrap"><span class="dur-bar" style="width:${Math.max(4,w)}px"></span></td>
+    </tr>`);
+});
+
+/* ── Z-index layers ── */
+const ZLAYERS = [
+  {n:'z.base',     val:0,  css:'--z-base',     h:24,  label:'Base'},
+  {n:'z.raised',   val:1,  css:'--z-raised',   h:44,  label:'Raised'},
+  {n:'z.dropdown', val:10, css:'--z-dropdown', h:72,  label:'Dropdown'},
+  {n:'z.sticky',   val:20, css:'--z-sticky',   h:94,  label:'Sticky'},
+  {n:'z.overlay',  val:30, css:'--z-overlay',  h:118, label:'Overlay'},
+  {n:'z.modal',    val:40, css:'--z-modal',     h:142, label:'Modal'},
+  {n:'z.toast',    val:50, css:'--z-toast',     h:162, label:'Toast'},
+  {n:'z.tooltip',  val:60, css:'--z-tooltip',   h:182, label:'Tooltip'},
+];
+const zlayers = document.getElementById('z-layers');
+ZLAYERS.forEach(z => {
+  zlayers.insertAdjacentHTML('beforeend', `
+    <div class="z-layer" style="height:${z.h}px">
+      <div class="z-layer-name">${z.label}</div>
+      <div class="z-layer-val">${z.val}</div>
+      <div class="z-csvar">${z.css}</div>
+    </div>`);
+});
+
+/* ── Space table ── */
+const SPACES = [
+  {n:'space.0',   m:0,   r:'0',         px:0},
+  {n:'space.025', m:.25, r:'0.0625rem', px:1},
+  {n:'space.050', m:.5,  r:'0.125rem',  px:2},
+  {n:'space.075', m:.75, r:'0.1875rem', px:3},
+  {n:'space.100', m:1,   r:'0.25rem',   px:4,  hl:true},
+  {n:'space.150', m:1.5, r:'0.375rem',  px:6},
+  {n:'space.200', m:2,   r:'0.5rem',    px:8},
+  {n:'space.250', m:2.5, r:'0.625rem',  px:10},
+  {n:'space.300', m:3,   r:'0.75rem',   px:12},
+  {n:'space.350', m:3.5, r:'0.875rem',  px:14},
+  {n:'space.400', m:4,   r:'1rem',      px:16},
+  {n:'space.500', m:5,   r:'1.25rem',   px:20},
+  {n:'space.600', m:6,   r:'1.5rem',    px:24},
+  {n:'space.700', m:7,   r:'1.75rem',   px:28},
+  {n:'space.800', m:8,   r:'2rem',      px:32},
+  {n:'space.900', m:9,   r:'2.25rem',   px:36},
+  {n:'space.1000',m:10,  r:'2.5rem',    px:40},
+  {n:'space.1200',m:12,  r:'3rem',      px:48},
+  {n:'space.1400',m:14,  r:'3.5rem',    px:56},
+  {n:'space.1600',m:16,  r:'4rem',      px:64},
+  {n:'space.2000',m:20,  r:'5rem',      px:80},
+  {n:'space.2400',m:24,  r:'6rem',      px:96},
+  {n:'space.3200',m:32,  r:'8rem',      px:128},
+];
+const stbody = document.getElementById('space-tbody');
+SPACES.forEach(t => {
+  const w = t.px === 0 ? 0 : Math.max(2, Math.round(t.px/128*220));
+  const chip = t.hl ? 'sp-chip hl' : 'sp-chip';
+  const bar = t.px > 0 ? `<span class="sp-bar" style="width:${w}px"></span>` : `<span class="sp-num">—</span>`;
+  stbody.insertAdjacentHTML('beforeend', `
+    <tr class="sp-row">
+      <td><span class="${chip}">${t.n}</span></td>
+      <td><span class="sp-num">${t.m}×</span></td>
+      <td><span class="sp-num">${t.r}</span></td>
+      <td><span class="sp-num">${t.px}px</span></td>
+      <td class="bar-cell">${bar}</td>
+    </tr>`);
+});
+
+/* ── Viz categorical ── */
+const VIZ_CAT = [
+  {v:'--viz1', cat:'viz.cat.1', node:'conversation'},
+  {v:'--viz2', cat:'viz.cat.2', node:'decision'},
+  {v:'--viz3', cat:'viz.cat.3', node:'code'},
+  {v:'--viz4', cat:'viz.cat.4', node:'reference'},
+  {v:'--viz5', cat:'viz.cat.5', node:'task'},
+  {v:'--viz6', cat:'viz.cat.6', node:'issue'},
+  {v:'--viz7', cat:'viz.cat.7', node:'note'},
+  {v:'--viz8', cat:'viz.cat.8', node:'unknown'},
+];
+const vcg = document.getElementById('viz-cat-grid');
+VIZ_CAT.forEach(c => {
+  vcg.insertAdjacentHTML('beforeend', `
+    <div class="viz-cat-card">
+      <div class="viz-cat-swatch" style="background:var(${c.v})"></div>
+      <div class="viz-cat-meta">
+        <span class="viz-cat-token">${c.cat}</span>
+        <span class="viz-cat-node">${c.node}</span>
+      </div>
+    </div>`);
+});
+
+/* ── Viz sequential ── */
+const VS = ['--vs1','--vs2','--vs3','--vs4','--vs5'];
+const vsr = document.getElementById('viz-seq-row');
+VS.forEach((v,i) => {
+  vsr.insertAdjacentHTML('beforeend', `
+    <div class="viz-seq-cell" style="background:var(${v})">
+      <span class="viz-seq-label" style="color:${i<2?'rgba(255,255,255,.5)':'rgba(255,255,255,.8)'}">seq.${i+1}</span>
+    </div>`);
+});
+
+/* ── Scroll spy ── */
+const anchors = document.querySelectorAll('.anchor');
+const links   = document.querySelectorAll('.nav-link, .nav-sub');
+new IntersectionObserver(es => {
+  es.forEach(e => { if(e.isIntersecting) { const id=e.target.id; links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+id)); } });
+},{rootMargin:'-15% 0px -75% 0px'}).observe || anchors.forEach(a=>new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const id=e.target.id;links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+id));}});},{rootMargin:'-15% 0px -75% 0px'}).observe(a));
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const id=e.target.id;links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+id));}});},{rootMargin:'-15% 0px -75% 0px'});
+anchors.forEach(a=>io.observe(a));
+</script>
+</body>
+</html>

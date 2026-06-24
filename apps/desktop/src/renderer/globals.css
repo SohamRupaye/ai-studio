@@ -2,154 +2,530 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light mode */
+/* ═══════════════════════════════════════════════════════════════════════════
+   AI Studio — Design Tokens
+   All tokens live inside :root. Dark mode overrides in .dark.
+   Primitives are raw HSL channels — apply via hsl(var(--indigo-500)).
+   Semantic tokens reference primitives where possible.
+═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --background: 0 0% 100%;
-  --foreground: 220 15% 15%;
-  --card: 0 0% 100%;
-  --card-foreground: 220 15% 15%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 15% 15%;
-  --primary: 220 60% 50%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 220 15% 15%;
-  --muted: 220 14% 95%;
-  --muted-foreground: 220 10% 46%;
-  --accent: 220 14% 93%;
-  --accent-foreground: 220 15% 15%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 76% 36%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 100%;
-  --border: 220 13% 90%;
-  --input: 220 13% 90%;
-  --ring: 220 60% 50%;
-  --sidebar: 220 16% 97%;
-  --sidebar-foreground: 220 15% 20%;
-  --sidebar-border: 220 13% 90%;
+
+  /* ── Primitive Color Ramps ───────────────────────────────────────────────
+     Raw HSL channel triples (no hsl() wrapper).
+     Semantic tokens reference these — never hardcode a hue.
+  ──────────────────────────────────────────────────────────────────────── */
+
+  /* Indigo */
+  --indigo-50:   229 80% 97%;
+  --indigo-100:  229 70% 94%;
+  --indigo-200:  229 68% 87%;
+  --indigo-300:  229 66% 77%;
+  --indigo-400:  229 65% 68%;
+  --indigo-500:  229 65% 62%;   /* #5B6FE0  dark-mode primary  */
+  --indigo-600:  232 57% 55%;   /* #4855CC  light-mode primary */
+  --indigo-700:  232 60% 44%;
+  --indigo-800:  232 62% 32%;
+  --indigo-900:  232 60% 22%;
+  --indigo-950:  232 58% 13%;
+
+  /* Amber */
+  --amber-50:    33 100% 97%;
+  --amber-100:   33  95% 93%;
+  --amber-200:   33  88% 83%;
+  --amber-300:   33  78% 72%;
+  --amber-400:   33  65% 62%;
+  --amber-500:   33  55% 54%;   /* #C9934A  dark-mode highlight  */
+  --amber-600:   33  55% 44%;   /* #B07A35  light-mode highlight */
+  --amber-700:   33  55% 35%;
+  --amber-800:   33  50% 26%;
+  --amber-900:   33  45% 18%;
+  --amber-950:   33  40% 11%;
+
+  /* Slate (neutrals) */
+  --slate-50:    229 20% 96%;   /* #F2F3F7  light background     */
+  --slate-100:   228 20% 93%;
+  --slate-200:   228 18% 88%;   /* #DADDF0  light border         */
+  --slate-300:   228 16% 80%;
+  --slate-400:   228 14% 66%;
+  --slate-500:   228 12% 52%;
+  --slate-600:   228 16% 38%;
+  --slate-700:   227 22% 25%;
+  --slate-800:   226 25% 16%;   /* #1D2236  dark secondary       */
+  --slate-900:   226 26% 10%;   /* #131721  dark card            */
+  --slate-950:   226 28%  7%;   /* #0C0F18  dark sidebar         */
+
+  /* Green */
+  --green-50:    145 55% 97%;
+  --green-100:   145 52% 92%;
+  --green-200:   145 50% 82%;
+  --green-300:   145 48% 68%;
+  --green-400:   145 45% 56%;
+  --green-500:   145 42% 47%;   /* #44A870  dark-mode success    */
+  --green-600:   145 48% 38%;   /* #2D9B5C  light-mode success   */
+  --green-700:   145 52% 29%;
+  --green-800:   145 50% 21%;
+  --green-900:   145 48% 14%;
+  --green-950:   145 45%  8%;
+
+  /* Red */
+  --red-50:      4 100% 97%;
+  --red-100:     4  90% 93%;
+  --red-200:     4  80% 85%;
+  --red-300:     4  75% 74%;
+  --red-400:     4  72% 66%;
+  --red-500:     4  70% 58%;    /* #E55B4D  dark-mode destructive  */
+  --red-600:     4  72% 50%;    /* #DC2424  light-mode destructive */
+  --red-700:     4  70% 40%;
+  --red-800:     4  65% 30%;
+  --red-900:     4  60% 20%;
+  --red-950:     4  55% 12%;
+
+  /* Yellow */
+  --yellow-50:   35 100% 97%;
+  --yellow-100:  35  95% 92%;
+  --yellow-200:  35  90% 82%;
+  --yellow-300:  35  84% 70%;
+  --yellow-400:  35  80% 62%;
+  --yellow-500:  35  75% 58%;   /* #E5A030  dark-mode warning    */
+  --yellow-600:  35  80% 48%;   /* #C47A10  light-mode warning   */
+  --yellow-700:  35  78% 38%;
+  --yellow-800:  35  72% 28%;
+  --yellow-900:  35  65% 19%;
+  --yellow-950:  35  60% 12%;
+
+  /* ── Semantic Color (Light Mode) ────────────────────────────────────────
+     Reference primitives wherever a ramp step matches.
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --background:               var(--slate-50);
+  --foreground:               227 32% 13%;
+  --card:                     0   0% 100%;
+  --card-foreground:          227 32% 13%;
+  --popover:                  0   0% 100%;
+  --popover-foreground:       227 32% 13%;
+  --primary:                  var(--indigo-600);
+  --primary-foreground:       0   0% 100%;
+  --secondary:                228 22% 91%;
+  --secondary-foreground:     227 32% 20%;
+  --muted:                    228 22% 93%;
+  --muted-foreground:         228 12% 48%;
+  --accent:                   228 22% 91%;
+  --accent-foreground:        227 32% 13%;
+  --highlight:                var(--amber-600);
+  --highlight-foreground:     0   0% 100%;
+  --destructive:              var(--red-600);
+  --destructive-foreground:   0   0% 100%;
+  --success:                  var(--green-600);
+  --success-foreground:       0   0% 100%;
+  --warning:                  var(--yellow-600);
+  --warning-foreground:       0   0% 100%;
+  --border:                   var(--slate-200);
+  --input:                    var(--slate-200);
+  --ring:                     var(--indigo-600);
+  --sidebar:                  228 20% 94%;
+  --sidebar-foreground:       227 32% 15%;
+  --sidebar-border:           var(--slate-200);
+
+  /* ── Shadows (Light Mode) ───────────────────────────────────────────────
+     Six elevation levels. Dark mode overrides these in .dark.
+     Use directly: box-shadow: var(--shadow-md)
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --shadow-xs:    0 1px 2px rgba(0,0,0,.06);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md:    0 4px 12px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.08);
+  --shadow-xl:    0 16px 40px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.10);
+  --shadow-float: 0 2px 8px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.08);
+
+  /* ── Motion (Mode-Agnostic) ─────────────────────────────────────────────
+     Duration and easing tokens. Use directly:
+       transition: opacity var(--duration-base) var(--easing-standard)
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --duration-instant:  50ms;
+  --duration-fast:    100ms;
+  --duration-base:    200ms;
+  --duration-slow:    300ms;
+  --duration-slower:  500ms;
+
+  --easing-standard:   cubic-bezier(0.2, 0, 0, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0, 1);
+  --easing-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --easing-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Z-Index Scale (Mode-Agnostic) ──────────────────────────────────────
+     Use directly: z-index: var(--z-modal)
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --z-base:     0;
+  --z-raised:   1;
+  --z-dropdown: 10;
+  --z-sticky:   20;
+  --z-overlay:  30;
+  --z-modal:    40;
+  --z-toast:    50;
+  --z-tooltip:  60;
+
+  /* ── Font Tokens ────────────────────────────────────────────────────────
+     Apply via: font: var(--font-heading-xxlarge)
+     Never pair font-size alone — weight and family are inseparable.
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+
+  /* Heading (H1–H6) */
+  --font-heading-xxlarge: 600 2rem/1.1     "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --font-heading-xlarge:  700 1.625rem/1.15 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-heading-large:   600 1.25rem/1.25  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-heading-medium:  600 1rem/1.3      -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-heading-small:   600 0.8125rem/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-heading-xsmall:  600 0.6875rem/1.4 "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+
+  /* Body */
+  --font-body-large:  400 0.9375rem/1.6  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-body-medium: 400 0.875rem/1.55  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-body-small:  400 0.8125rem/1.5  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-body-xsmall: 400 0.75rem/1.5   -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+
+  /* Label — always pair with text-transform:uppercase and letter-spacing:0.1em */
+  --font-label-large:  600 0.75rem/1    "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --font-label-medium: 600 0.6875rem/1  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --font-label-small:  600 0.625rem/1   "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+
+  /* Code */
+  --font-code-large:  400 0.875rem/1.65  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --font-code-medium: 400 0.8125rem/1.6  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --font-code-small:  400 0.75rem/1.5    "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+
+  /* ── Space Tokens (4px base unit) ───────────────────────────────────────
+     space.100 = 4px base. Suffix = % of base unit.
+     Apply via: padding: var(--space-400)
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --space-0:     0;
+  --space-025:   0.0625rem;   /*  1px */
+  --space-050:   0.125rem;    /*  2px */
+  --space-075:   0.1875rem;   /*  3px */
+  --space-100:   0.25rem;     /*  4px  ← base unit */
+  --space-150:   0.375rem;    /*  6px */
+  --space-200:   0.5rem;      /*  8px */
+  --space-250:   0.625rem;    /* 10px */
+  --space-300:   0.75rem;     /* 12px */
+  --space-350:   0.875rem;    /* 14px */
+  --space-400:   1rem;        /* 16px */
+  --space-500:   1.25rem;     /* 20px */
+  --space-600:   1.5rem;      /* 24px */
+  --space-700:   1.75rem;     /* 28px */
+  --space-800:   2rem;        /* 32px */
+  --space-900:   2.25rem;     /* 36px */
+  --space-1000:  2.5rem;      /* 40px */
+  --space-1200:  3rem;        /* 48px */
+  --space-1400:  3.5rem;      /* 56px */
+  --space-1600:  4rem;        /* 64px */
+  --space-2000:  5rem;        /* 80px */
+  --space-2400:  6rem;        /* 96px */
+  --space-3200:  8rem;        /* 128px */
+
+  /* ── Border Tokens ──────────────────────────────────────────────────────
+     Width and radius are mode-agnostic. Color tokens reference --border, --ring, etc.
+  ──────────────────────────────────────────────────────────────────────── */
+
+  --border-width:          1px;
+  --border-width-selected: 2px;
+  --border-width-focused:  2px;
+  --border-width-none:     0px;
+
+  --border-radius-none:    0px;
+  --border-radius-small:   3px;
+  --border-radius-medium:  6px;
+  --border-radius-large:   8px;
+  --border-radius-xlarge:  12px;
+  --border-radius-xxlarge: 16px;
+  --border-radius-circle:  9999px;
+
+  /* ── Data Visualization Palette ─────────────────────────────────────────
+     Categorical: 8 perceptually distinct hues for knowledge node types.
+     Sequential:  5-step indigo scale for edge weight / relevance scoring.
+     Semantic aliases map human-readable names onto categorical slots.
+  ──────────────────────────────────────────────────────────────────────── */
+
+  /* Categorical */
+  --viz-cat-1: var(--indigo-600);   /* conversation / AI turn  */
+  --viz-cat-2: var(--amber-600);    /* decision / choice       */
+  --viz-cat-3: var(--green-600);    /* code / implementation   */
+  --viz-cat-4: 270 50% 50%;         /* violet — reference/doc  */
+  --viz-cat-5: 192 70% 35%;         /* cyan — task / action    */
+  --viz-cat-6: var(--red-600);      /* issue / error           */
+  --viz-cat-7: 80  50% 40%;         /* lime — note / obs       */
+  --viz-cat-8: var(--slate-500);    /* unknown / misc          */
+
+  /* Semantic node-type aliases */
+  --viz-node-conversation: var(--viz-cat-1);
+  --viz-node-decision:     var(--viz-cat-2);
+  --viz-node-code:         var(--viz-cat-3);
+  --viz-node-reference:    var(--viz-cat-4);
+  --viz-node-task:         var(--viz-cat-5);
+  --viz-node-issue:        var(--viz-cat-6);
+  --viz-node-note:         var(--viz-cat-7);
+  --viz-node-unknown:      var(--viz-cat-8);
+
+  /* Sequential (edge weight / relevance — lowest to highest) */
+  --viz-seq-1: 229 35% 28%;
+  --viz-seq-2: 229 48% 40%;
+  --viz-seq-3: 229 56% 50%;
+  --viz-seq-4: 229 62% 58%;
+  --viz-seq-5: 229 70% 72%;
 }
 
-/* Dark mode */
+/* ─── Dark Mode Overrides ────────────────────────────────────────────────── */
+
 .dark {
-  --background: 224 12% 10%;
-  --foreground: 220 14% 90%;
-  --card: 224 12% 12%;
-  --card-foreground: 220 14% 90%;
-  --popover: 224 12% 12%;
-  --popover-foreground: 220 14% 90%;
-  --primary: 220 60% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 224 10% 16%;
-  --secondary-foreground: 220 14% 90%;
-  --muted: 224 10% 16%;
-  --muted-foreground: 220 10% 55%;
-  --accent: 224 10% 18%;
-  --accent-foreground: 220 14% 90%;
-  --destructive: 0 62% 45%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 76% 36%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 100%;
-  --border: 224 10% 18%;
-  --input: 224 10% 18%;
-  --ring: 220 60% 60%;
-  --sidebar: 224 12% 9%;
-  --sidebar-foreground: 220 14% 85%;
-  --sidebar-border: 224 10% 16%;
+
+  /* Semantic color — dark surface */
+  --background:               226 26%  8%;
+  --foreground:               228 30% 91%;
+  --card:                     227 25% 10%;
+  --card-foreground:          228 30% 91%;
+  --popover:                  227 24% 12%;
+  --popover-foreground:       228 30% 91%;
+  --primary:                  var(--indigo-500);
+  --primary-foreground:       0   0% 100%;
+  --secondary:                226 25% 16%;
+  --secondary-foreground:     228 24% 74%;
+  --muted:                    226 24% 14%;
+  --muted-foreground:         228 14% 52%;
+  --accent:                   226 24% 14%;
+  --accent-foreground:        228 30% 91%;
+  --highlight:                var(--amber-500);
+  --highlight-foreground:     226 26%  8%;
+  --destructive:              var(--red-500);
+  --destructive-foreground:   0   0% 100%;
+  --success:                  var(--green-500);
+  --success-foreground:       0   0% 100%;
+  --warning:                  var(--yellow-500);
+  --warning-foreground:       226 26%  8%;
+  --border:                   228 24% 19%;
+  --input:                    228 24% 19%;
+  --ring:                     var(--indigo-500);
+  --sidebar:                  227 28%  7%;
+  --sidebar-foreground:       228 26% 86%;
+  --sidebar-border:           228 22% 15%;
+
+  /* Shadows — stronger on dark backgrounds (depth via opacity) */
+  --shadow-xs:    0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:    0 1px 4px rgba(0,0,0,.40), 0 0 1px rgba(0,0,0,.30);
+  --shadow-md:    0 4px 12px rgba(0,0,0,.50), 0 0 2px rgba(0,0,0,.30);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,.60), 0 0 2px rgba(0,0,0,.30);
+  --shadow-xl:    0 16px 48px rgba(0,0,0,.70), 0 0 4px rgba(0,0,0,.20);
+  --shadow-float: 0 2px 8px rgba(0,0,0,.50), 0 1px 3px rgba(0,0,0,.30);
+
+  /* Viz — brighter for contrast on dark surfaces */
+  --viz-cat-1: var(--indigo-500);
+  --viz-cat-2: var(--amber-500);
+  --viz-cat-3: var(--green-500);
+  --viz-cat-4: 270 60% 68%;
+  --viz-cat-5: 192 65% 55%;
+  --viz-cat-6: var(--red-500);
+  --viz-cat-7:  80 55% 60%;
+  --viz-cat-8: var(--slate-400);
+
+  --viz-seq-1: 229 32% 20%;
+  --viz-seq-2: 229 46% 34%;
+  --viz-seq-3: 229 58% 48%;
+  --viz-seq-4: 229 65% 62%;
+  --viz-seq-5: 229 72% 76%;
 }
+
+/* ─── Tailwind Theme Mapping ─────────────────────────────────────────────── */
 
 @theme {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
+  /* Semantic colors → Tailwind utilities (bg-primary, text-foreground…) */
+  --color-background:             hsl(var(--background));
+  --color-foreground:             hsl(var(--foreground));
+  --color-card:                   hsl(var(--card));
+  --color-card-foreground:        hsl(var(--card-foreground));
+  --color-popover:                hsl(var(--popover));
+  --color-popover-foreground:     hsl(var(--popover-foreground));
+  --color-primary:                hsl(var(--primary));
+  --color-primary-foreground:     hsl(var(--primary-foreground));
+  --color-secondary:              hsl(var(--secondary));
+  --color-secondary-foreground:   hsl(var(--secondary-foreground));
+  --color-muted:                  hsl(var(--muted));
+  --color-muted-foreground:       hsl(var(--muted-foreground));
+  --color-accent:                 hsl(var(--accent));
+  --color-accent-foreground:      hsl(var(--accent-foreground));
+  --color-highlight:              hsl(var(--highlight));
+  --color-highlight-foreground:   hsl(var(--highlight-foreground));
+  --color-destructive:            hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-success: hsl(var(--success));
-  --color-success-foreground: hsl(var(--success-foreground));
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-sidebar: hsl(var(--sidebar));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+  --color-success:                hsl(var(--success));
+  --color-success-foreground:     hsl(var(--success-foreground));
+  --color-warning:                hsl(var(--warning));
+  --color-warning-foreground:     hsl(var(--warning-foreground));
+  --color-border:                 hsl(var(--border));
+  --color-input:                  hsl(var(--input));
+  --color-ring:                   hsl(var(--ring));
+  --color-sidebar:                hsl(var(--sidebar));
+  --color-sidebar-foreground:     hsl(var(--sidebar-foreground));
+  --color-sidebar-border:         hsl(var(--sidebar-border));
+
+  /* Data viz → Tailwind utilities (bg-viz-cat-1, text-viz-node-code…) */
+  --color-viz-cat-1: hsl(var(--viz-cat-1));
+  --color-viz-cat-2: hsl(var(--viz-cat-2));
+  --color-viz-cat-3: hsl(var(--viz-cat-3));
+  --color-viz-cat-4: hsl(var(--viz-cat-4));
+  --color-viz-cat-5: hsl(var(--viz-cat-5));
+  --color-viz-cat-6: hsl(var(--viz-cat-6));
+  --color-viz-cat-7: hsl(var(--viz-cat-7));
+  --color-viz-cat-8: hsl(var(--viz-cat-8));
+  --color-viz-node-conversation: hsl(var(--viz-node-conversation));
+  --color-viz-node-decision:     hsl(var(--viz-node-decision));
+  --color-viz-node-code:         hsl(var(--viz-node-code));
+  --color-viz-node-reference:    hsl(var(--viz-node-reference));
+  --color-viz-node-task:         hsl(var(--viz-node-task));
+  --color-viz-node-issue:        hsl(var(--viz-node-issue));
+  --color-viz-node-note:         hsl(var(--viz-node-note));
+  --color-viz-node-unknown:      hsl(var(--viz-node-unknown));
+  --color-viz-seq-1: hsl(var(--viz-seq-1));
+  --color-viz-seq-2: hsl(var(--viz-seq-2));
+  --color-viz-seq-3: hsl(var(--viz-seq-3));
+  --color-viz-seq-4: hsl(var(--viz-seq-4));
+  --color-viz-seq-5: hsl(var(--viz-seq-5));
+
+  /* Border radius → Tailwind rounded-* utilities */
+  --radius-sm:     0.25rem;
+  --radius-md:     0.375rem;
+  --radius-lg:     0.5rem;
+  --radius-xl:     0.75rem;
 }
+
+/* ─── Base Layer ─────────────────────────────────────────────────────────── */
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    font: var(--font-body-medium);
     -webkit-font-smoothing: antialiased;
-    font-size: 14px;
+  }
+  .font-mono {
+    font-family: "SF Mono","JetBrains Mono","Fira Code","Cascadia Code",ui-monospace,monospace;
   }
 }
 
-/* Electron: allow window drag on title bar area */
-.drag-region {
-  -webkit-app-region: drag;
-}
-.no-drag {
-  -webkit-app-region: no-drag;
-}
+/* ─── Electron ───────────────────────────────────────────────────────────── */
 
-/* macOS-style glass search bar */
+.drag-region { -webkit-app-region: drag; }
+.no-drag     { -webkit-app-region: no-drag; }
+
+/* ─── Glass Search Bar ───────────────────────────────────────────────────── */
+
 .glass-searchbar {
-  background: rgba(120, 120, 128, 0.12);
+  background: rgba(120,120,128,.12);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 0.5px solid rgba(0, 0, 0, 0.06);
-  transition: all 0.2s ease;
+  border: 0.5px solid rgba(0,0,0,.06);
+  transition: all var(--duration-base) var(--easing-standard);
 }
 .glass-searchbar:focus-within {
-  background: rgba(120, 120, 128, 0.16);
-  box-shadow: 0 0 0 3.5px rgba(59, 130, 246, 0.3);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(120,120,128,.16);
+  box-shadow: 0 0 0 3px hsl(var(--ring) / .30);
+  border-color: hsl(var(--ring) / .40);
 }
 .dark .glass-searchbar {
-  background: rgba(120, 120, 128, 0.2);
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  background: rgba(120,120,128,.18);
+  border: 0.5px solid rgba(255,255,255,.06);
 }
 .dark .glass-searchbar:focus-within {
-  background: rgba(120, 120, 128, 0.28);
-  box-shadow: 0 0 0 3.5px rgba(96, 165, 250, 0.25);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(120,120,128,.24);
+  box-shadow: 0 0 0 3px hsl(var(--ring) / .25);
+  border-color: hsl(var(--ring) / .35);
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar         { width: 6px; height: 6px; }
+::-webkit-scrollbar-track   { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: hsl(var(--muted-foreground) / .25);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--muted-foreground) / .45);
+}
+
+/* ─── Token Utility Classes ──────────────────────────────────────────────────
+   These turn design tokens into regular className strings so you never write
+   style={{ font: "var(--font-heading-xlarge)" }} in application code.
+─────────────────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+
+  /* Typography — font tokens */
+  .font-h1 { font: var(--font-heading-xxlarge); }
+  .font-h2 { font: var(--font-heading-xlarge); }
+  .font-h3 { font: var(--font-heading-large); }
+  .font-h4 { font: var(--font-heading-medium); }
+  .font-h5 { font: var(--font-heading-small); }
+  .font-h6 { font: var(--font-heading-xsmall); }
+
+  .font-body-lg { font: var(--font-body-large); }
+  .font-body-md { font: var(--font-body-medium); }
+  .font-body-sm { font: var(--font-body-small); }
+  .font-body-xs { font: var(--font-body-xsmall); }
+
+  .font-label-lg { font: var(--font-label-large);  text-transform: uppercase; letter-spacing: 0.10em; }
+  .font-label-md { font: var(--font-label-medium); text-transform: uppercase; letter-spacing: 0.10em; }
+  .font-label-sm { font: var(--font-label-small);  text-transform: uppercase; letter-spacing: 0.12em; }
+
+  .font-code-lg { font: var(--font-code-large); }
+  .font-code-md { font: var(--font-code-medium); }
+  .font-code-sm { font: var(--font-code-small); }
+
+  /* Shadows — override Tailwind defaults; respond to dark/light mode */
+  .shadow-xs    { box-shadow: var(--shadow-xs); }
+  .shadow-sm    { box-shadow: var(--shadow-sm); }
+  .shadow-md    { box-shadow: var(--shadow-md); }
+  .shadow-lg    { box-shadow: var(--shadow-lg); }
+  .shadow-xl    { box-shadow: var(--shadow-xl); }
+  .shadow-float { box-shadow: var(--shadow-float); }
+  .shadow-none  { box-shadow: none; }
+
+  /* Motion — preset transition combos */
+  .transition-std {
+    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+    transition-duration: var(--duration-base);
+    transition-timing-function: var(--easing-standard);
+  }
+  .transition-fast {
+    transition-property: color, background-color, border-color, opacity, box-shadow;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--easing-standard);
+  }
+  .transition-motion {
+    transition-property: transform, opacity;
+    transition-duration: var(--duration-slow);
+    transition-timing-function: var(--easing-spring);
+  }
+  .transition-enter {
+    transition-property: transform, opacity;
+    transition-duration: var(--duration-slow);
+    transition-timing-function: var(--easing-decelerate);
+  }
+  .transition-exit {
+    transition-property: transform, opacity;
+    transition-duration: var(--duration-base);
+    transition-timing-function: var(--easing-accelerate);
+  }
+
+  /* Z-index named layers */
+  .z-dropdown { z-index: var(--z-dropdown); }
+  .z-sticky   { z-index: var(--z-sticky); }
+  .z-overlay  { z-index: var(--z-overlay); }
+  .z-modal    { z-index: var(--z-modal); }
+  .z-toast    { z-index: var(--z-toast); }
+  .z-tooltip  { z-index: var(--z-tooltip); }
 }
