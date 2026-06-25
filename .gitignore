@@ -41,3 +41,7 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 graphify-out/
+
+
+kiro.txt
+apps/desktop/config.yaml
