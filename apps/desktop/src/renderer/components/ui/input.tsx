@@ -4,19 +4,19 @@ import { cn } from "@/lib/utils";
 
 const inputVariants = cva(
   [
-    "flex h-9 w-full rounded-md border bg-transparent px-3 py-1",
-    "text-sm text-foreground placeholder:text-muted-foreground",
-    "transition-colors duration-150",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+    "flex h-8 w-full rounded-lg border bg-canvas px-3 py-1",
+    "text-[13px] text-foreground shadow-xs placeholder:text-muted-foreground/70",
+    "transition-[border-color,box-shadow] duration-150",
+    "focus-visible:outline-none focus-visible:ring-2",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "file:border-0 file:bg-transparent file:text-sm file:font-medium",
   ],
   {
     variants: {
       variant: {
-        default:  "border-input focus-visible:ring-ring",
-        error:    "border-destructive focus-visible:ring-destructive",
-        success:  "border-success focus-visible:ring-success",
+        default:  "border-input focus-visible:border-ring focus-visible:ring-ring/25",
+        error:    "border-destructive focus-visible:ring-destructive/25",
+        success:  "border-success focus-visible:ring-success/25",
       },
     },
     defaultVariants: { variant: "default" },

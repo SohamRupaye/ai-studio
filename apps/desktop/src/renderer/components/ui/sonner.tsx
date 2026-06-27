@@ -2,23 +2,34 @@ import { Toaster as SonnerToaster } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
 
+// Styled via inline tokens (not classNames) so it always beats Sonner's own
+// stylesheet and flips automatically with .dark — no hardcoded theme.
 const Toaster = ({ ...props }: ToasterProps) => (
   <SonnerToaster
-    theme="dark"
-    className="toaster group"
+    position="bottom-right"
+    offset={20}
+    gap={8}
+    duration={3200}
     toastOptions={{
+      style: {
+        background: "hsl(var(--popover))",
+        color: "hsl(var(--popover-foreground))",
+        border: "1px solid hsl(var(--border))",
+        borderRadius: "12px",
+        boxShadow: "var(--shadow-lg)",
+        padding: "12px 14px",
+        fontSize: "13px",
+        fontWeight: 500,
+        fontFamily: "var(--font-sans)",
+      },
       classNames: {
-        toast:
-          "group toast group-[.toaster]:bg-popover group-[.toaster]:text-popover-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg group-[.toaster]:rounded-lg group-[.toaster]:font-sans",
-        description: "group-[.toast]:text-muted-foreground",
-        actionButton:
-          "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground group-[.toast]:rounded-md group-[.toast]:font-mono group-[.toast]:text-xs",
-        cancelButton:
-          "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground group-[.toast]:rounded-md group-[.toast]:font-mono group-[.toast]:text-xs",
-        success: "group-[.toaster]:border-success/40 group-[.toaster]:text-success",
-        error:   "group-[.toaster]:border-destructive/40 group-[.toaster]:text-destructive",
-        warning: "group-[.toaster]:border-warning/40 group-[.toaster]:text-warning",
-        info:    "group-[.toaster]:border-primary/40",
+        description: "!text-muted-foreground !font-normal",
+        success: "[&_[data-icon]]:!text-success",
+        error: "[&_[data-icon]]:!text-destructive",
+        warning: "[&_[data-icon]]:!text-warning",
+        info: "[&_[data-icon]]:!text-primary",
+        actionButton: "!bg-primary !text-primary-foreground !rounded-lg !text-xs !font-medium",
+        cancelButton: "!bg-muted !text-muted-foreground !rounded-lg !text-xs !font-medium",
       },
     }}
     {...props}

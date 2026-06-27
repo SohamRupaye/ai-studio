@@ -4,8 +4,13 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AI Studio — Design Tokens
+   Direction: "calm instrument". One continuous warm-neutral window frame
+   (title bar + sidebar), content floating on an elevated canvas. Sans-serif
+   UI voice with tight tracking; monospace strictly for data (models, tokens,
+   costs, code). One accent. Status color only for status.
+
    All tokens live inside :root. Dark mode overrides in .dark.
-   Primitives are raw HSL channels — apply via hsl(var(--indigo-500)).
+   Primitives are raw HSL channels — apply via hsl(var(--iris-500)).
    Semantic tokens reference primitives where possible.
 ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -16,102 +21,104 @@
      Semantic tokens reference these — never hardcode a hue.
   ──────────────────────────────────────────────────────────────────────── */
 
-  /* Indigo */
-  --indigo-50:   229 80% 97%;
-  --indigo-100:  229 70% 94%;
-  --indigo-200:  229 68% 87%;
-  --indigo-300:  229 66% 77%;
-  --indigo-400:  229 65% 68%;
-  --indigo-500:  229 65% 62%;   /* #5B6FE0  dark-mode primary  */
-  --indigo-600:  232 57% 55%;   /* #4855CC  light-mode primary */
-  --indigo-700:  232 60% 44%;
-  --indigo-800:  232 62% 32%;
-  --indigo-900:  232 60% 22%;
-  --indigo-950:  232 58% 13%;
+  /* Iris — the single product accent */
+  --iris-50:   233 70% 97%;
+  --iris-100:  233 65% 94%;
+  --iris-200:  233 60% 88%;
+  --iris-300:  233 58% 79%;
+  --iris-400:  233 60% 70%;
+  --iris-500:  233 64% 66%;   /* #7B87EA  dark-mode primary  */
+  --iris-600:  234 56% 55%;   /* #4C5BCC  light-mode primary */
+  --iris-700:  235 55% 45%;
+  --iris-800:  235 52% 34%;
+  --iris-900:  235 48% 24%;
+  --iris-950:  235 45% 14%;
 
-  /* Amber */
-  --amber-50:    33 100% 97%;
-  --amber-100:   33  95% 93%;
-  --amber-200:   33  88% 83%;
-  --amber-300:   33  78% 72%;
-  --amber-400:   33  65% 62%;
-  --amber-500:   33  55% 54%;   /* #C9934A  dark-mode highlight  */
-  --amber-600:   33  55% 44%;   /* #B07A35  light-mode highlight */
-  --amber-700:   33  55% 35%;
-  --amber-800:   33  50% 26%;
-  --amber-900:   33  45% 18%;
-  --amber-950:   33  40% 11%;
+  /* Amber — warm accent, used sparingly (branches, highlights) */
+  --amber-50:    36 90% 96%;
+  --amber-100:   36 85% 92%;
+  --amber-200:   36 80% 82%;
+  --amber-300:   36 70% 70%;
+  --amber-400:   36 60% 60%;
+  --amber-500:   36 52% 53%;   /* dark-mode highlight  */
+  --amber-600:   34 55% 43%;   /* light-mode highlight */
+  --amber-700:   34 55% 34%;
+  --amber-800:   34 50% 25%;
+  --amber-900:   34 45% 17%;
+  --amber-950:   34 40% 11%;
 
-  /* Slate (neutrals) */
-  --slate-50:    229 20% 96%;   /* #F2F3F7  light background     */
-  --slate-100:   228 20% 93%;
-  --slate-200:   228 18% 88%;   /* #DADDF0  light border         */
-  --slate-300:   228 16% 80%;
-  --slate-400:   228 14% 66%;
-  --slate-500:   228 12% 52%;
-  --slate-600:   228 16% 38%;
-  --slate-700:   227 22% 25%;
-  --slate-800:   226 25% 16%;   /* #1D2236  dark secondary       */
-  --slate-900:   226 26% 10%;   /* #131721  dark card            */
-  --slate-950:   226 28%  7%;   /* #0C0F18  dark sidebar         */
+  /* Neutral — warm gray, the material of the whole app */
+  --neutral-50:   45 25% 97%;   /* #F9F8F6  light canvas tint */
+  --neutral-100:  44 18% 94%;   /* #F2F1EE  light frame       */
+  --neutral-200:  42 14% 89%;
+  --neutral-300:  40 11% 80%;
+  --neutral-400:  40  9% 64%;
+  --neutral-500:  40  7% 50%;
+  --neutral-600:  40  7% 38%;
+  --neutral-700:  40  7% 26%;
+  --neutral-800:  40  6% 16%;
+  --neutral-900:  40  6% 11%;
+  --neutral-950:  42  8%  7%;
 
   /* Green */
-  --green-50:    145 55% 97%;
-  --green-100:   145 52% 92%;
-  --green-200:   145 50% 82%;
-  --green-300:   145 48% 68%;
-  --green-400:   145 45% 56%;
-  --green-500:   145 42% 47%;   /* #44A870  dark-mode success    */
-  --green-600:   145 48% 38%;   /* #2D9B5C  light-mode success   */
-  --green-700:   145 52% 29%;
-  --green-800:   145 50% 21%;
-  --green-900:   145 48% 14%;
-  --green-950:   145 45%  8%;
+  --green-50:    150 45% 96%;
+  --green-100:   150 44% 91%;
+  --green-200:   150 42% 81%;
+  --green-300:   150 40% 66%;
+  --green-400:   150 38% 52%;
+  --green-500:   150 40% 44%;   /* dark-mode success    */
+  --green-600:   152 45% 35%;   /* light-mode success   */
+  --green-700:   152 48% 27%;
+  --green-800:   152 46% 20%;
+  --green-900:   152 44% 13%;
+  --green-950:   152 42%  8%;
 
   /* Red */
-  --red-50:      4 100% 97%;
-  --red-100:     4  90% 93%;
-  --red-200:     4  80% 85%;
-  --red-300:     4  75% 74%;
-  --red-400:     4  72% 66%;
-  --red-500:     4  70% 58%;    /* #E55B4D  dark-mode destructive  */
-  --red-600:     4  72% 50%;    /* #DC2424  light-mode destructive */
-  --red-700:     4  70% 40%;
-  --red-800:     4  65% 30%;
-  --red-900:     4  60% 20%;
-  --red-950:     4  55% 12%;
+  --red-50:      6 85% 97%;
+  --red-100:     6 80% 93%;
+  --red-200:     6 75% 85%;
+  --red-300:     6 70% 74%;
+  --red-400:     6 66% 64%;
+  --red-500:     6 64% 58%;    /* dark-mode destructive  */
+  --red-600:     4 66% 48%;    /* light-mode destructive */
+  --red-700:     4 64% 39%;
+  --red-800:     4 60% 29%;
+  --red-900:     4 55% 20%;
+  --red-950:     4 50% 12%;
 
   /* Yellow */
-  --yellow-50:   35 100% 97%;
-  --yellow-100:  35  95% 92%;
-  --yellow-200:  35  90% 82%;
-  --yellow-300:  35  84% 70%;
-  --yellow-400:  35  80% 62%;
-  --yellow-500:  35  75% 58%;   /* #E5A030  dark-mode warning    */
-  --yellow-600:  35  80% 48%;   /* #C47A10  light-mode warning   */
-  --yellow-700:  35  78% 38%;
-  --yellow-800:  35  72% 28%;
-  --yellow-900:  35  65% 19%;
-  --yellow-950:  35  60% 12%;
+  --yellow-50:   40 90% 96%;
+  --yellow-100:  40 88% 91%;
+  --yellow-200:  40 84% 80%;
+  --yellow-300:  40 78% 68%;
+  --yellow-400:  40 72% 58%;
+  --yellow-500:  40 68% 52%;   /* dark-mode warning    */
+  --yellow-600:  38 72% 42%;   /* light-mode warning   */
+  --yellow-700:  38 70% 33%;
+  --yellow-800:  38 65% 25%;
+  --yellow-900:  38 60% 17%;
+  --yellow-950:  38 55% 11%;
 
   /* ── Semantic Color (Light Mode) ────────────────────────────────────────
-     Reference primitives wherever a ramp step matches.
+     --background is the window FRAME (title bar + sidebar).
+     --canvas is the floating content surface everything else sits on.
   ──────────────────────────────────────────────────────────────────────── */
 
-  --background:               var(--slate-50);
-  --foreground:               227 32% 13%;
+  --background:               233 24% 95%;
+  --foreground:               234 16% 14%;
+  --canvas:                   0   0% 100%;
   --card:                     0   0% 100%;
-  --card-foreground:          227 32% 13%;
+  --card-foreground:          234 16% 14%;
   --popover:                  0   0% 100%;
-  --popover-foreground:       227 32% 13%;
-  --primary:                  var(--indigo-600);
+  --popover-foreground:       234 16% 14%;
+  --primary:                  var(--iris-600);
   --primary-foreground:       0   0% 100%;
-  --secondary:                228 22% 91%;
-  --secondary-foreground:     227 32% 20%;
-  --muted:                    228 22% 93%;
-  --muted-foreground:         228 12% 48%;
-  --accent:                   228 22% 91%;
-  --accent-foreground:        227 32% 13%;
+  --secondary:                233 18% 93%;
+  --secondary-foreground:     234 14% 22%;
+  --muted:                    233 20% 95.5%;
+  --muted-foreground:         233  9% 45%;
+  --accent:                   233 18% 93.5%;
+  --accent-foreground:        234 16% 14%;
   --highlight:                var(--amber-600);
   --highlight-foreground:     0   0% 100%;
   --destructive:              var(--red-600);
@@ -120,29 +127,28 @@
   --success-foreground:       0   0% 100%;
   --warning:                  var(--yellow-600);
   --warning-foreground:       0   0% 100%;
-  --border:                   var(--slate-200);
-  --input:                    var(--slate-200);
-  --ring:                     var(--indigo-600);
-  --sidebar:                  228 20% 94%;
-  --sidebar-foreground:       227 32% 15%;
-  --sidebar-border:           var(--slate-200);
+  --border:                   233 14% 88%;
+  --input:                    233 14% 84%;
+  --ring:                     var(--iris-600);
+  --sidebar:                  233 24% 95%;
+  --sidebar-foreground:       234 14% 18%;
+  --sidebar-border:           233 14% 87%;
+  --sidebar-accent:           233 16% 88.5%;   /* neutral active pill */
 
   /* ── Shadows (Light Mode) ───────────────────────────────────────────────
-     Six elevation levels. Dark mode overrides these in .dark.
-     Use directly: box-shadow: var(--shadow-md)
+     Soft, low-spread. The canvas gets --shadow-canvas; cards stay flat and
+     only elevate on hover/overlay.
   ──────────────────────────────────────────────────────────────────────── */
 
-  --shadow-xs:    0 1px 2px rgba(0,0,0,.06);
-  --shadow-sm:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
-  --shadow-md:    0 4px 12px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.06);
-  --shadow-lg:    0 8px 24px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.08);
-  --shadow-xl:    0 16px 40px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.10);
-  --shadow-float: 0 2px 8px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.08);
+  --shadow-xs:     0 1px 2px rgba(28,25,20,.05);
+  --shadow-sm:     0 1px 3px rgba(28,25,20,.07), 0 1px 2px rgba(28,25,20,.04);
+  --shadow-md:     0 4px 12px rgba(28,25,20,.08), 0 2px 4px rgba(28,25,20,.05);
+  --shadow-lg:     0 8px 28px rgba(28,25,20,.12), 0 4px 8px rgba(28,25,20,.06);
+  --shadow-xl:     0 16px 44px rgba(28,25,20,.16), 0 8px 16px rgba(28,25,20,.08);
+  --shadow-float:  0 2px 8px rgba(28,25,20,.08), 0 1px 3px rgba(28,25,20,.06);
+  --shadow-canvas: 0 1px 3px rgba(28,25,20,.06), 0 4px 16px rgba(28,25,20,.04);
 
-  /* ── Motion (Mode-Agnostic) ─────────────────────────────────────────────
-     Duration and easing tokens. Use directly:
-       transition: opacity var(--duration-base) var(--easing-standard)
-  ──────────────────────────────────────────────────────────────────────── */
+  /* ── Motion (Mode-Agnostic) ─────────────────────────────────────────── */
 
   --duration-instant:  50ms;
   --duration-fast:    100ms;
@@ -155,9 +161,7 @@
   --easing-accelerate: cubic-bezier(0.3, 0, 1, 1);
   --easing-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* ── Z-Index Scale (Mode-Agnostic) ──────────────────────────────────────
-     Use directly: z-index: var(--z-modal)
-  ──────────────────────────────────────────────────────────────────────── */
+  /* ── Z-Index Scale (Mode-Agnostic) ──────────────────────────────────── */
 
   --z-base:     0;
   --z-raised:   1;
@@ -169,41 +173,40 @@
   --z-tooltip:  60;
 
   /* ── Font Tokens ────────────────────────────────────────────────────────
-     Apply via: font: var(--font-heading-xxlarge)
-     Never pair font-size alone — weight and family are inseparable.
+     Sans is the UI voice — headings included. Mono is a DATA voice only:
+     model ids, token counts, costs, code, branch refs. Never headings.
+     Apply via the .font-* utility classes (they add letter-spacing, which
+     the font shorthand cannot carry).
   ──────────────────────────────────────────────────────────────────────── */
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
 
-  /* Heading (H1–H6) */
-  --font-heading-xxlarge: 600 2rem/1.1     "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --font-heading-xlarge:  700 1.625rem/1.15 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-heading-large:   600 1.25rem/1.25  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-heading-medium:  600 1rem/1.3      -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-heading-small:   600 0.8125rem/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-heading-xsmall:  600 0.6875rem/1.4 "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  /* Heading (H1–H6) — all sans, weight steps down with size */
+  --font-heading-xxlarge: 650 1.75rem/1.2    var(--font-sans);
+  --font-heading-xlarge:  650 1.375rem/1.25  var(--font-sans);
+  --font-heading-large:   600 1.0625rem/1.35 var(--font-sans);
+  --font-heading-medium:  600 0.9375rem/1.4  var(--font-sans);
+  --font-heading-small:   600 0.8125rem/1.4  var(--font-sans);
+  --font-heading-xsmall:  600 0.75rem/1.4    var(--font-sans);
 
   /* Body */
-  --font-body-large:  400 0.9375rem/1.6  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-body-medium: 400 0.875rem/1.55  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-body-small:  400 0.8125rem/1.5  -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
-  --font-body-xsmall: 400 0.75rem/1.5   -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+  --font-body-large:  400 0.9375rem/1.6  var(--font-sans);
+  --font-body-medium: 400 0.875rem/1.55  var(--font-sans);
+  --font-body-small:  400 0.8125rem/1.5  var(--font-sans);
+  --font-body-xsmall: 400 0.75rem/1.5    var(--font-sans);
 
-  /* Label — always pair with text-transform:uppercase and letter-spacing:0.1em */
-  --font-label-large:  600 0.75rem/1    "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --font-label-medium: 600 0.6875rem/1  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --font-label-small:  600 0.625rem/1   "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  /* Label — small sans caps for section headers; quiet, not techno */
+  --font-label-large:  500 0.75rem/1.2   var(--font-sans);
+  --font-label-medium: 500 0.6875rem/1.2 var(--font-sans);
+  --font-label-small:  500 0.65rem/1.2   var(--font-sans);
 
-  /* Code */
-  --font-code-large:  400 0.875rem/1.65  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --font-code-medium: 400 0.8125rem/1.6  "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
-  --font-code-small:  400 0.75rem/1.5    "SF Mono","JetBrains Mono","Fira Code",ui-monospace,monospace;
+  /* Code / data */
+  --font-code-large:  400 0.875rem/1.65  var(--font-mono);
+  --font-code-medium: 400 0.8125rem/1.6  var(--font-mono);
+  --font-code-small:  400 0.75rem/1.5    var(--font-mono);
 
-  /* ── Space Tokens (4px base unit) ───────────────────────────────────────
-     space.100 = 4px base. Suffix = % of base unit.
-     Apply via: padding: var(--space-400)
-  ──────────────────────────────────────────────────────────────────────── */
+  /* ── Space Tokens (4px base unit) ───────────────────────────────────── */
 
   --space-0:     0;
   --space-025:   0.0625rem;   /*  1px */
@@ -229,9 +232,7 @@
   --space-2400:  6rem;        /* 96px */
   --space-3200:  8rem;        /* 128px */
 
-  /* ── Border Tokens ──────────────────────────────────────────────────────
-     Width and radius are mode-agnostic. Color tokens reference --border, --ring, etc.
-  ──────────────────────────────────────────────────────────────────────── */
+  /* ── Border Tokens ──────────────────────────────────────────────────── */
 
   --border-width:          1px;
   --border-width-selected: 2px;
@@ -239,7 +240,7 @@
   --border-width-none:     0px;
 
   --border-radius-none:    0px;
-  --border-radius-small:   3px;
+  --border-radius-small:   4px;
   --border-radius-medium:  6px;
   --border-radius-large:   8px;
   --border-radius-xlarge:  12px;
@@ -248,19 +249,18 @@
 
   /* ── Data Visualization Palette ─────────────────────────────────────────
      Categorical: 8 perceptually distinct hues for knowledge node types.
-     Sequential:  5-step indigo scale for edge weight / relevance scoring.
-     Semantic aliases map human-readable names onto categorical slots.
+     Sequential:  5-step iris scale for edge weight / relevance scoring.
   ──────────────────────────────────────────────────────────────────────── */
 
   /* Categorical */
-  --viz-cat-1: var(--indigo-600);   /* conversation / AI turn  */
+  --viz-cat-1: var(--iris-600);     /* conversation / AI turn  */
   --viz-cat-2: var(--amber-600);    /* decision / choice       */
   --viz-cat-3: var(--green-600);    /* code / implementation   */
-  --viz-cat-4: 270 50% 50%;         /* violet — reference/doc  */
-  --viz-cat-5: 192 70% 35%;         /* cyan — task / action    */
+  --viz-cat-4: 270 45% 52%;         /* violet — reference/doc  */
+  --viz-cat-5: 195 65% 36%;         /* cyan — task / action    */
   --viz-cat-6: var(--red-600);      /* issue / error           */
-  --viz-cat-7: 80  50% 40%;         /* lime — note / obs       */
-  --viz-cat-8: var(--slate-500);    /* unknown / misc          */
+  --viz-cat-7: 82  45% 40%;         /* lime — note / obs       */
+  --viz-cat-8: var(--neutral-500);  /* unknown / misc          */
 
   /* Semantic node-type aliases */
   --viz-node-conversation: var(--viz-cat-1);
@@ -273,70 +273,73 @@
   --viz-node-unknown:      var(--viz-cat-8);
 
   /* Sequential (edge weight / relevance — lowest to highest) */
-  --viz-seq-1: 229 35% 28%;
-  --viz-seq-2: 229 48% 40%;
-  --viz-seq-3: 229 56% 50%;
-  --viz-seq-4: 229 62% 58%;
-  --viz-seq-5: 229 70% 72%;
+  --viz-seq-1: 233 30% 30%;
+  --viz-seq-2: 233 42% 42%;
+  --viz-seq-3: 233 52% 52%;
+  --viz-seq-4: 233 60% 62%;
+  --viz-seq-5: 233 68% 74%;
 }
 
 /* ─── Dark Mode Overrides ────────────────────────────────────────────────── */
 
 .dark {
 
-  /* Semantic color — dark surface */
-  --background:               226 26%  8%;
-  --foreground:               228 30% 91%;
-  --card:                     227 25% 10%;
-  --card-foreground:          228 30% 91%;
-  --popover:                  227 24% 12%;
-  --popover-foreground:       228 30% 91%;
-  --primary:                  var(--indigo-500);
-  --primary-foreground:       0   0% 100%;
-  --secondary:                226 25% 16%;
-  --secondary-foreground:     228 24% 74%;
-  --muted:                    226 24% 14%;
-  --muted-foreground:         228 14% 52%;
-  --accent:                   226 24% 14%;
-  --accent-foreground:        228 30% 91%;
+  /* Frame is a deep iris-tinted near-black; canvas lifts clearly above it */
+  --background:               236 20%  7%;
+  --foreground:               233 14% 92%;
+  --canvas:                   235 13% 11.5%;
+  --card:                     234 13% 14.5%;
+  --card-foreground:          233 14% 92%;
+  --popover:                  234 14% 13%;
+  --popover-foreground:       233 14% 92%;
+  --primary:                  var(--iris-500);
+  --primary-foreground:       235 45% 12%;
+  --secondary:                234 10% 19%;
+  --secondary-foreground:     233 10% 80%;
+  --muted:                    234 10% 16.5%;
+  --muted-foreground:         233  9% 62%;
+  --accent:                   234 10% 18%;
+  --accent-foreground:        233 14% 92%;
   --highlight:                var(--amber-500);
-  --highlight-foreground:     226 26%  8%;
+  --highlight-foreground:     34 40% 10%;
   --destructive:              var(--red-500);
   --destructive-foreground:   0   0% 100%;
   --success:                  var(--green-500);
-  --success-foreground:       0   0% 100%;
+  --success-foreground:       152 42% 8%;
   --warning:                  var(--yellow-500);
-  --warning-foreground:       226 26%  8%;
-  --border:                   228 24% 19%;
-  --input:                    228 24% 19%;
-  --ring:                     var(--indigo-500);
-  --sidebar:                  227 28%  7%;
-  --sidebar-foreground:       228 26% 86%;
-  --sidebar-border:           228 22% 15%;
+  --warning-foreground:       38 55% 10%;
+  --border:                   234 10% 20.5%;
+  --input:                    234 10% 25%;
+  --ring:                     var(--iris-500);
+  --sidebar:                  236 20% 7%;
+  --sidebar-foreground:       233 12% 88%;
+  --sidebar-border:           235 12% 15%;
+  --sidebar-accent:           235 12% 17%;
 
-  /* Shadows — stronger on dark backgrounds (depth via opacity) */
-  --shadow-xs:    0 1px 2px rgba(0,0,0,.40);
-  --shadow-sm:    0 1px 4px rgba(0,0,0,.40), 0 0 1px rgba(0,0,0,.30);
-  --shadow-md:    0 4px 12px rgba(0,0,0,.50), 0 0 2px rgba(0,0,0,.30);
-  --shadow-lg:    0 8px 24px rgba(0,0,0,.60), 0 0 2px rgba(0,0,0,.30);
-  --shadow-xl:    0 16px 48px rgba(0,0,0,.70), 0 0 4px rgba(0,0,0,.20);
-  --shadow-float: 0 2px 8px rgba(0,0,0,.50), 0 1px 3px rgba(0,0,0,.30);
+  /* Shadows — depth via opacity on dark */
+  --shadow-xs:     0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:     0 1px 4px rgba(0,0,0,.40), 0 0 1px rgba(0,0,0,.30);
+  --shadow-md:     0 4px 12px rgba(0,0,0,.50), 0 0 2px rgba(0,0,0,.30);
+  --shadow-lg:     0 8px 24px rgba(0,0,0,.60), 0 0 2px rgba(0,0,0,.30);
+  --shadow-xl:     0 16px 48px rgba(0,0,0,.70), 0 0 4px rgba(0,0,0,.20);
+  --shadow-float:  0 2px 8px rgba(0,0,0,.50), 0 1px 3px rgba(0,0,0,.30);
+  --shadow-canvas: 0 1px 3px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.25);
 
   /* Viz — brighter for contrast on dark surfaces */
-  --viz-cat-1: var(--indigo-500);
-  --viz-cat-2: var(--amber-500);
-  --viz-cat-3: var(--green-500);
-  --viz-cat-4: 270 60% 68%;
-  --viz-cat-5: 192 65% 55%;
-  --viz-cat-6: var(--red-500);
-  --viz-cat-7:  80 55% 60%;
-  --viz-cat-8: var(--slate-400);
+  --viz-cat-1: var(--iris-400);
+  --viz-cat-2: var(--amber-400);
+  --viz-cat-3: var(--green-400);
+  --viz-cat-4: 270 55% 70%;
+  --viz-cat-5: 195 55% 56%;
+  --viz-cat-6: var(--red-400);
+  --viz-cat-7:  82 45% 58%;
+  --viz-cat-8: var(--neutral-400);
 
-  --viz-seq-1: 229 32% 20%;
-  --viz-seq-2: 229 46% 34%;
-  --viz-seq-3: 229 58% 48%;
-  --viz-seq-4: 229 65% 62%;
-  --viz-seq-5: 229 72% 76%;
+  --viz-seq-1: 233 28% 24%;
+  --viz-seq-2: 233 40% 38%;
+  --viz-seq-3: 233 52% 52%;
+  --viz-seq-4: 233 62% 64%;
+  --viz-seq-5: 233 70% 78%;
 }
 
 /* ─── Tailwind Theme Mapping ─────────────────────────────────────────────── */
@@ -345,6 +348,7 @@
   /* Semantic colors → Tailwind utilities (bg-primary, text-foreground…) */
   --color-background:             hsl(var(--background));
   --color-foreground:             hsl(var(--foreground));
+  --color-canvas:                 hsl(var(--canvas));
   --color-card:                   hsl(var(--card));
   --color-card-foreground:        hsl(var(--card-foreground));
   --color-popover:                hsl(var(--popover));
@@ -371,6 +375,7 @@
   --color-sidebar:                hsl(var(--sidebar));
   --color-sidebar-foreground:     hsl(var(--sidebar-foreground));
   --color-sidebar-border:         hsl(var(--sidebar-border));
+  --color-sidebar-accent:         hsl(var(--sidebar-accent));
 
   /* Data viz → Tailwind utilities (bg-viz-cat-1, text-viz-node-code…) */
   --color-viz-cat-1: hsl(var(--viz-cat-1));
@@ -396,10 +401,11 @@
   --color-viz-seq-5: hsl(var(--viz-seq-5));
 
   /* Border radius → Tailwind rounded-* utilities */
-  --radius-sm:     0.25rem;
-  --radius-md:     0.375rem;
-  --radius-lg:     0.5rem;
+  --radius-sm:     0.3125rem;
+  --radius-md:     0.4375rem;
+  --radius-lg:     0.5625rem;
   --radius-xl:     0.75rem;
+  --radius-2xl:    1rem;
 }
 
 /* ─── Base Layer ─────────────────────────────────────────────────────────── */
@@ -410,9 +416,17 @@
     @apply bg-background text-foreground;
     font: var(--font-body-medium);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   .font-mono {
-    font-family: "SF Mono","JetBrains Mono","Fira Code","Cascadia Code",ui-monospace,monospace;
+    font-family: var(--font-mono);
+  }
+  /* Data should always align in columns */
+  .font-code-lg, .font-code-md, .font-code-sm, .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: hsl(var(--primary) / .18);
   }
 }
 
@@ -421,78 +435,146 @@
 .drag-region { -webkit-app-region: drag; }
 .no-drag     { -webkit-app-region: no-drag; }
 
-/* ─── Glass Search Bar ───────────────────────────────────────────────────── */
+/* ─── Atmosphere ─────────────────────────────────────────────────────────────
+   The window frame is not flat gray — a faint iris bloom breathes from the
+   top-left so the whole app carries the brand tint (the Dia move).
+─────────────────────────────────────────────────────────────────────────── */
 
-.glass-searchbar {
-  background: rgba(120,120,128,.12);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 0.5px solid rgba(0,0,0,.06);
-  transition: all var(--duration-base) var(--easing-standard);
+.frame-atmosphere {
+  background:
+    radial-gradient(1100px 700px at 12% -8%, hsl(var(--primary) / 0.08), transparent 55%),
+    radial-gradient(900px 600px at 105% 115%, hsl(var(--highlight) / 0.05), transparent 55%),
+    hsl(var(--background));
 }
-.glass-searchbar:focus-within {
-  background: rgba(120,120,128,.16);
-  box-shadow: 0 0 0 3px hsl(var(--ring) / .30);
-  border-color: hsl(var(--ring) / .40);
+.dark .frame-atmosphere {
+  background:
+    radial-gradient(1100px 700px at 12% -8%, hsl(var(--primary) / 0.13), transparent 55%),
+    radial-gradient(900px 600px at 105% 115%, hsl(var(--primary) / 0.06), transparent 55%),
+    hsl(var(--background));
 }
-.dark .glass-searchbar {
-  background: rgba(120,120,128,.18);
-  border: 0.5px solid rgba(255,255,255,.06);
+
+/* Hero glow — the signature halo for the composer / launcher */
+.glow-hero {
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.14),
+    0 4px 24px hsl(var(--primary) / 0.12),
+    var(--shadow-md);
 }
-.dark .glass-searchbar:focus-within {
-  background: rgba(120,120,128,.24);
-  box-shadow: 0 0 0 3px hsl(var(--ring) / .25);
-  border-color: hsl(var(--ring) / .35);
+.glow-hero-strong {
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.30),
+    0 6px 40px hsl(var(--primary) / 0.22),
+    var(--shadow-lg);
+}
+
+/* ─── Motion vocabulary ──────────────────────────────────────────────────────
+   Small, consistent set: content rises in, popovers pop, glows breathe,
+   pressables compress. Respect reduced-motion.
+─────────────────────────────────────────────────────────────────────────── */
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes glow-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.22), 0 4px 24px hsl(var(--primary) / 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.38), 0 6px 40px hsl(var(--primary) / 0.30);
+  }
+}
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: none;              opacity: 0.35; }
+  40%           { transform: translateY(-3px);  opacity: 1; }
+}
+
+.animate-rise { animation: rise-in var(--duration-slow) var(--easing-decelerate) both; }
+.animate-pop  { animation: pop-in var(--duration-fast) var(--easing-decelerate) both; transform-origin: top; }
+.animate-glow-breathe { animation: glow-breathe 2.4s ease-in-out infinite; }
+
+/* Staggered entrance for a page's top-level sections */
+.stagger-children > * { animation: rise-in var(--duration-slow) var(--easing-decelerate) both; }
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+
+/* Tactile press for buttons, rows, and pills */
+.pressable { transition: transform var(--duration-fast) var(--easing-standard); }
+.pressable:active { transform: scale(0.97); }
+
+/* Typing indicator dots */
+.typing-dot { animation: dot-bounce 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.30s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise, .animate-pop, .stagger-children > * { animation: none; }
+  .animate-glow-breathe { animation: none; }
+  .typing-dot { animation-duration: 2.4s; }
+  .pressable:active { transform: none; }
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
 
-::-webkit-scrollbar         { width: 6px; height: 6px; }
+::-webkit-scrollbar         { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track   { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / .25);
-  border-radius: 3px;
+  background: hsl(var(--muted-foreground) / .22);
+  border-radius: 4px;
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / .45);
+  background: hsl(var(--muted-foreground) / .40);
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }
 
 /* ─── Token Utility Classes ──────────────────────────────────────────────────
-   These turn design tokens into regular className strings so you never write
-   style={{ font: "var(--font-heading-xlarge)" }} in application code.
+   Design tokens as className strings — never style={{ font: … }} in app code.
 ─────────────────────────────────────────────────────────────────────────── */
 
 @layer utilities {
 
-  /* Typography — font tokens */
-  .font-h1 { font: var(--font-heading-xxlarge); }
-  .font-h2 { font: var(--font-heading-xlarge); }
-  .font-h3 { font: var(--font-heading-large); }
-  .font-h4 { font: var(--font-heading-medium); }
-  .font-h5 { font: var(--font-heading-small); }
-  .font-h6 { font: var(--font-heading-xsmall); }
+  /* Typography — headings carry their own tracking */
+  .font-h1 { font: var(--font-heading-xxlarge); letter-spacing: -0.021em; }
+  .font-h2 { font: var(--font-heading-xlarge);  letter-spacing: -0.017em; }
+  .font-h3 { font: var(--font-heading-large);   letter-spacing: -0.012em; }
+  .font-h4 { font: var(--font-heading-medium);  letter-spacing: -0.008em; }
+  .font-h5 { font: var(--font-heading-small);   letter-spacing: -0.004em; }
+  .font-h6 { font: var(--font-heading-xsmall);  letter-spacing: 0; }
 
   .font-body-lg { font: var(--font-body-large); }
   .font-body-md { font: var(--font-body-medium); }
   .font-body-sm { font: var(--font-body-small); }
   .font-body-xs { font: var(--font-body-xsmall); }
 
-  .font-label-lg { font: var(--font-label-large);  text-transform: uppercase; letter-spacing: 0.10em; }
-  .font-label-md { font: var(--font-label-medium); text-transform: uppercase; letter-spacing: 0.10em; }
-  .font-label-sm { font: var(--font-label-small);  text-transform: uppercase; letter-spacing: 0.12em; }
+  /* Quiet section labels — small caps feel without the teletype look */
+  .font-label-lg { font: var(--font-label-large);  text-transform: uppercase; letter-spacing: 0.05em; }
+  .font-label-md { font: var(--font-label-medium); text-transform: uppercase; letter-spacing: 0.05em; }
+  .font-label-sm { font: var(--font-label-small);  text-transform: uppercase; letter-spacing: 0.06em; }
 
   .font-code-lg { font: var(--font-code-large); }
   .font-code-md { font: var(--font-code-medium); }
   .font-code-sm { font: var(--font-code-small); }
 
   /* Shadows — override Tailwind defaults; respond to dark/light mode */
-  .shadow-xs    { box-shadow: var(--shadow-xs); }
-  .shadow-sm    { box-shadow: var(--shadow-sm); }
-  .shadow-md    { box-shadow: var(--shadow-md); }
-  .shadow-lg    { box-shadow: var(--shadow-lg); }
-  .shadow-xl    { box-shadow: var(--shadow-xl); }
-  .shadow-float { box-shadow: var(--shadow-float); }
-  .shadow-none  { box-shadow: none; }
+  .shadow-xs     { box-shadow: var(--shadow-xs); }
+  .shadow-sm     { box-shadow: var(--shadow-sm); }
+  .shadow-md     { box-shadow: var(--shadow-md); }
+  .shadow-lg     { box-shadow: var(--shadow-lg); }
+  .shadow-xl     { box-shadow: var(--shadow-xl); }
+  .shadow-float  { box-shadow: var(--shadow-float); }
+  .shadow-canvas { box-shadow: var(--shadow-canvas); }
+  .shadow-none   { box-shadow: none; }
 
   /* Motion — preset transition combos */
   .transition-std {
