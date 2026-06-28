@@ -1,409 +1,451 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
 import {
   Search,
   Network,
   Settings,
-  FolderOpen,
   ChevronRight,
   Brain,
   FileText,
   MessageSquare,
   GitBranch,
-  Sparkles,
-  Layers,
+  Plus,
+  LayoutDashboard,
+  Check,
+  ChevronsUpDown,
+  DollarSign,
+  GitCompare,
+  BookOpen,
 } from "lucide-react";
-import { Button } from "./ui/button";
+import type { Chat, Branch } from "@ai-studio/shared";
 import { ScrollArea } from "./ui/scroll-area";
+import { Avatar, AvatarFallback } from "./ui/avatar";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "./workspace-provider";
+import { useAuth } from "./auth-provider";
+import { useChats, useBranches } from "../hooks/use-ipc-data";
 
-interface FolderData {
-  id: string;
-  name: string;
-  color: string;
-  memories: { id: string; label: string }[];
-  artifacts: { id: string; label: string }[];
-  chats: { id: string; label: string; branches?: { id: string; label: string; color: string }[] }[];
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Primary navigation links (top-level destinations)
+// ─────────────────────────────────────────────────────────────────────────────
 
-const DUMMY_FOLDERS: FolderData[] = [
-  {
-    id: "design",
-    name: "Design",
-    color: "#ef4444",
-    memories: [
-      { id: "m1", label: "Brand guidelines context" },
-      { id: "m2", label: "Color palette notes" },
-    ],
-    artifacts: [
-      { id: "a1", label: "Component library spec" },
-      { id: "a2", label: "Figma export tokens" },
-    ],
-    chats: [
-      {
-        id: "c1",
-        label: "UI exploration",
-        branches: [
-          { id: "b1", label: "Main branch", color: "#f59e0b" },
-          { id: "b2", label: "Dark mode variant", color: "#8b5cf6" },
-        ],
-      },
-      { id: "c2", label: "Icon set discussion" },
-    ],
-  },
-  {
-    id: "development",
-    name: "Development",
-    color: "#f59e0b",
-    memories: [
-      { id: "m3", label: "API architecture decisions" },
-      { id: "m4", label: "Tech stack preferences" },
-      { id: "m5", label: "Performance benchmarks" },
-    ],
-    artifacts: [
-      { id: "a3", label: "Database schema v2" },
-      { id: "a4", label: "REST API documentation" },
-      { id: "a5", label: "Deployment runbook" },
-    ],
-    chats: [
-      {
-        id: "c3",
-        label: "Auth implementation",
-        branches: [
-          { id: "b3", label: "Main branch", color: "#f59e0b" },
-          { id: "b4", label: "OAuth flow", color: "#3b82f6" },
-          { id: "b5", label: "JWT refresh", color: "#ef4444" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "research",
-    name: "Research",
-    color: "#8b5cf6",
-    memories: [{ id: "m6", label: "Competitor analysis" }],
-    artifacts: [{ id: "a6", label: "Market report Q4" }],
-    chats: [
-      { id: "c4", label: "LLM comparison" },
-      { id: "c5", label: "Pricing strategy" },
-    ],
-  },
+const PRIMARY_NAV = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/memory", label: "Memory", icon: Brain },
+  { to: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  { to: "/artifacts", label: "Artifacts", icon: FileText },
+  { to: "/graph", label: "Knowledge Graph", icon: Network },
+];
+
+const FOOTER_NAV = [
+  { to: "/branches/compare", label: "Compare branches", icon: GitCompare },
+  { to: "/settings/costs", label: "Cost tracker", icon: DollarSign },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["development"]));
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["development-chats"]));
-  const [activeItem, setActiveItem] = useState("b3");
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const toggleFolder = (id: string) => {
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSection = (id: string) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  const initials = (user?.name ?? "User")
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("");
 
   return (
-    <aside className="flex w-[270px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <span className="text-[15px] font-semibold text-sidebar-foreground">Organisation</span>
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-border" />
+    <aside className="flex w-[264px] shrink-0 flex-col bg-sidebar">
+      {/* Workspace switcher — org + project in one control */}
+      <div className="px-3 pb-1">
+        <WorkspaceSwitcher />
       </div>
 
-      {/* macOS Liquid Glass Search Bar */}
-      <div className="px-3 py-2">
-        <div className="glass-searchbar relative rounded-[10px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      {/* Search */}
+      <div className="px-3 pb-2 pt-1">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="w-full h-[36px] rounded-[10px] pl-9 pr-12 text-[13px] bg-transparent text-sidebar-foreground placeholder:text-muted-foreground focus:outline-none"
+            placeholder="Search"
+            className="h-8 w-full rounded-lg bg-black/[0.045] pl-8 pr-11 text-[13px] text-sidebar-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:bg-black/[0.06] dark:bg-white/[0.06] dark:focus:bg-white/[0.09]"
           />
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-[5px] bg-black/[0.05] dark:bg-white/[0.08] px-1.5 py-0.5 text-[11px] text-muted-foreground font-medium">
+          <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground/60">
             ⌘K
           </kbd>
         </div>
       </div>
 
-      {/* Workspace */}
-      <div className="px-4 py-1">
-        <div className="flex items-center gap-2.5 py-1.5 text-[13px] font-medium text-sidebar-foreground">
-          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          <span>Workspace name</span>
-        </div>
-      </div>
+      {/* Primary nav */}
+      <nav className="space-y-px px-3">
+        {PRIMARY_NAV.map((item) => (
+          <SidebarLink key={item.to} {...item} />
+        ))}
+      </nav>
 
-      {/* Tree */}
-      <ScrollArea className="flex-1 px-2 pb-2">
-        <div className="space-y-0.5">
-          {DUMMY_FOLDERS.map((folder) => (
-            <FolderItem
-              key={folder.id}
-              folder={folder}
-              isExpanded={expandedFolders.has(folder.id)}
-              expandedSections={expandedSections}
-              activeItem={activeItem}
-              onToggleFolder={() => toggleFolder(folder.id)}
-              onToggleSection={toggleSection}
-              onSelectItem={setActiveItem}
-            />
-          ))}
+      {/* Chats + branches tree */}
+      <ScrollArea className="flex-1 px-3 pb-2 pt-3">
+        <div className="flex items-center justify-between px-2 pb-1">
+          <span className="font-label-sm text-muted-foreground/80">Chats</span>
+          <button
+            onClick={() => navigate("/chat/new")}
+            className="pressable rounded-md p-1 text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            title="New chat"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
         </div>
+        <ChatTree />
       </ScrollArea>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar-border px-2 py-2 space-y-0.5">
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2.5 text-[13px] h-8 text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-accent">
-          <Network className="h-4 w-4" /> Project graph
-        </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2.5 text-[13px] h-8 text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-accent">
-          <Settings className="h-4 w-4" /> Project settings
-        </Button>
+      {/* Footer nav */}
+      <div className="space-y-px px-3 pb-1 pt-2">
+        {FOOTER_NAV.map((item) => (
+          <SidebarLink key={item.to} {...item} />
+        ))}
       </div>
 
       {/* User */}
-      <div className="border-t border-sidebar-border flex items-center gap-3 px-4 py-3">
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[12px] font-semibold text-white shadow-sm">
-          S
+      <div className="mx-3 mb-2 mt-1 flex items-center gap-2.5 rounded-lg px-2 py-2">
+        <Avatar size="sm">
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+        <div className="truncate text-[13px] font-medium text-sidebar-foreground">
+          {user?.name ?? "User"}
         </div>
-        <span className="text-[13px] font-medium text-sidebar-foreground">Soham Rupaye</span>
       </div>
     </aside>
   );
 }
 
-function FolderItem({
-  folder,
-  isExpanded,
-  expandedSections,
-  activeItem,
-  onToggleFolder,
-  onToggleSection,
-  onSelectItem,
-}: {
-  folder: FolderData;
-  isExpanded: boolean;
-  expandedSections: Set<string>;
-  activeItem: string;
-  onToggleFolder: () => void;
-  onToggleSection: (id: string) => void;
-  onSelectItem: (id: string) => void;
-}) {
-  return (
-    <div>
-      <button
-        onClick={onToggleFolder}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-sidebar-foreground hover:bg-accent transition-colors"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-            isExpanded && "rotate-90"
-          )}
-        />
-        <div className="h-3 w-3 rounded-[4px]" style={{ backgroundColor: folder.color }} />
-        <span>{folder.name}</span>
-      </button>
+// ─────────────────────────────────────────────────────────────────────────────
+// SidebarLink — neutral pill, no accent tinting; icons stay quiet
+// ─────────────────────────────────────────────────────────────────────────────
 
-      {isExpanded && (
-        <div className="ml-4 border-l border-sidebar-border pl-2 mt-0.5 space-y-0.5">
-          <SectionItem
-            icon={<Brain className="h-4 w-4 text-violet-500" />}
-            label="Memories"
-            items={folder.memories}
-            isExpanded={expandedSections.has(`${folder.id}-memories`)}
-            activeItem={activeItem}
-            onToggle={() => onToggleSection(`${folder.id}-memories`)}
-            onSelectItem={onSelectItem}
-            itemIcon={<Sparkles className="h-3.5 w-3.5 text-violet-400" />}
-          />
-          <SectionItem
-            icon={<Layers className="h-4 w-4 text-emerald-500" />}
-            label="Artifacts"
-            items={folder.artifacts}
-            isExpanded={expandedSections.has(`${folder.id}-artifacts`)}
-            activeItem={activeItem}
-            onToggle={() => onToggleSection(`${folder.id}-artifacts`)}
-            onSelectItem={onSelectItem}
-            itemIcon={<FileText className="h-3.5 w-3.5 text-emerald-400" />}
-          />
-          <ChatSection
-            folderId={folder.id}
-            chats={folder.chats}
-            isExpanded={expandedSections.has(`${folder.id}-chats`)}
-            expandedSections={expandedSections}
-            activeItem={activeItem}
-            onToggle={() => onToggleSection(`${folder.id}-chats`)}
-            onToggleSection={onToggleSection}
-            onSelectItem={onSelectItem}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SectionItem({
-  icon,
+function SidebarLink({
+  to,
   label,
-  items,
-  isExpanded,
-  activeItem,
-  onToggle,
-  onSelectItem,
-  itemIcon,
+  icon: Icon,
+  end,
 }: {
-  icon: React.ReactNode;
+  to: string;
   label: string;
-  items: { id: string; label: string }[];
-  isExpanded: boolean;
-  activeItem: string;
-  onToggle: () => void;
-  onSelectItem: (id: string) => void;
-  itemIcon: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  end?: boolean;
 }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        cn(
+          "pressable flex items-center gap-2.5 rounded-lg px-2 py-[6px] text-[13px] transition-colors",
+          isActive
+            ? "bg-sidebar-accent font-medium text-foreground"
+            : "font-normal text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon
+            className={cn(
+              "h-4 w-4",
+              isActive ? "text-foreground" : "text-muted-foreground/80",
+            )}
+          />
+          <span>{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WorkspaceSwitcher — one control for the org → project context.
+// Org reads as the eyebrow, project as the primary line; the popover lists
+// both levels so switching context is a single interaction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function WorkspaceSwitcher() {
+  const navigate = useNavigate();
+  const {
+    orgs,
+    projects,
+    activeOrg,
+    activeProject,
+    setActiveOrgId,
+    setActiveProjectId,
+  } = useWorkspace();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="pressable flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent/60"
+      >
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold text-white shadow-sm"
+          style={{ background: "linear-gradient(135deg, hsl(var(--iris-500)), hsl(var(--iris-700)))" }}
+        >
+          {(activeOrg?.name ?? "?").slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] leading-tight text-muted-foreground">
+            {activeOrg?.name ?? "No organisation"}
+          </div>
+          <div className="truncate text-[13px] font-semibold leading-snug text-sidebar-foreground">
+            {activeProject?.name ?? "Select project"}
+          </div>
+        </div>
+        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="animate-pop absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg">
+            <SwitcherGroup label="Organisation">
+              {orgs.length === 0 && <SwitcherEmpty>No organisations</SwitcherEmpty>}
+              {orgs.map((org) => (
+                <SwitcherItem
+                  key={org.id}
+                  name={org.name}
+                  selected={activeOrg?.id === org.id}
+                  onClick={() => setActiveOrgId(org.id)}
+                />
+              ))}
+              <SwitcherCreate
+                label="New organisation"
+                onClick={() => {
+                  navigate("/orgs");
+                  setOpen(false);
+                }}
+              />
+            </SwitcherGroup>
+
+            <div className="my-1 h-px bg-border" />
+
+            <SwitcherGroup label="Project">
+              {projects.length === 0 && <SwitcherEmpty>No projects yet</SwitcherEmpty>}
+              {projects.map((project) => (
+                <SwitcherItem
+                  key={project.id}
+                  name={project.name}
+                  selected={activeProject?.id === project.id}
+                  onClick={() => {
+                    setActiveProjectId(project.id);
+                    setOpen(false);
+                  }}
+                />
+              ))}
+              <SwitcherCreate
+                label="New project"
+                onClick={() => {
+                  navigate("/projects");
+                  setOpen(false);
+                }}
+              />
+            </SwitcherGroup>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SwitcherGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="font-label-sm px-2 pb-1 pt-1.5 text-muted-foreground/70">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function SwitcherItem({
+  name,
+  selected,
+  onClick,
+}: {
+  name: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-accent"
+    >
+      <span className={cn("flex-1 truncate", selected && "font-medium")}>{name}</span>
+      {selected && <Check className="h-3.5 w-3.5 text-primary" />}
+    </button>
+  );
+}
+
+function SwitcherCreate({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SwitcherEmpty({ children }: { children: React.ReactNode }) {
+  return <div className="px-2 py-1.5 text-[12px] text-muted-foreground/70">{children}</div>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ChatTree — chats for the active project, expandable to show branches
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ChatTree() {
+  const { activeProjectId } = useWorkspace();
+  const { data: chats = [], loading } = useChats(activeProjectId);
+  const { branchId } = useParams();
+
+  if (!activeProjectId) {
+    return <TreeHint>Select a project to see its chats</TreeHint>;
+  }
+
+  if (loading) {
+    return <TreeHint>Loading…</TreeHint>;
+  }
+
+  if (chats.length === 0) {
+    return <TreeHint>No chats yet</TreeHint>;
+  }
+
+  return (
+    <div className="space-y-px">
+      {chats.map((chat) => (
+        <ChatTreeItem key={chat.id} chat={chat} activeBranchId={branchId} />
+      ))}
+    </div>
+  );
+}
+
+function TreeHint({ children }: { children: React.ReactNode }) {
+  return <p className="px-2 py-1.5 text-[12px] text-muted-foreground/70">{children}</p>;
+}
+
+function ChatTreeItem({ chat, activeBranchId }: { chat: Chat; activeBranchId?: string }) {
+  const { data: allBranches = [] } = useBranches();
+  const branches = allBranches.filter((b) => b.chatId === chat.id);
+  const containsActive = !!activeBranchId && branches.some((b) => b.id === activeBranchId);
+  const [expanded, setExpanded] = useState(containsActive);
+
+  // Auto-expand when the active branch belongs to this chat (e.g. after New Chat).
+  useEffect(() => {
+    if (containsActive) setExpanded(true);
+  }, [containsActive]);
+
   return (
     <div>
       <button
-        onClick={onToggle}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[6px] text-[13px] text-sidebar-foreground/80 hover:bg-accent transition-colors"
+        onClick={() => setExpanded((e) => !e)}
+        className={cn(
+          "group flex w-full items-center gap-1.5 rounded-lg py-[5px] pl-1.5 pr-2 text-[13px] transition-colors",
+          containsActive
+            ? "text-sidebar-foreground"
+            : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )}
       >
         <ChevronRight
           className={cn(
-            "h-3 w-3 text-muted-foreground transition-transform duration-200",
-            isExpanded && "rotate-90"
+            "h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+            expanded && "rotate-90",
           )}
         />
-        {icon}
-        <span>{label}</span>
-        <span className="ml-auto text-[11px] text-muted-foreground">{items.length}</span>
+        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+        <span className="truncate">{chat.name}</span>
+        {branches.length > 0 && (
+          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground/60">
+            {branches.length}
+          </span>
+        )}
       </button>
-      {isExpanded && (
-        <div className="ml-5 space-y-0.5 mt-0.5">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onSelectItem(item.id)}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[5px] text-[13px] transition-colors",
-                activeItem === item.id
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-sidebar-foreground/70 hover:bg-accent hover:text-sidebar-foreground"
-              )}
-            >
-              {itemIcon}
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+
+      {expanded && (
+        <div className="ml-[13px] mt-px space-y-px border-l border-sidebar-border pl-1.5">
+          {branches.length === 0 && <TreeHint>No branches</TreeHint>}
+          <BranchTree branches={branches} />
         </div>
       )}
     </div>
   );
 }
 
-function ChatSection({
-  folderId,
-  chats,
-  isExpanded,
-  expandedSections,
-  activeItem,
-  onToggle,
-  onToggleSection,
-  onSelectItem,
+// ─────────────────────────────────────────────────────────────────────────────
+// BranchTree — renders branches nested by parentId so forks indent under
+// the branch they were created from.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BranchTree({ branches }: { branches: Branch[] }) {
+  const ids = new Set(branches.map((b) => b.id));
+  // Roots: branches with no parent, or whose parent isn't in this chat.
+  const roots = branches.filter((b) => !b.parentId || !ids.has(b.parentId));
+  return (
+    <>
+      {roots.map((b) => (
+        <BranchNode key={b.id} branch={b} branches={branches} depth={0} />
+      ))}
+    </>
+  );
+}
+
+function BranchNode({
+  branch,
+  branches,
+  depth,
 }: {
-  folderId: string;
-  chats: FolderData["chats"];
-  isExpanded: boolean;
-  expandedSections: Set<string>;
-  activeItem: string;
-  onToggle: () => void;
-  onToggleSection: (id: string) => void;
-  onSelectItem: (id: string) => void;
+  branch: Branch;
+  branches: Branch[];
+  depth: number;
 }) {
+  const children = branches.filter((b) => b.parentId === branch.id);
   return (
     <div>
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[6px] text-[13px] text-sidebar-foreground/80 hover:bg-accent transition-colors"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 text-muted-foreground transition-transform duration-200",
-            isExpanded && "rotate-90"
-          )}
-        />
-        <MessageSquare className="h-4 w-4 text-blue-500" />
-        <span>Chats</span>
-        <span className="ml-auto text-[11px] text-muted-foreground">{chats.length}</span>
-      </button>
-      {isExpanded && (
-        <div className="ml-5 space-y-0.5 mt-0.5">
-          {chats.map((chat) => (
-            <div key={chat.id}>
-              {chat.branches ? (
-                <>
-                  <button
-                    onClick={() => onToggleSection(`${folderId}-chat-${chat.id}`)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[5px] text-[13px] text-sidebar-foreground/70 hover:bg-accent transition-colors"
-                  >
-                    <ChevronRight
-                      className={cn(
-                        "h-3 w-3 text-muted-foreground transition-transform duration-200",
-                        expandedSections.has(`${folderId}-chat-${chat.id}`) && "rotate-90"
-                      )}
-                    />
-                    <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
-                    <span className="truncate">{chat.label}</span>
-                  </button>
-                  {expandedSections.has(`${folderId}-chat-${chat.id}`) && (
-                    <div className="ml-6 space-y-0.5 mt-0.5">
-                      {chat.branches.map((branch) => (
-                        <button
-                          key={branch.id}
-                          onClick={() => onSelectItem(branch.id)}
-                          className={cn(
-                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[5px] text-[13px] transition-colors",
-                            activeItem === branch.id
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "text-sidebar-foreground/70 hover:bg-accent hover:text-sidebar-foreground"
-                          )}
-                        >
-                          <GitBranch className="h-3.5 w-3.5" style={{ color: branch.color }} />
-                          <span className="truncate">{branch.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <button
-                  onClick={() => onSelectItem(chat.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[5px] text-[13px] transition-colors",
-                    activeItem === chat.id
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-sidebar-foreground/70 hover:bg-accent hover:text-sidebar-foreground"
-                  )}
-                >
-                  <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
-                  <span className="truncate">{chat.label}</span>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <BranchLink branch={branch} depth={depth} />
+      {children.map((c) => (
+        <BranchNode key={c.id} branch={c} branches={branches} depth={depth + 1} />
+      ))}
     </div>
+  );
+}
+
+function BranchLink({ branch, depth }: { branch: Branch; depth: number }) {
+  return (
+    <NavLink
+      to={`/chat/${branch.id}`}
+      style={{ paddingLeft: 8 + depth * 14 }}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-2 rounded-lg py-[5px] pr-2 text-[13px] transition-colors",
+          isActive
+            ? "bg-sidebar-accent font-medium text-foreground"
+            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <GitBranch
+            className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              isActive ? "text-highlight" : "text-muted-foreground/60",
+            )}
+          />
+          <span className="truncate">{branch.name}</span>
+        </>
+      )}
+    </NavLink>
   );
 }
