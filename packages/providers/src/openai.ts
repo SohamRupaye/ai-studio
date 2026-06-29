@@ -94,6 +94,16 @@ export class OpenAIProvider implements Provider {
     }
   }
 
+  /** GET /v1/models — standard OpenAI-compatible model listing. */
+  async listModels(): Promise<string[]> {
+    const res = await fetch(`${this.baseUrl}/models`, {
+      headers: { authorization: `Bearer ${this.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
+    const data = await res.json() as { data: Array<{ id: string }> };
+    return data.data.map(m => m.id);
+  }
+
   private formatMessages(messages: ProviderMessage[]): any[] {
     return messages.map(m => {
       if (m.role === "tool_result") {

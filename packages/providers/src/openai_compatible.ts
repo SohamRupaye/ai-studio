@@ -40,6 +40,7 @@ export class OpenAICompatibleProvider implements Provider {
     });
     if (!res.ok) throw new Error(`${this.config.name ?? "Provider"} ${res.status}: ${await res.text()}`);
     const data = await res.json() as any;
+    if (!data.choices?.length) throw new Error(`${this.config.name ?? "Provider"} returned no choices: ${JSON.stringify(data.error ?? data)}`);
     const choice = data.choices[0];
     const toolCalls = (choice.message.tool_calls || []).map((tc: any) => ({
       id: tc.id, name: tc.function.name, arguments: JSON.parse(tc.function.arguments),
@@ -79,8 +80,17 @@ export class OpenAICompatibleProvider implements Provider {
           }
           return;
         }
+        let chunk: any;
         try {
-          const delta = JSON.parse(raw).choices?.[0]?.delta;
+          chunk = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+        if (chunk.error) {
+          throw new Error(`${this.config.name ?? "Provider"} stream error${chunk.error.code ? ` ${chunk.error.code}` : ""}: ${chunk.error.message || JSON.stringify(chunk.error)}`);
+        }
+        try {
+          const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
           if (delta.content) yield { type: "text", text: delta.content };
           if (delta.tool_calls) {
@@ -107,6 +117,24 @@ export class OpenAICompatibleProvider implements Provider {
       if (m.toolCalls?.length) return { role: "assistant", content: null, tool_calls: m.toolCalls.map(tc => ({ id: tc.id, type: "function", function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } })) };
       return { role: m.role, content: m.content };
     });
+  }
+
+  /**
+   * GET {baseUrl}/models — most OpenAI-compatible providers return
+   * {data: [{id, ...}]}. Cohere is the one exception in this family: its
+   * models list lives at a sibling /v1/models (not /v2) and returns
+   * {models: [{name, ...}]} instead. Both shapes are handled here.
+   */
+  async listModels(): Promise<string[]> {
+    const url = this.config.name === "Cohere"
+      ? this.config.baseUrl.replace(/\/v2$/, "/v1") + "/models"
+      : `${this.config.baseUrl}/models`;
+    const res = await fetch(url, { headers: this.headers });
+    if (!res.ok) throw new Error(`${this.config.name ?? "Provider"} ${res.status}: ${await res.text()}`);
+    const data = await res.json() as any;
+    if (Array.isArray(data.data)) return data.data.map((m: any) => m.id);
+    if (Array.isArray(data.models)) return data.models.map((m: any) => m.name ?? m.id);
+    return [];
   }
 }
 

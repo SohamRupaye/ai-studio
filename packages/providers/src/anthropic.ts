@@ -96,6 +96,26 @@ export class AnthropicProvider implements Provider {
     }
   }
 
+  /** GET /v1/models — paginates via has_more/last_id until exhausted. */
+  async listModels(): Promise<string[]> {
+    const ids: string[] = [];
+    let afterId: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const url = new URL(`${this.baseUrl}/models`);
+      url.searchParams.set("limit", "100");
+      if (afterId) url.searchParams.set("after_id", afterId);
+      const res = await fetch(url, {
+        headers: { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
+      });
+      if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
+      const data = await res.json() as { data: Array<{ id: string }>; has_more: boolean; last_id?: string };
+      ids.push(...data.data.map(m => m.id));
+      if (!data.has_more || !data.last_id) break;
+      afterId = data.last_id;
+    }
+    return ids;
+  }
+
   private formatMessages(messages: ProviderMessage[]): any[] {
     const formatted: any[] = [];
     for (const m of messages) {

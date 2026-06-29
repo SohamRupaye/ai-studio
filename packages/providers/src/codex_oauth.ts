@@ -5,7 +5,7 @@
 
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
@@ -24,6 +24,13 @@ interface AuthData {
   refresh: string;
   expires: number;
   account_id?: string;
+  email?: string;
+}
+
+export interface CodexAccountStatus {
+  connected: boolean;
+  accountId?: string;
+  email?: string;
 }
 
 export class CodexOAuthProvider implements Provider {
@@ -36,6 +43,32 @@ export class CodexOAuthProvider implements Provider {
 
   isAvailable(): boolean {
     return this.auth !== null;
+  }
+
+  /** Current signed-in account, if any — used by the UI to show who's connected. */
+  getStatus(): CodexAccountStatus {
+    if (!this.auth) return { connected: false };
+    return { connected: true, accountId: this.auth.account_id, email: this.auth.email };
+  }
+
+  /**
+   * Clear cached tokens (both in-memory and on disk). Does not revoke the
+   * token with the issuer — ChatGPT sessions don't support programmatic
+   * revocation — but the app forgets it immediately, and the next call
+   * triggers a fresh `login()` (which lets the user pick a different
+   * account in the browser).
+   */
+  logout(): void {
+    this.auth = null;
+    if (existsSync(AUTH_FILE)) {
+      try { unlinkSync(AUTH_FILE); } catch { /* best-effort */ }
+    }
+  }
+
+  /** Force a fresh browser login, replacing any existing session. Used for "switch account". */
+  async switchAccount(): Promise<AuthData> {
+    this.logout();
+    return this.login();
   }
 
   async call(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): Promise<{ text: string; toolCalls: any[]; usage: any }> {
@@ -173,11 +206,13 @@ export class CodexOAuthProvider implements Provider {
 
         exchangeCode(code, verifier).then(tokens => {
           const accountId = parseJwtAccountId(tokens.access_token) || parseJwtAccountId(tokens.id_token || "");
+          const email = parseJwtEmail(tokens.id_token || "") || parseJwtEmail(tokens.access_token);
           const auth: AuthData = {
             access: tokens.access_token,
             refresh: tokens.refresh_token,
             expires: Date.now() + (tokens.expires_in || 3600) * 1000,
             account_id: accountId || undefined,
+            email: email || undefined,
           };
           this.saveAuth(auth);
           this.auth = auth;
@@ -302,5 +337,14 @@ function parseJwtAccountId(token: string): string | null {
       || payload["https://api.openai.com/auth"]?.chatgpt_account_id
       || payload.organizations?.[0]?.id
       || null;
+  } catch { return null; }
+}
+
+function parseJwtEmail(token: string): string | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString());
+    return payload.email || payload["https://api.openai.com/profile"]?.email || null;
   } catch { return null; }
 }

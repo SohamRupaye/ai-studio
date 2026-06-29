@@ -78,6 +78,35 @@ export class GoogleProvider implements Provider {
     }
   }
 
+  /**
+   * GET /v1beta/models?key=... — paginates via pageToken. Model names come
+   * back prefixed "models/" and must be stripped; only models that support
+   * generateContent are usable for chat.
+   */
+  async listModels(): Promise<string[]> {
+    const ids: string[] = [];
+    let pageToken: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const url = new URL(`${this.baseUrl}/models`);
+      url.searchParams.set("key", this.apiKey);
+      url.searchParams.set("pageSize", "100");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Google ${res.status}: ${await res.text()}`);
+      const data = await res.json() as {
+        models: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+        nextPageToken?: string;
+      };
+      for (const m of data.models) {
+        if (m.supportedGenerationMethods && !m.supportedGenerationMethods.includes("generateContent")) continue;
+        ids.push(m.name.replace(/^models\//, ""));
+      }
+      if (!data.nextPageToken) break;
+      pageToken = data.nextPageToken;
+    }
+    return ids;
+  }
+
   private formatMessages(messages: ProviderMessage[]): any[] {
     const toolCallNames = new Map<string, string>();
     for (const msg of messages) {

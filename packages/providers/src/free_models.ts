@@ -31,11 +31,11 @@ export const FREE_MODELS = {
     context: 262_000,
     strengths: ["coding", "tool-calling", "agentic"],
   },
-  "moonshotai/kimi-k2.6:free": {
-    name: "Kimi K2.6",
+  "qwen/qwen3-coder:free": {
+    name: "Qwen3 Coder",
     params: "MoE",
     context: 262_000,
-    strengths: ["coding", "multi-agent", "UI generation"],
+    strengths: ["coding", "tool-calling", "agentic"],
   },
 
   // Strong mid-tier free models
@@ -51,6 +51,12 @@ export const FREE_MODELS = {
     context: 256_000,
     strengths: ["efficiency", "agentic", "customizable"],
   },
+  "qwen/qwen3-next-80b-a3b-instruct:free": {
+    name: "Qwen3 Next 80B",
+    params: "80B (3B active)",
+    context: 262_000,
+    strengths: ["reasoning", "coding", "agentic"],
+  },
   "google/gemma-4-31b-it:free": {
     name: "Google Gemma 4 31B",
     params: "30.7B dense",
@@ -63,12 +69,6 @@ export const FREE_MODELS = {
     context: 262_000,
     strengths: ["multimodal", "efficient", "function-calling"],
   },
-  "z-ai/glm-4.5-air:free": {
-    name: "Z.ai GLM 4.5 Air",
-    params: "MoE",
-    context: 131_000,
-    strengths: ["agentic", "reasoning", "tool-use"],
-  },
   "poolside/laguna-xs.2:free": {
     name: "Poolside Laguna XS.2",
     params: "Compact",
@@ -80,6 +80,12 @@ export const FREE_MODELS = {
     params: "9B",
     context: 128_000,
     strengths: ["compact", "reasoning", "configurable"],
+  },
+  "meta-llama/llama-3.3-70b-instruct:free": {
+    name: "Meta Llama 3.3 70B",
+    params: "70B",
+    context: 131_000,
+    strengths: ["general", "reasoning", "tool-use"],
   },
 
   // Multimodal free models

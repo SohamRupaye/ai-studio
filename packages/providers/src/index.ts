@@ -1,10 +1,12 @@
 export type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+export { ProviderRateLimitError } from "./base.js";
 
 // Core providers
 export { AnthropicProvider } from "./anthropic.js";
 export { OpenAIProvider } from "./openai.js";
 export { GoogleProvider } from "./google.js";
 export { CodexOAuthProvider } from "./codex_oauth.js";
+export type { CodexAccountStatus } from "./codex_oauth.js";
 export { OpenRouterProvider } from "./openrouter.js";
 
 // Cloud providers
@@ -39,8 +41,8 @@ export type { OpenAICompatibleConfig } from "./openai_compatible.js";
 export { Router } from "./router.js";
 
 // Config
-export { getConfig, loadConfig, watchConfig, unwatchConfig } from "./config.js";
-export type { Config } from "./config.js";
+export { getConfig, loadConfig, saveConfig, watchConfig, unwatchConfig, API_KEY_PROVIDERS } from "./config.js";
+export type { Config, ApiKeyProvider, MCPServerConfigEntry } from "./config.js";
 
 // Free models (via OpenRouter)
 export {
