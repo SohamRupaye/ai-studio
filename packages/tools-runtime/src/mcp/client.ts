@@ -472,6 +472,51 @@ export class MCPManager extends EventEmitter {
     return result;
   }
 
+  /** Get config + status + tools for every connected/registered server. */
+  getServers(): Array<{ config: MCPServerConfig; status: MCPStatus; tools: MCPToolDef[] }> {
+    const result: Array<{ config: MCPServerConfig; status: MCPStatus; tools: MCPToolDef[] }> = [];
+    for (const [, client] of this.clients) {
+      result.push({
+        config: (client as any).config as MCPServerConfig,
+        status: client.currentStatus,
+        tools: client.currentTools,
+      });
+    }
+    return result;
+  }
+
+  /** Add and connect a single server at runtime. */
+  async addServer(config: MCPServerConfig): Promise<{ config: MCPServerConfig; status: MCPStatus; tools: MCPToolDef[] }> {
+    await this.removeServer(config.name);
+    const client = new MCPClient(config);
+    this.clients.set(config.name, client);
+    client.on("status", (e) => this.emit("status", e));
+    client.on("tools_changed", (e) => this.emit("tools_changed", e));
+    client.on("log", (e) => this.emit("log", e));
+    try {
+      await client.connect();
+    } catch {
+      // Status already set by client
+    }
+    return { config, status: client.currentStatus, tools: client.currentTools };
+  }
+
+  /** Disconnect and remove a single server. */
+  async removeServer(name: string): Promise<void> {
+    const client = this.clients.get(name);
+    if (!client) return;
+    await client.disconnect();
+    this.clients.delete(name);
+  }
+
+  /** Reconnect a single server using its existing config. */
+  async reconnectServer(name: string): Promise<{ config: MCPServerConfig; status: MCPStatus; tools: MCPToolDef[] } | null> {
+    const client = this.clients.get(name);
+    if (!client) return null;
+    const config = (client as any).config as MCPServerConfig;
+    return this.addServer(config);
+  }
+
   /** Get a specific client */
   getClient(name: string): MCPClient | undefined {
     return this.clients.get(name);

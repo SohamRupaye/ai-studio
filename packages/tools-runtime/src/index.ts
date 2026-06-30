@@ -82,7 +82,12 @@ export type {
 export { loadCustomTools, watchToolDirectories } from "./custom_loader";
 
 // Defaults
-export { createDefaultRegistry, loadMCPServers, getLSPClient } from "./defaults";
+export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer } from "./defaults";
 
 // Skills (convenience re-export)
 export { listSkills } from "./skills/runner";
+export type { Skill } from "./skills/runner";
+
+// Knowledge base (IPC-friendly wrappers)
+export { kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry } from "./tools/knowledge_base";
+export type { KnowledgeEntry } from "./tools/knowledge_base";

@@ -100,6 +100,36 @@ function getStore(root: string): KnowledgeStore {
   return stores.get(root)!;
 }
 
+// ── IPC-friendly wrappers (used by the desktop app's main process) ──────────
+// These operate on a single KnowledgeStore rooted at the app's data directory,
+// independent of the agent tool's per-call `project_root` argument.
+
+export type { KnowledgeEntry };
+
+export function kbListEntries(root: string, category?: string, tags?: string[]): KnowledgeEntry[] {
+  return getStore(root).list(category, tags);
+}
+
+export function kbSearchEntries(root: string, query: string, category?: string, tags?: string[]): KnowledgeEntry[] {
+  return getStore(root).search(query, tags, category);
+}
+
+export function kbAddEntry(
+  root: string,
+  entry: { title: string; content: string; category?: KnowledgeEntry["category"]; tags?: string[] },
+): KnowledgeEntry {
+  return getStore(root).add({
+    title: entry.title,
+    content: entry.content,
+    category: entry.category ?? "note",
+    tags: entry.tags ?? [],
+  });
+}
+
+export function kbRemoveEntry(root: string, id: number): boolean {
+  return getStore(root).remove(id);
+}
+
 function formatEntry(e: KnowledgeEntry, short = false): string {
   const tags = e.tags.length ? ` [${e.tags.join(", ")}]` : "";
   const header = `[${e.id}] ${e.category.toUpperCase()} — ${e.title}${tags}`;

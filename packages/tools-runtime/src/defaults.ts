@@ -133,6 +133,11 @@ const _mcpManager = new MCPManager();
 /** Connect MCP servers and register their tools in the given registry */
 export async function loadMCPServers(configs: MCPServerConfig[], registry: ToolRegistry): Promise<void> {
   await _mcpManager.connectAll(configs);
+  registerMCPTools(registry);
+}
+
+/** (Re-)register all currently-connected MCP tools into the given registry. */
+function registerMCPTools(registry: ToolRegistry): void {
   for (const tool of _mcpManager.getAllTools()) {
     registry.register(
       { name: tool.namespacedName, description: tool.description ?? "", parameters: tool.inputSchema as any },
@@ -142,6 +147,30 @@ export async function loadMCPServers(configs: MCPServerConfig[], registry: ToolR
       },
     );
   }
+}
+
+/** Access the shared MCP manager singleton — used for management UI (add/remove/status/tools). */
+export function getMCPManager(): MCPManager {
+  return _mcpManager;
+}
+
+/** Add a single MCP server at runtime and register its tools in the given registry. */
+export async function addMCPServer(config: MCPServerConfig, registry: ToolRegistry) {
+  const entry = await _mcpManager.addServer(config);
+  registerMCPTools(registry);
+  return entry;
+}
+
+/** Remove a single MCP server at runtime. */
+export async function removeMCPServer(name: string): Promise<void> {
+  await _mcpManager.removeServer(name);
+}
+
+/** Reconnect a single MCP server and re-register its tools. */
+export async function reconnectMCPServer(name: string, registry: ToolRegistry) {
+  const entry = await _mcpManager.reconnectServer(name);
+  registerMCPTools(registry);
+  return entry;
 }
 
 const _lspManager = new LSPManager();
