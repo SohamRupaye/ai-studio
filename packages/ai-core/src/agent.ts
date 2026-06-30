@@ -41,15 +41,27 @@ export interface AgentConfig {
 function validateResponse(
   text: string,
   toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string }>,
+  userMessage: string,
 ): string | null {
-  const confirmPatterns = [
-    /if you want,?\s*i can/i, /shall i (proceed|go ahead|do|apply|fix|update|change)/i,
-    /would you like me to/i, /want me to (apply|do|fix|change|update|proceed)/i,
-    /let me know if you('d like| want)/i,
-  ];
-  for (const pat of confirmPatterns) {
-    if (pat.test(text)) return "[SYSTEM] You asked for confirmation instead of acting. Execute the change NOW using tools.";
+  // Only nudge "act, don't ask" when the user actually requested an action.
+  // Informational/conversational questions (e.g. "what tools do you have?")
+  // must not be hijacked into a forced tool execution.
+  const isActionRequest =
+    /\b(fix|change|update|add|implement|create|refactor|rewrite|write|make|build|delete|remove|rename|apply|edit|modify|install|run|generate|deploy|migrate|configure|set\s?up|scaffold)\b/i.test(
+      userMessage,
+    );
+
+  if (isActionRequest) {
+    const confirmPatterns = [
+      /if you want,?\s*i can/i, /shall i (proceed|go ahead|do|apply|fix|update|change)/i,
+      /would you like me to/i, /want me to (apply|do|fix|change|update|proceed)/i,
+      /let me know if you('d like| want)/i,
+    ];
+    for (const pat of confirmPatterns) {
+      if (pat.test(text)) return "[SYSTEM] You asked for confirmation instead of acting. Execute the change NOW using tools.";
+    }
   }
+
   const actionClaims = [/i (changed|updated|applied|modified|edited|rewrote|replaced|fixed)/i, /(done|applied|updated|changed)\s*✅/i];
   const writeTools = ["write_file", "edit_file", "patch", "bash", "apply_patch"];
   const hasWriteCall = toolCalls.some(tc => writeTools.includes(tc.name));
@@ -95,6 +107,8 @@ export class Agent {
 
     const toolDefs = this.tools.getDefinitions();
     const allToolCalls: AgentResult["toolCalls"] = [];
+    // Latest user turn — used to decide whether "act, don't ask" nudges apply.
+    const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
     let iterations = 0;
     let finalText = "";
     const maxIter = this.config.maxIterations!;
@@ -112,7 +126,7 @@ export class Agent {
       }
 
       if (!pendingToolCalls.length) {
-        const correction = validateResponse(text, allToolCalls);
+        const correction = validateResponse(text, allToolCalls, lastUserMessage);
         if (correction && iterations < maxIter) {
           history.push({ role: "assistant", content: text });
           history.push({ role: "user", content: correction });

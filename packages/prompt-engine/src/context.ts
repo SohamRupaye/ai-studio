@@ -108,7 +108,8 @@ export async function buildPayload(
   const systemContextBlocks: string[] = [];
 
   if (globalMem) {
-    const memBlock = globalMem.asContextBlock(branch.id, branch.chatId);
+    const projectId = branch.chatId ? store.getChat(branch.chatId)?.projectId : undefined;
+    const memBlock = globalMem.asContextBlock(branch.id, branch.chatId, projectId);
     if (memBlock) {
       systemContextBlocks.push(`<global_memory>\n${memBlock}\n</global_memory>`);
     }
@@ -147,8 +148,16 @@ export async function buildPayload(
     systemContextBlocks.push(`<pinned_rules>\n${pinBlock}\n</pinned_rules>`);
   }
 
-  const startIdx = summaries.length ? Math.max(...summaries.map(s => s.toTurn)) + 1 : 0;
-  const hot = messages.slice(startIdx);
+  // startTurn is a TURN NUMBER, not an array index — turn numbers only match
+  // array position when no message has ever been deleted from this branch.
+  // Deleting/editing/retrying a message (any of which can remove a turn from
+  // the middle of the sequence, not just the tail) leaves gaps, so filtering
+  // by the actual `turn` field is required; slicing by position could cut
+  // away the current message entirely and send an empty `messages` array —
+  // which providers that always prepend their own system message tolerate,
+  // but Codex's bare `input` field rejects outright with a 400.
+  const startTurn = summaries.length ? Math.max(...summaries.map(s => s.toTurn)) + 1 : 0;
+  const hot = messages.filter(m => m.turn >= startTurn);
   const apiMessages = hot.map(m => ({ role: m.role, content: m.content }));
 
   let systemContext = "";
