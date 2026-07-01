@@ -200,6 +200,66 @@ describe("Messages", () => {
     store.addMessage(branchId, "assistant", "b");
     expect(store.getMessageCount(branchId)).toBe(2);
   });
+
+  it("editMessage deletes the target turn and everything after it", () => {
+    store.addMessage(branchId, "user", "original question");
+    store.addMessage(branchId, "assistant", "original answer");
+    store.addMessage(branchId, "user", "follow-up");
+    store.addMessage(branchId, "assistant", "follow-up answer");
+
+    store.editMessage(branchId, 0);
+
+    const msgs = store.getMessages(branchId);
+    expect(msgs).toHaveLength(0);
+  });
+
+  it("editMessage is a no-op when there's no message at that turn", () => {
+    store.addMessage(branchId, "user", "only message");
+    store.editMessage(branchId, 5);
+    const msgs = store.getMessages(branchId);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]!.content).toBe("only message");
+  });
+
+  it("deleteMessagePair removes a user message and its paired assistant response", () => {
+    store.addMessage(branchId, "user", "question");
+    store.addMessage(branchId, "assistant", "answer");
+    store.addMessage(branchId, "user", "second question");
+    store.addMessage(branchId, "assistant", "second answer");
+
+    const removed = store.deleteMessagePair(branchId, 0);
+
+    expect(removed).toBe(2);
+    const msgs = store.getMessages(branchId);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0]!.content).toBe("second question");
+  });
+
+  it("deleteMessagePair removes only the target message when there's no paired response", () => {
+    store.addMessage(branchId, "user", "lone question");
+    const removed = store.deleteMessagePair(branchId, 0);
+    expect(removed).toBe(1);
+    expect(store.getMessages(branchId)).toHaveLength(0);
+  });
+
+  it("deleteMessagePair does not delete the next message if it isn't an assistant reply", () => {
+    // Two consecutive user messages (e.g. after some edge case) — deleting
+    // the first must not delete the second just because it's "next".
+    store.addMessage(branchId, "user", "first");
+    store.addMessage(branchId, "user", "second (also user)");
+    const removed = store.deleteMessagePair(branchId, 0);
+    expect(removed).toBe(1);
+    const msgs = store.getMessages(branchId);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]!.content).toBe("second (also user)");
+  });
+
+  it("deleteMessagePair returns 0 when there's no message at that turn", () => {
+    store.addMessage(branchId, "user", "only message");
+    const removed = store.deleteMessagePair(branchId, 99);
+    expect(removed).toBe(0);
+    expect(store.getMessages(branchId)).toHaveLength(1);
+  });
 });
 
 // ── Summaries ─────────────────────────────────────────────────────────────────

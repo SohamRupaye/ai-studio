@@ -341,6 +341,43 @@ export class Store {
     return true;
   }
 
+  /**
+   * Delete a user message at `turn` and everything after it in the branch
+   * (the old assistant response plus any later turns). The caller is
+   * expected to immediately re-send the edited text via the normal chat
+   * flow (which calls addMessage and picks the next free turn), so this
+   * never leaves two rows fighting over the same turn number.
+   * No-op if there's no message at that turn.
+   */
+  editMessage(branchId: string, turn: number): void {
+    this.db.transaction(() => {
+      const row = this.db.prepare("SELECT id FROM messages WHERE branch_id = ? AND turn = ?").get(branchId, turn) as any;
+      if (!row) return;
+      this.db.prepare("DELETE FROM messages WHERE branch_id = ? AND turn >= ?").run(branchId, turn);
+    })();
+  }
+
+  /**
+   * Delete the user message at `turn` plus its paired assistant response
+   * (the very next message, if present) so a deleted prompt also removes
+   * its reply. Returns the number of messages actually deleted.
+   */
+  deleteMessagePair(branchId: string, turn: number): number {
+    let removed = 0;
+    this.db.transaction(() => {
+      const target = this.db.prepare("SELECT id, turn FROM messages WHERE branch_id = ? AND turn = ?").get(branchId, turn) as any;
+      if (!target) return;
+      this.db.prepare("DELETE FROM messages WHERE id = ?").run(target.id);
+      removed++;
+      const next = this.db.prepare("SELECT id, role FROM messages WHERE branch_id = ? AND turn = ?").get(branchId, turn + 1) as any;
+      if (next && next.role === "assistant") {
+        this.db.prepare("DELETE FROM messages WHERE id = ?").run(next.id);
+        removed++;
+      }
+    })();
+    return removed;
+  }
+
   undoLastTurn(branchId: string): number {
     let removed = 0;
     this.db.transaction(() => {
