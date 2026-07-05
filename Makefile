@@ -1,6 +1,5 @@
 .PHONY: help install dev build test lint typecheck clean \
-        desktop desktop-build desktop-package \
-        db-generate db-migrate
+        desktop desktop-build desktop-package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -40,14 +39,6 @@ lint: ## Lint all packages
 
 typecheck: ## Type-check all packages
 	yarn typecheck
-
-# ── Database ─────────────────────────────────────────────────────────────────
-
-db-generate: ## Generate Drizzle migration files
-	yarn db:generate
-
-db-migrate: ## Apply pending migrations
-	yarn db:migrate
 
 # ── Maintenance ──────────────────────────────────────────────────────────────
 

@@ -14,19 +14,15 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
     "clean": "rm -rf dist",
     "test": "vitest run"
   },
   "dependencies": {
     "@ai-studio/shared": "workspace:*",
-    "better-sqlite3": "11.7.0",
-    "drizzle-orm": "0.38.3"
+    "better-sqlite3": "11.7.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.12",
-    "drizzle-kit": "0.30.4",
     "typescript": "5.7.2",
     "vitest": "^3.2.0"
   }

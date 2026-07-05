@@ -5,6 +5,7 @@
   "description": "AI Studio Desktop Application",
   "main": ".vite/build/index.js",
   "scripts": {
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "dev": "electron-forge start",
     "build": "electron-forge package",
     "package": "electron-forge package",
@@ -72,6 +73,7 @@
     "@types/react-dom": "19.0.1",
     "@vitejs/plugin-react": "4.3.4",
     "electron": "33.2.1",
+    "ts-node": "^10.9.2",
     "typescript": "5.7.2",
     "vite": "6.0.7",
     "vitest": "^3.2.0"

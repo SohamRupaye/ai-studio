@@ -25,9 +25,7 @@
     "desktop:dev": "yarn workspace @ai-studio/desktop dev",
     "desktop:build": "yarn workspace @ai-studio/desktop build",
     "desktop:package": "yarn workspace @ai-studio/desktop package",
-    "desktop:make": "yarn workspace @ai-studio/desktop make",
-    "db:generate": "yarn workspace @ai-studio/database generate",
-    "db:migrate": "yarn workspace @ai-studio/database migrate"
+    "desktop:make": "yarn workspace @ai-studio/desktop make"
   },
   "devDependencies": {
     "@ai-studio/eslint-config": "workspace:*",

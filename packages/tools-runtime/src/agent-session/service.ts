@@ -1,20 +1,23 @@
 /**
- * ACP (Agent Communication Protocol) - IDE integration service
- * Enables VS Code, Zed, and other editors to communicate with AI agents
+ * Agent Session Service - HTTP + SSE session/streaming API for IDE integration.
+ * Enables editors to open a session, send prompts, and stream agent updates back.
+ *
+ * Note: this is a bespoke protocol, not an implementation of the Agent Client
+ * Protocol (ACP) standard - there is no interop with ACP-based editors/clients.
  */
 import { EventEmitter } from "events";
 import * as http from "http";
 
 // --- Types ---
 
-export interface ACPCapabilities {
+export interface AgentSessionCapabilities {
   mcp: { http: boolean; sse: boolean };
   prompt: { embeddedContext: boolean; image: boolean };
   session: { close: boolean; fork: boolean; list: boolean; resume: boolean };
   loadSession: boolean;
 }
 
-export interface ACPSessionInfo {
+export interface AgentSessionInfo {
   id: string;
   model?: string;
   mode?: string;
@@ -22,18 +25,18 @@ export interface ACPSessionInfo {
   createdAt: number;
 }
 
-export interface ACPMessage {
+export interface AgentSessionMessage {
   role: "user" | "assistant";
-  content: ACPContentBlock[];
+  content: AgentContentBlock[];
 }
 
-export type ACPContentBlock =
+export type AgentContentBlock =
   | { type: "text"; text: string; audience?: "user" | "assistant" }
   | { type: "image"; data: string; mimeType: string }
   | { type: "resource_link"; uri: string; name?: string }
   | { type: "resource"; uri: string; text?: string; blob?: string; mimeType?: string };
 
-export interface ACPToolCall {
+export interface AgentToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
@@ -42,11 +45,11 @@ export interface ACPToolCall {
   error?: string;
 }
 
-export type ACPSessionUpdate =
+export type AgentSessionUpdate =
   | { type: "agent_message_chunk"; text: string }
   | { type: "agent_thought_chunk"; text: string }
-  | { type: "tool_call"; call: ACPToolCall }
-  | { type: "tool_call_update"; call: ACPToolCall }
+  | { type: "tool_call"; call: AgentToolCall }
+  | { type: "tool_call_update"; call: AgentToolCall }
   | { type: "done"; messageId: string }
   | { type: "error"; message: string };
 
@@ -60,7 +63,7 @@ export interface PermissionRequest {
   metadata?: Record<string, unknown>;
 }
 
-export interface ACPConfigOption {
+export interface AgentSessionConfigOption {
   key: string;
   label: string;
   type: "select" | "text";
@@ -68,7 +71,7 @@ export interface ACPConfigOption {
   value: string;
 }
 
-export interface ACPMCPServer {
+export interface AgentSessionMCPServer {
   name: string;
   type: "local" | "remote";
   command?: string;
@@ -79,8 +82,8 @@ export interface ACPMCPServer {
 
 // --- Connection Interface ---
 
-export interface ACPConnection {
-  send(update: ACPSessionUpdate): void;
+export interface AgentSessionConnection {
+  send(update: AgentSessionUpdate): void;
   requestPermission(request: PermissionRequest): Promise<PermissionDecision>;
   writeTextFile?(path: string, content: string): Promise<void>;
   close(): void;
@@ -90,20 +93,20 @@ export interface ACPConnection {
 
 export type PromptHandler = (
   sessionId: string,
-  content: ACPContentBlock[],
-  mcpServers?: ACPMCPServer[],
-) => AsyncGenerator<ACPSessionUpdate>;
+  content: AgentContentBlock[],
+  mcpServers?: AgentSessionMCPServer[],
+) => AsyncGenerator<AgentSessionUpdate>;
 
 export type SessionHandler = {
-  create: (opts: { model?: string; mode?: string; cwd?: string; mcpServers?: ACPMCPServer[] }) => Promise<ACPSessionInfo>;
-  load: (id: string) => Promise<{ session: ACPSessionInfo; messages: ACPMessage[] } | null>;
-  list: (cursor?: string, limit?: number) => Promise<{ sessions: ACPSessionInfo[]; nextCursor?: string }>;
+  create: (opts: { model?: string; mode?: string; cwd?: string; mcpServers?: AgentSessionMCPServer[] }) => Promise<AgentSessionInfo>;
+  load: (id: string) => Promise<{ session: AgentSessionInfo; messages: AgentSessionMessage[] } | null>;
+  list: (cursor?: string, limit?: number) => Promise<{ sessions: AgentSessionInfo[]; nextCursor?: string }>;
   close: (id: string) => Promise<void>;
-  fork: (id: string) => Promise<ACPSessionInfo | null>;
-  resume: (id: string) => Promise<{ session: ACPSessionInfo; messages: ACPMessage[] } | null>;
+  fork: (id: string) => Promise<AgentSessionInfo | null>;
+  resume: (id: string) => Promise<{ session: AgentSessionInfo; messages: AgentSessionMessage[] } | null>;
 };
 
-export interface ACPServiceConfig {
+export interface AgentSessionServiceConfig {
   name?: string;
   version?: string;
   port?: number;
@@ -111,22 +114,22 @@ export interface ACPServiceConfig {
   auth?: { method: string; validate: (token: string) => Promise<boolean> };
   onPrompt: PromptHandler;
   sessions: SessionHandler;
-  capabilities?: Partial<ACPCapabilities>;
-  configOptions?: () => Promise<ACPConfigOption[]>;
+  capabilities?: Partial<AgentSessionCapabilities>;
+  configOptions?: () => Promise<AgentSessionConfigOption[]>;
   setConfigOption?: (sessionId: string, key: string, value: string) => Promise<void>;
   onCancel?: (sessionId: string) => Promise<void>;
 }
 
 /**
- * ACP Service - HTTP + SSE server implementing the Agent Communication Protocol
+ * Agent Session Service - HTTP + SSE server for IDE-facing agent sessions.
  */
-export class ACPService extends EventEmitter {
+export class AgentSessionService extends EventEmitter {
   private server: http.Server | null = null;
-  private connections = new Map<string, ACPConnection>();
-  private config: ACPServiceConfig;
-  private capabilities: ACPCapabilities;
+  private connections = new Map<string, AgentSessionConnection>();
+  private config: AgentSessionServiceConfig;
+  private capabilities: AgentSessionCapabilities;
 
-  constructor(config: ACPServiceConfig) {
+  constructor(config: AgentSessionServiceConfig) {
     super();
     this.config = config;
     this.capabilities = {
@@ -138,7 +141,7 @@ export class ACPService extends EventEmitter {
     };
   }
 
-  /** Start the ACP server */
+  /** Start the session server */
   async start(): Promise<number> {
     const port = this.config.port ?? 0;
     const host = this.config.host ?? "127.0.0.1";
@@ -153,7 +156,7 @@ export class ACPService extends EventEmitter {
     });
   }
 
-  /** Stop the ACP server */
+  /** Stop the session server */
   async stop(): Promise<void> {
     for (const conn of this.connections.values()) conn.close();
     this.connections.clear();
@@ -185,37 +188,37 @@ export class ACPService extends EventEmitter {
 
     try {
       switch (url.pathname) {
-        case "/acp/initialize":
+        case "/agent/initialize":
           await this.handleInitialize(body, res);
           break;
-        case "/acp/session/new":
+        case "/agent/session/new":
           await this.handleNewSession(body, res);
           break;
-        case "/acp/session/load":
+        case "/agent/session/load":
           await this.handleLoadSession(body, res);
           break;
-        case "/acp/session/list":
+        case "/agent/session/list":
           await this.handleListSessions(body, res);
           break;
-        case "/acp/session/close":
+        case "/agent/session/close":
           await this.handleCloseSession(body, res);
           break;
-        case "/acp/session/fork":
+        case "/agent/session/fork":
           await this.handleForkSession(body, res);
           break;
-        case "/acp/session/resume":
+        case "/agent/session/resume":
           await this.handleResumeSession(body, res);
           break;
-        case "/acp/prompt":
+        case "/agent/prompt":
           await this.handlePrompt(body, req, res);
           break;
-        case "/acp/cancel":
+        case "/agent/cancel":
           await this.handleCancel(body, res);
           break;
-        case "/acp/config/options":
+        case "/agent/config/options":
           await this.handleConfigOptions(res);
           break;
-        case "/acp/config/set":
+        case "/agent/config/set":
           await this.handleSetConfig(body, res);
           break;
         default:
@@ -284,8 +287,8 @@ export class ACPService extends EventEmitter {
 
   private async handlePrompt(body: any, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const sessionId = body?.sessionId;
-    const content = body?.content as ACPContentBlock[] ?? [];
-    const mcpServers = body?.mcpServers as ACPMCPServer[] | undefined;
+    const content = body?.content as AgentContentBlock[] ?? [];
+    const mcpServers = body?.mcpServers as AgentSessionMCPServer[] | undefined;
 
     // SSE streaming response
     res.writeHead(200, {
@@ -294,7 +297,7 @@ export class ACPService extends EventEmitter {
       Connection: "keep-alive",
     });
 
-    const connection: ACPConnection = {
+    const connection: AgentSessionConnection = {
       send: (update) => {
         res.write(`data: ${JSON.stringify(update)}\n\n`);
       },

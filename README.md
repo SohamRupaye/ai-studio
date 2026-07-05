@@ -67,9 +67,6 @@ make clean          # remove build artifacts
 
 make desktop-build  # build desktop app
 make desktop-package # package into distributable
-
-make db-generate    # generate Drizzle migration files
-make db-migrate     # apply pending migrations
 ```
 
 ## License

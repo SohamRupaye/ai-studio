@@ -4,7 +4,7 @@
  * Sub-modules:
  * - mcp: Multi-transport MCP client (stdio/SSE/HTTP) with OAuth & reconnection
  * - lsp: 30+ language server manager with lazy spawning & pull+push diagnostics
- * - acp: Agent Communication Protocol for IDE integration
+ * - agent-session: HTTP + SSE session/streaming API for IDE integration (bespoke, not ACP-compliant)
  * - skills: YAML frontmatter skills with remote discovery & per-agent permissions
  * - registry: Tool registry with schema validation, plugin hooks, & observability
  */
@@ -37,24 +37,24 @@ export {
 } from "./lsp";
 export type { Diagnostic, LSPServerInfo } from "./lsp";
 
-// ACP
-export { ACPService } from "./acp";
+// Agent Session (IDE integration; bespoke protocol, not ACP-compliant)
+export { AgentSessionService } from "./agent-session";
 export type {
-  ACPCapabilities,
-  ACPSessionInfo,
-  ACPMessage,
-  ACPContentBlock,
-  ACPToolCall,
-  ACPSessionUpdate,
-  ACPConnection,
-  ACPServiceConfig,
-  ACPConfigOption,
-  ACPMCPServer,
+  AgentSessionCapabilities,
+  AgentSessionInfo,
+  AgentSessionMessage,
+  AgentContentBlock,
+  AgentToolCall,
+  AgentSessionUpdate,
+  AgentSessionConnection,
+  AgentSessionServiceConfig,
+  AgentSessionConfigOption,
+  AgentSessionMCPServer,
   PermissionDecision,
   PermissionRequest,
   PromptHandler,
   SessionHandler,
-} from "./acp";
+} from "./agent-session";
 
 // Skills
 export { SkillsService } from "./skills";
