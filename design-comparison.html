@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Studio — Warm mono, final</title>
+<style>
+@font-face {
+  font-family: "Mona Sans Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  src: url(./node_modules/@fontsource-variable/mona-sans/files/mona-sans-latin-wdth-normal.woff2) format("woff2-variations");
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #131211; color: #9a968e;
+  font-family: "Mona Sans Variable", -apple-system, sans-serif;
+  padding: 40px; -webkit-font-smoothing: antialiased;
+}
+.page-title { font-size: 15px; font-weight: 600; color: #dcdad6; margin-bottom: 6px; }
+.page-sub { font-size: 12.5px; margin-bottom: 28px; }
+.grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  max-width: 1400px; margin: 0 auto;
+}
+@media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+.cell {
+  background: var(--canvas); border-radius: 14px; overflow: hidden;
+  padding: 18px 22px 30px; position: relative;
+  border: 1px solid rgba(128,124,116,.16);
+}
+.tag {
+  font: 500 10.5px/1 ui-monospace, "SF Mono", monospace; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--fg2); margin-bottom: 14px; display: block;
+}
+.dots { display: flex; gap: 7px; margin-bottom: 16px; }
+.dots span { width: 11px; height: 11px; border-radius: 50%; background: var(--fg2); opacity: .45; }
+
+.card {
+  background: var(--card); border-radius: 20px; padding: 26px;
+  border: 1px solid var(--line);
+  box-shadow: var(--card-sh);
+}
+.composer {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--pill); border: 1px solid var(--pill-line, var(--line));
+  border-radius: 999px; padding: 9px 9px 9px 22px; height: 58px;
+  box-shadow: var(--pill-sh, none);
+}
+.placeholder { flex: 1; font-size: 15px; color: var(--fg2); letter-spacing: -0.006em; }
+.send {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: var(--btn); color: var(--btnfg);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--btn-sh, none);
+}
+.send svg { width: 18px; height: 18px; }
+
+.chips { display: flex; gap: 10px; margin-top: 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 500 12.5px/1 ui-monospace, "SF Mono", monospace;
+  color: var(--fg1); background: var(--chipbg, var(--pill)); border: 1px solid var(--line);
+  border-radius: 999px; padding: 9px 15px;
+  box-shadow: var(--chip-sh, none);
+}
+.chip svg { width: 13px; height: 13px; opacity: .7; }
+.chip.dim { color: var(--fg2); }
+
+.meta {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 22px;
+  padding-top: 16px; border-top: 1px solid var(--line);
+  font-size: 12.5px; letter-spacing: -0.006em;
+}
+.meta .lbl { color: var(--fg2); }
+.meta a { color: var(--link); text-decoration: underline; text-underline-offset: 3px; font-weight: 500; }
+.meta .mono { margin-left: auto; font: 400 11.5px/1 ui-monospace, "SF Mono", monospace; color: var(--fg2); }
+
+/* Final dark — warm mono, button pulled down from #E9E6E0 to #CBC8C1 */
+.final-dark {
+  --canvas:#121110; --card:#1A1917; --pill:#121110; --chipbg:#211F1C;
+  --line:#2A2824; --pill-line:#242220;
+  --fg1:#DCDAD6; --fg2:#86827B;
+  --btn:#CBC8C1; --btnfg:#1A1917; --link:#A39E95;
+  --card-sh: inset 0 1px 0 rgba(255,255,255,.04), 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.35);
+  --pill-sh: inset 0 1px 3px rgba(0,0,0,.35);
+  --btn-sh: 0 1px 6px rgba(0,0,0,.35);
+  --chip-sh: inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.3);
+}
+
+/* Final light — same warm tint + elevation system: sunken composer well,
+   chips raised to white above the warm card, soft charcoal button */
+.final-light {
+  --canvas:#F6F5F2; --card:#FDFCFA; --pill:#EEECE8; --chipbg:#FFFFFF;
+  --line:#E3E0DA; --pill-line:#E8E5E0;
+  --fg1:#1B1A17; --fg2:#7D7972;
+  --btn:#33302A; --btnfg:#F6F5F2; --link:#6B665E;
+  --card-sh: 0 1px 3px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.05);
+  --pill-sh: inset 0 1px 3px rgba(0,0,0,.06);
+  --btn-sh: 0 1px 4px rgba(0,0,0,.18);
+  --chip-sh: 0 1px 2px rgba(0,0,0,.05);
+}
+</style>
+</head>
+<body>
+<div class="page-title">Warm mono — final pair.</div>
+<div class="page-sub">Dark: v3 with the button pulled down to warm gray-300 &nbsp;·&nbsp; Light: same warm tint + elevation ramp applied</div>
+
+<div class="grid" id="grid"></div>
+
+<template id="panel">
+  <div class="cell">
+    <span class="tag"></span>
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="card">
+      <div class="composer">
+        <span class="placeholder">Start a new chat…</span>
+        <span class="send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+      <div class="chips">
+        <span class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="5" r="2.4"/><circle cx="18" cy="5" r="2.4"/><circle cx="12" cy="19" r="2.4"/><path d="M6 7.5v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-2M12 12.5v4"/></svg>
+          fork
+        </span>
+        <span class="chip dim">main</span>
+      </div>
+      <div class="meta">
+        <span class="lbl">Continue from</span>
+        <a href="#">feat/context-merge</a>
+        <span class="mono">claude-sonnet-5 · 12.4k tok · $0.0042</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+const panels = [
+  ["final-dark", "final — warm mono · dark"],
+  ["final-light", "final — warm mono · light"],
+];
+const grid = document.getElementById("grid");
+const tpl = document.getElementById("panel");
+for (const [cls, label] of panels) {
+  const node = tpl.content.cloneNode(true);
+  node.querySelector(".cell").classList.add(cls);
+  node.querySelector(".tag").textContent = label;
+  grid.appendChild(node);
+}
+</script>
+</body>
+</html>

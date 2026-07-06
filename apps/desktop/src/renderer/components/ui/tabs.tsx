@@ -1,58 +1,54 @@
-import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { forwardRef } from "react";
-import { cn } from "@/lib/utils";
+import * as React from "react";
+import { Tabs as BaseTabs } from "@base-ui-components/react/tabs";
+import { cn } from "../../lib/utils";
 
-const Tabs = TabsPrimitive.Root;
+// Segmented tabs: recessed list, and a raised indicator rectangle that
+// SLIDES between tabs (positioned via Base UI's --active-tab-* vars).
+// List 10px radius − 4px padding = 6px indicator. NB: the active attribute
+// is data-active, not data-selected.
+const Tabs = BaseTabs.Root;
 
-const TabsList = forwardRef<
-  React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-8 items-center gap-0.5 rounded-lg bg-muted p-[3px]",
-      className
-    )}
-    {...props}
-  />
-));
-TabsList.displayName = TabsPrimitive.List.displayName;
+function TabsList({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof BaseTabs.List>) {
+  return (
+    <BaseTabs.List
+      className={cn(
+        "relative inline-flex items-center gap-1 rounded-md border border-line bg-surface-1 p-1",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <BaseTabs.Indicator
+        className={cn(
+          "absolute left-(--active-tab-left) top-(--active-tab-top) h-(--active-tab-height) w-(--active-tab-width)",
+          "rounded-[6px] bg-surface-3 shadow-raised",
+          "transition-[left,top,width,height] duration-200 ease-(--ease-standard)",
+        )}
+      />
+    </BaseTabs.List>
+  );
+}
 
-const TabsTrigger = forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1",
-      "text-[13px] font-medium text-muted-foreground",
-      "transition-all duration-150",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-      "disabled:pointer-events-none disabled:opacity-50",
-      "data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs",
-      className
-    )}
-    {...props}
-  />
-));
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
+function TabsTab({ className, ...props }: React.ComponentProps<typeof BaseTabs.Tab>) {
+  return (
+    <BaseTabs.Tab
+      className={cn(
+        "pressable relative z-[1] flex h-7 select-none items-center gap-1.5 rounded-[6px] px-3 text-label-md text-fg-muted",
+        "hover:text-fg data-[active]:text-fg",
+        "[&_svg]:size-4 [&_svg]:shrink-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-const TabsContent = forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className
-    )}
-    {...props}
-  />
-));
-TabsContent.displayName = TabsPrimitive.Content.displayName;
+function TabsPanel({ className, ...props }: React.ComponentProps<typeof BaseTabs.Panel>) {
+  return <BaseTabs.Panel className={cn("outline-none", className)} {...props} />;
+}
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+export { Tabs, TabsList, TabsTab, TabsPanel };

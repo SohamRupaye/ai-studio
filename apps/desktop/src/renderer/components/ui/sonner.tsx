@@ -1,40 +1,35 @@
-import { Toaster as SonnerToaster } from "sonner";
+import * as React from "react";
+import { Toaster as SonnerToaster, toast, type ToasterProps } from "sonner";
 
-type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
+// Sonner, restyled onto the warm-mono tokens (unstyled + classNames so no
+// stock sonner look leaks through). Mount once at app level; fire with toast().
+function Toaster(props: ToasterProps) {
+  return (
+    <SonnerToaster
+      position="bottom-right"
+      offset={16}
+      gap={8}
+      toastOptions={{
+        unstyled: true,
+        classNames: {
+          toast:
+            "flex w-89 items-center gap-3 rounded-lg border border-line bg-surface-2 p-4 shadow-lg animate-rise",
+          title: "text-label-lg text-fg",
+          description: "text-body-sm text-fg-muted",
+          icon: "shrink-0 [&_svg]:size-4.5",
+          success: "[&>[data-icon]]:text-success",
+          error: "[&>[data-icon]]:text-danger",
+          warning: "[&>[data-icon]]:text-warning",
+          info: "[&>[data-icon]]:text-info",
+          actionButton:
+            "pressable ml-auto h-7 shrink-0 rounded-md bg-primary px-2.5 text-label-sm text-primary-fg",
+          cancelButton:
+            "pressable ml-auto h-7 shrink-0 rounded-md border border-line bg-surface-2 px-2.5 text-label-sm text-fg-muted",
+        },
+      }}
+      {...props}
+    />
+  );
+}
 
-// Styled via inline tokens (not classNames) so it always beats Sonner's own
-// stylesheet and flips automatically with .dark — no hardcoded theme.
-const Toaster = ({ ...props }: ToasterProps) => (
-  <SonnerToaster
-    position="bottom-right"
-    offset={20}
-    gap={8}
-    duration={3200}
-    toastOptions={{
-      style: {
-        background: "hsl(var(--popover))",
-        color: "hsl(var(--popover-foreground))",
-        border: "1px solid hsl(var(--border))",
-        borderRadius: "12px",
-        boxShadow: "var(--shadow-lg)",
-        padding: "12px 14px",
-        fontSize: "13px",
-        fontWeight: 500,
-        fontFamily: "var(--font-sans)",
-      },
-      classNames: {
-        description: "!text-muted-foreground !font-normal",
-        success: "[&_[data-icon]]:!text-success",
-        error: "[&_[data-icon]]:!text-destructive",
-        warning: "[&_[data-icon]]:!text-warning",
-        info: "[&_[data-icon]]:!text-primary",
-        actionButton: "!bg-primary !text-primary-foreground !rounded-lg !text-xs !font-medium",
-        cancelButton: "!bg-muted !text-muted-foreground !rounded-lg !text-xs !font-medium",
-      },
-    }}
-    {...props}
-  />
-);
-
-export { Toaster };
-export { toast } from "sonner";
+export { Toaster, toast };

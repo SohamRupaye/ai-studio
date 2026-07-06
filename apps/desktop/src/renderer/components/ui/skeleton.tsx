@@ -1,12 +1,10 @@
-import { cn } from "@/lib/utils";
+import * as React from "react";
+import { cn } from "../../lib/utils";
 
-function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
-      {...props}
-    />
-  );
+// Shape comes from className (w/h/rounded); the `skeleton` utility supplies
+// the warm surface + opacity pulse.
+function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
+  return <div aria-hidden className={cn("skeleton", className)} {...props} />;
 }
 
 export { Skeleton };

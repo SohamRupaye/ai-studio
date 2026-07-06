@@ -1,33 +1,33 @@
-import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { Check, Minus } from "lucide-react";
-import { forwardRef } from "react";
-import { cn } from "@/lib/utils";
+import * as React from "react";
+import { Checkbox as BaseCheckbox } from "@base-ui-components/react/checkbox";
+import { CheckIcon, MinusIcon } from "@phosphor-icons/react";
+import { cn } from "../../lib/utils";
 
-const Checkbox = forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      "peer h-4 w-4 shrink-0 rounded-sm border border-border transition-colors duration-100",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-      "disabled:cursor-not-allowed disabled:opacity-50",
-      "data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground",
-      "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:text-primary-foreground",
-      className
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
-      {props.checked === "indeterminate" ? (
-        <Minus className="h-3 w-3" strokeWidth={2.5} />
-      ) : (
-        <Check className="h-3 w-3" strokeWidth={2.5} />
+function Checkbox({ className, ...props }: React.ComponentProps<typeof BaseCheckbox.Root>) {
+  return (
+    <BaseCheckbox.Root
+      className={cn(
+        "pressable flex size-4.5 shrink-0 items-center justify-center rounded-xs border border-line-strong bg-surface-1 shadow-raised",
+        "data-[checked]:border-primary data-[checked]:bg-primary data-[indeterminate]:border-primary data-[indeterminate]:bg-primary",
+        className,
       )}
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-));
-Checkbox.displayName = CheckboxPrimitive.Root.displayName;
+      {...props}
+    >
+      <BaseCheckbox.Indicator
+        keepMounted
+        className={cn(
+          "flex scale-0 text-primary-fg transition-transform duration-200 ease-(--ease-spring)",
+          "data-[checked]:scale-100 data-[indeterminate]:scale-100",
+        )}
+      >
+        {props.indeterminate ? (
+          <MinusIcon size={12} weight="bold" />
+        ) : (
+          <CheckIcon size={12} weight="bold" />
+        )}
+      </BaseCheckbox.Indicator>
+    </BaseCheckbox.Root>
+  );
+}
 
 export { Checkbox };
