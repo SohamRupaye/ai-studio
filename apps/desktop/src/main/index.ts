@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { Store, GlobalMemory } from "@ai-studio/database";
 import { Router, getConfig, loadConfig, saveConfig, ProviderRateLimitError } from "@ai-studio/providers";
 import type { MCPServerConfigEntry } from "@ai-studio/providers";
@@ -92,6 +92,8 @@ function createWindow() {
     },
   });
   mainWindow.setWindowButtonVisibility(true);
+  mainWindow.on("enter-full-screen", () => { mainWindow?.webContents.send("window:fullscreen-changed", true); });
+  mainWindow.on("leave-full-screen", () => { mainWindow?.webContents.send("window:fullscreen-changed", false); });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -371,12 +373,139 @@ function registerHandlers() {
   // ── Projects ────────────────────────────────────────────────────────────────
 
   handle("project:list", ({ orgId }) => store.listProjects(orgId));
-  handle("project:create", ({ orgId, name }) => store.createProject(orgId, name));
+  handle("project:create", ({ orgId, name }) => {
+    const project = store.createProject(orgId, name);
+    // Every project starts with a home for chats so the sidebar is never empty.
+    store.createSpace(project.id, "General");
+    return project;
+  });
+  handle("project:rename", ({ id, name }) => { store.renameProject(id, name); });
+  handle("project:reorder", ({ orgId, ids }) => { store.reorderProjects(orgId, ids); });
+
+  const projectMemoryScopes = (projectId: string, impact: { chatIds: string[]; branchIds: string[] }) => [
+    `project:${projectId}` as const,
+    ...impact.chatIds.map((chatId) => `chat:${chatId}` as const),
+    ...impact.branchIds.map((branchId) => `branch:${branchId}` as const),
+  ];
+  handle("project:impact", ({ id }) => {
+    const impact = store.projectImpact(id);
+    const scopes = new Set<string>(projectMemoryScopes(id, impact));
+    return {
+      spaces: impact.spaceIds.length,
+      chats: impact.chatIds.length,
+      artifacts: impact.artifacts,
+      memories: globalMem.list().filter((f) => scopes.has(f.scope)).length,
+    };
+  });
+  handle("project:delete", ({ id }) => {
+    // Unlike space/chat deletion this is a HARD delete: the store returns the
+    // purged ids (soft-deleted rows included) and we take the scoped memories
+    // and the knowledge-graph nodes with them. Gated by a typed challenge in
+    // the UI.
+    const purged = store.deleteProject(id);
+    if (purged) {
+      globalMem.removeScopes(projectMemoryScopes(id, purged));
+      graph.removeByBranches(purged.branchIds);
+    }
+    return purged !== null;
+  });
+
+  // ── Window ──────────────────────────────────────────────────────────────────
+
+  handle("window:is-fullscreen", () => mainWindow?.isFullScreen() ?? false);
+
+  // ── Spaces ──────────────────────────────────────────────────────────────────
+
+  handle("space:list", ({ projectId }) => store.listSpaces(projectId));
+  handle("space:create", ({ projectId, name }) => store.createSpace(projectId, name));
+  handle("space:rename", ({ id, name }) => { store.renameSpace(id, name); });
+
+  // Memories scoped to a space's chats/branches live in GlobalMemory, not the
+  // store — resolve those scopes from the store's impact ids.
+  const spaceMemoryScopes = (impact: { chatIds: string[]; branchIds: string[] }) => [
+    ...impact.chatIds.map((chatId) => `chat:${chatId}` as const),
+    ...impact.branchIds.map((branchId) => `branch:${branchId}` as const),
+  ];
+  handle("space:impact", ({ id }) => {
+    const impact = store.spaceImpact(id);
+    const scopes = new Set<string>(spaceMemoryScopes(impact));
+    return {
+      chats: impact.chatIds.length,
+      artifacts: impact.artifacts,
+      memories: globalMem.list().filter((f) => scopes.has(f.scope)).length,
+    };
+  });
+  handle("space:delete", ({ id }) => {
+    // Take the impact before the delete marks the rows — the ids drive the
+    // memory purge. Knowledge-graph entries are deliberately left alone.
+    const impact = store.spaceImpact(id);
+    const deleted = store.deleteSpace(id);
+    if (deleted) globalMem.removeScopes(spaceMemoryScopes(impact));
+    return deleted;
+  });
 
   // ── Chats ───────────────────────────────────────────────────────────────────
 
   handle("chat:list", ({ projectId }) => store.listChats(projectId));
-  handle("chat:create", ({ projectId, name }) => store.createChat(projectId, name));
+  // New chats are born on a "main" branch carrying the current default model.
+  handle("chat:create", ({ projectId, name, spaceId }) =>
+    store.createChat(projectId, name, spaceId, getConfig().defaultModel));
+  handle("chat:rename", ({ id, name }) => { store.renameChat(id, name); });
+
+  const chatMemoryScopes = (chatId: string, branchIds: string[]) => [
+    `chat:${chatId}` as const,
+    ...branchIds.map((branchId) => `branch:${branchId}` as const),
+  ];
+  handle("chat:impact", ({ id }) => {
+    const impact = store.chatImpact(id);
+    const scopes = new Set<string>(chatMemoryScopes(id, impact.branchIds));
+    return {
+      branches: impact.branches,
+      artifacts: impact.artifacts,
+      memories: globalMem.list().filter((f) => scopes.has(f.scope)).length,
+    };
+  });
+  handle("chat:delete", ({ id }) => {
+    // Impact before delete — the ids drive the memory purge, same as spaces.
+    const impact = store.chatImpact(id);
+    const deleted = store.deleteChat(id);
+    if (deleted) globalMem.removeScopes(chatMemoryScopes(id, impact.branchIds));
+    return deleted;
+  });
+
+  handle("branch:fork", ({ branchId, name }) => {
+    // Fork at the current head so the new branch inherits the whole
+    // conversation up to this point.
+    const parent = store.getBranch(branchId);
+    if (!parent) throw new Error("Branch not found");
+    const messageCount = store.getMessageCount(branchId);
+    return store.createBranch(
+      name,
+      parent.model,
+      branchId,
+      messageCount > 0 ? messageCount - 1 : undefined,
+      parent.chatId,
+    );
+  });
+
+  handle("branch:export", async ({ id }) => {
+    const branch = store.getBranch(id);
+    if (!branch || !mainWindow) return null;
+    const chat = branch.chatId ? store.getChat(branch.chatId) : undefined;
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: `${chat ? `${chat.name}-` : ""}${branch.name}.md`,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (canceled || !filePath) return null;
+
+    const lines: string[] = [`# ${chat ? `${chat.name} — ` : ""}${branch.name}`, ""];
+    for (const msg of store.getMessages(id)) {
+      const speaker = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : "System";
+      lines.push(`**${speaker}:**`, "", msg.content, "");
+    }
+    writeFileSync(filePath, lines.join("\n"));
+    return filePath;
+  });
 
   // ── Branches ────────────────────────────────────────────────────────────────
 

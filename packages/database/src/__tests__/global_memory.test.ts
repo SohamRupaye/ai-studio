@@ -58,6 +58,26 @@ describe("GlobalMemory", () => {
     expect(memory.remove(999)).toBe(false);
   });
 
+  it("removeScopes() removes every fact in the given scopes and persists", () => {
+    memory.add("keep global", "global");
+    memory.add("keep project", "project:p1");
+    memory.add("chat memory", "chat:c1");
+    memory.add("branch memory", "branch:b1");
+    memory.add("other chat", "chat:c2");
+
+    expect(memory.removeScopes(["chat:c1", "branch:b1"])).toBe(2);
+    const texts = memory.list().map(f => f.text);
+    expect(texts).toEqual(["keep global", "keep project", "other chat"]);
+    // Persisted — a fresh instance sees the same three facts.
+    expect(new GlobalMemory(tmpDir).list()).toHaveLength(3);
+  });
+
+  it("removeScopes() with no matches removes nothing and returns 0", () => {
+    memory.add("keep", "global");
+    expect(memory.removeScopes(["chat:none"])).toBe(0);
+    expect(memory.list()).toHaveLength(1);
+  });
+
   it("forBranch() returns global + matching project/chat/branch scoped facts", () => {
     memory.add("global", "global");
     memory.add("project p1", "project:p1");

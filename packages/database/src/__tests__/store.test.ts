@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import Database from "better-sqlite3";
 import { Store } from "../store.js";
 
 let tmpDir: string;
@@ -58,6 +59,255 @@ describe("Project CRUD", () => {
     const list = store.listProjects(org.id);
     expect(list.some(p => p.id === project.id)).toBe(true);
   });
+
+  it("renameProject updates the name", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Old");
+    store.renameProject(project.id, "New");
+    expect(store.getProject(project.id)!.name).toBe("New");
+  });
+
+  it("reorderProjects persists the order; new projects append after it", () => {
+    const org = store.createOrganisation("Org");
+    const a = store.createProject(org.id, "A");
+    const b = store.createProject(org.id, "B");
+    const c = store.createProject(org.id, "C");
+
+    store.reorderProjects(org.id, [c.id, a.id, b.id]);
+    expect(store.listProjects(org.id).map(p => p.id)).toEqual([c.id, a.id, b.id]);
+
+    // A project created after a reorder sorts last (creation-time sort_order
+    // is far above the rewritten 0..n run).
+    const d = store.createProject(org.id, "D");
+    expect(store.listProjects(org.id).map(p => p.id)).toEqual([c.id, a.id, b.id, d.id]);
+  });
+
+  it("projectImpact counts live spaces, chats and artifacts", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Design");
+    const chat = store.createChat(project.id, "Chat", space.id);
+    const branch = store.listBranches(chat.id)[0]!; // auto-created main
+    store.createArtifact(branch.id, project.id, "doc", "Doc", "content");
+
+    const impact = store.projectImpact(project.id);
+    expect(impact.spaceIds).toEqual([space.id]);
+    expect(impact.chatIds).toEqual([chat.id]);
+    expect(impact.branchIds).toEqual([branch.id]);
+    expect(impact.artifacts).toBe(1);
+  });
+
+  it("deleteProject HARD-deletes everything, soft-deleted rows included", () => {
+    const org = store.createOrganisation("Org");
+    const keep = store.createProject(org.id, "Kept");
+    const doomed = store.createProject(org.id, "Doomed");
+    const space = store.createSpace(doomed.id, "Design");
+    const chat = store.createChat(doomed.id, "Chat", space.id);
+    const branch = store.listBranches(chat.id)[0]!;
+    store.addMessage(branch.id, "user", "hello");
+    store.createArtifact(branch.id, doomed.id, "doc", "Doc", "content");
+    // A chat soft-deleted beforehand must be purged too.
+    const softDeleted = store.createChat(doomed.id, "Old", space.id);
+    store.deleteChat(softDeleted.id);
+
+    const purged = store.deleteProject(doomed.id);
+    expect(purged).not.toBeNull();
+    expect(purged!.chatIds.sort()).toEqual([chat.id, softDeleted.id].sort());
+    expect(purged!.branchIds).toContain(branch.id);
+
+    expect(store.getProject(doomed.id)).toBeUndefined();
+    expect(store.listProjects(org.id).map(p => p.id)).toEqual([keep.id]);
+    // Rows are physically gone — not soft-deleted.
+    const raw = new Database(dbPath);
+    const count = (sql: string, param: string) =>
+      (raw.prepare(sql).get(param) as any).n as number;
+    expect(count("SELECT COUNT(*) AS n FROM projects WHERE id = ?", doomed.id)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM spaces WHERE project_id = ?", doomed.id)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM chats WHERE project_id = ?", doomed.id)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM branches WHERE id = ?", branch.id)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM messages WHERE branch_id = ?", branch.id)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM artifacts WHERE project_id = ?", doomed.id)).toBe(0);
+    raw.close();
+
+    // Repeat and unknown deletes report null.
+    expect(store.deleteProject(doomed.id)).toBeNull();
+    expect(store.deleteProject("nonexistent")).toBeNull();
+  });
+});
+
+// ── Spaces ────────────────────────────────────────────────────────────────────
+
+describe("Space CRUD", () => {
+  it("createSpace → getSpace/listSpaces returns same data", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Design");
+    expect(store.getSpace(space.id)!.name).toBe("Design");
+    expect(store.listSpaces(project.id).some(s => s.id === space.id)).toBe(true);
+  });
+
+  it("createChat without spaceId auto-assigns the project's default space", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat");
+    expect(chat.spaceId).toBeDefined();
+    const spaces = store.listSpaces(project.id);
+    expect(spaces.length).toBe(1);
+    expect(spaces[0]!.name).toBe("General");
+    expect(chat.spaceId).toBe(spaces[0]!.id);
+  });
+
+  it("createChat with explicit spaceId uses it", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Dev");
+    const chat = store.createChat(project.id, "Chat", space.id);
+    expect(store.getChat(chat.id)!.spaceId).toBe(space.id);
+  });
+
+  it("createChat auto-creates a 'main' trunk branch carrying the given model", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat", undefined, "gpt-4");
+    const branches = store.listBranches(chat.id);
+    expect(branches).toHaveLength(1);
+    expect(branches[0]!.name).toBe("main");
+    expect(branches[0]!.model).toBe("gpt-4");
+  });
+
+  it("renameSpace updates the name", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Desgin");
+    store.renameSpace(space.id, "Design");
+    expect(store.getSpace(space.id)!.name).toBe("Design");
+  });
+
+  it("deleteSpace soft-deletes the space with its chats, branches and artifacts", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const keep = store.createSpace(project.id, "Design");
+    const doomed = store.createSpace(project.id, "Scratch");
+    const keptChat = store.createChat(project.id, "Kept chat", keep.id);
+    const chat = store.createChat(project.id, "Chat", doomed.id);
+    const branch = store.createBranch("main", "model", undefined, undefined, chat.id);
+    const artifact = store.createArtifact(branch.id, project.id, "doc", "Doc", "content");
+
+    expect(store.deleteSpace(doomed.id)).toBe(true);
+    expect(store.getSpace(doomed.id)).toBeUndefined();
+    expect(store.getChat(chat.id)).toBeUndefined();
+    expect(store.getBranch(branch.id)).toBeUndefined();
+    expect(store.getArtifact(artifact.id)).toBeUndefined();
+    // Rows survive as soft-deleted — "git for context" doesn't destroy context.
+    const raw = new Database(dbPath);
+    expect((raw.prepare("SELECT deleted_at FROM spaces WHERE id = ?").get(doomed.id) as any).deleted_at).not.toBeNull();
+    expect((raw.prepare("SELECT deleted_at FROM chats WHERE id = ?").get(chat.id) as any).deleted_at).not.toBeNull();
+    raw.close();
+    // The neighbouring space is untouched.
+    expect(store.getSpace(keep.id)).toBeDefined();
+    expect(store.getChat(keptChat.id)!.spaceId).toBe(keep.id);
+  });
+
+  it("deleteSpace can delete a project's last space; General comes back on demand", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const only = store.createSpace(project.id, "General");
+    expect(store.deleteSpace(only.id)).toBe(true);
+    expect(store.listSpaces(project.id)).toEqual([]);
+    // A chat created afterwards recreates the default space.
+    const chat = store.createChat(project.id, "Chat");
+    const spaces = store.listSpaces(project.id);
+    expect(spaces.length).toBe(1);
+    expect(spaces[0]!.name).toBe("General");
+    expect(chat.spaceId).toBe(spaces[0]!.id);
+  });
+
+  it("deleteSpace returns false for unknown or already-deleted spaces", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Scratch");
+    expect(store.deleteSpace("nonexistent")).toBe(false);
+    expect(store.deleteSpace(space.id)).toBe(true);
+    expect(store.deleteSpace(space.id)).toBe(false);
+  });
+
+  it("spaceImpact counts live chats and artifacts, including those on soft-deleted branches", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const space = store.createSpace(project.id, "Design");
+    const chatA = store.createChat(project.id, "A", space.id);
+    const chatB = store.createChat(project.id, "B", space.id);
+    const live = store.createBranch("main", "model", undefined, undefined, chatA.id);
+    const dead = store.createBranch("old", "model", undefined, undefined, chatB.id);
+    store.createArtifact(live.id, project.id, "doc", "Doc", "content");
+    // An artifact on a soft-deleted branch is still listed at project level,
+    // so deleting the space sweeps it — impact must count it.
+    store.createArtifact(dead.id, project.id, "doc", "Old doc", "content");
+    store.deleteBranch(dead.id);
+
+    const impact = store.spaceImpact(space.id);
+    expect(impact.chatIds.sort()).toEqual([chatA.id, chatB.id].sort());
+    // live + dead + each chat's auto-created "main" trunk.
+    expect(impact.branchIds).toHaveLength(4);
+    expect(impact.branchIds).toContain(live.id);
+    expect(impact.branchIds).toContain(dead.id);
+    expect(impact.artifacts).toBe(2);
+
+    // A previously deleted chat no longer counts.
+    store.deleteChat(chatB.id);
+    const after = store.spaceImpact(space.id);
+    expect(after.chatIds).toEqual([chatA.id]);
+    expect(after.artifacts).toBe(1);
+  });
+});
+
+// ── Migration from a pre-spaces database ─────────────────────────────────────
+
+describe("pre-spaces migration", () => {
+  it("opens a legacy DB, adds space_id, and backfills chats into General", () => {
+    const legacyPath = join(tmpDir, "legacy.db");
+
+    // Recreate the old schema by hand: chats without space_id, no spaces table.
+    const raw = new Database(legacyPath);
+    raw.exec(`
+      CREATE TABLE organisations (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at REAL, updated_at REAL);
+      CREATE TABLE projects (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, name TEXT NOT NULL, created_at REAL, updated_at REAL);
+      CREATE TABLE chats (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, created_at REAL, updated_at REAL);
+    `);
+    raw.prepare("INSERT INTO organisations VALUES ('o1', 'Org', 1, 1)").run();
+    raw.prepare("INSERT INTO projects VALUES ('p1', 'o1', 'Project', 1, 1)").run();
+    raw.prepare("INSERT INTO chats VALUES ('c1', 'p1', 'Old chat', 1, 1)").run();
+    raw.prepare("INSERT INTO chats VALUES ('c2', 'p1', 'Older chat', 2, 2)").run();
+    raw.close();
+
+    // Constructing the Store runs schema + migrate; this used to throw
+    // "no such column: space_id" because an index on chats(space_id) sat in
+    // the schema pass, ahead of the ALTER TABLE.
+    const migrated = new Store(legacyPath);
+    const spaces = migrated.listSpaces("p1");
+    expect(spaces.length).toBe(1);
+    expect(spaces[0]!.name).toBe("General");
+    for (const chat of migrated.listChats("p1")) {
+      expect(chat.spaceId).toBe(spaces[0]!.id);
+      // Branchless legacy chats get a "main" trunk backfilled.
+      const branches = migrated.listBranches(chat.id);
+      expect(branches).toHaveLength(1);
+      expect(branches[0]!.name).toBe("main");
+    }
+  });
+
+  it("reopening a store recreates a trunk for chats whose branches were all deleted", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat");
+    for (const b of store.listBranches(chat.id)) store.deleteBranch(b.id);
+    expect(store.listBranches(chat.id)).toHaveLength(0);
+
+    const reopened = new Store(dbPath);
+    const branches = reopened.listBranches(chat.id);
+    expect(branches).toHaveLength(1);
+    expect(branches[0]!.name).toBe("main");
+  });
 });
 
 // ── Chats ─────────────────────────────────────────────────────────────────────
@@ -79,6 +329,52 @@ describe("Chat CRUD", () => {
     const chat = store.createChat(project.id, "Chat1");
     const list = store.listChats(project.id);
     expect(list.some(c => c.id === chat.id)).toBe(true);
+  });
+
+  it("renameChat updates the name", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Old name");
+    store.renameChat(chat.id, "New name");
+    expect(store.getChat(chat.id)!.name).toBe("New name");
+  });
+
+  it("deleteChat soft-deletes the chat, its branches and their artifacts", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Doomed");
+    const branch = store.createBranch("main", "gpt-4", undefined, undefined, chat.id);
+    const artifact = store.createArtifact(branch.id, project.id, "doc", "Doc", "content");
+    expect(store.deleteChat(chat.id)).toBe(true);
+    expect(store.getChat(chat.id)).toBeUndefined();
+    expect(store.getBranch(branch.id)).toBeUndefined();
+    expect(store.getArtifact(artifact.id)).toBeUndefined();
+    expect(store.listChats(project.id).some(c => c.id === chat.id)).toBe(false);
+  });
+
+  it("deleteChat returns false for unknown id", () => {
+    expect(store.deleteChat("nonexistent")).toBe(false);
+  });
+
+  it("chatImpact counts live branches and artifacts; purge ids include soft-deleted branches", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat");
+    const live = store.createBranch("main", "model", undefined, undefined, chat.id);
+    const dead = store.createBranch("old", "model", undefined, undefined, chat.id);
+    store.createArtifact(live.id, project.id, "doc", "Doc", "content");
+    // Still listed at project level despite its branch being soft-deleted, so
+    // deleting the chat sweeps it — impact must count it.
+    store.createArtifact(dead.id, project.id, "doc", "Old doc", "content");
+    store.deleteBranch(dead.id);
+
+    const impact = store.chatImpact(chat.id);
+    // live + dead + the auto-created "main" trunk.
+    expect(impact.branchIds).toHaveLength(3);
+    expect(impact.branchIds).toContain(live.id);
+    expect(impact.branchIds).toContain(dead.id);
+    expect(impact.branches).toBe(2);
+    expect(impact.artifacts).toBe(2);
   });
 });
 

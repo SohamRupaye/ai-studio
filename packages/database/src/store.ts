@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Branch, Message, Summary, Organisation, Project, Chat } from "@ai-studio/shared";
+import type { Branch, Message, Summary, Organisation, Project, Space, Chat } from "@ai-studio/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -38,16 +38,29 @@ CREATE TABLE IF NOT EXISTS projects (
   id         TEXT PRIMARY KEY,
   org_id     TEXT NOT NULL REFERENCES organisations(id),
   name       TEXT NOT NULL,
+  sort_order INTEGER,
   created_at REAL,
-  updated_at REAL
+  updated_at REAL,
+  deleted_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS spaces (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  name       TEXT NOT NULL,
+  created_at REAL,
+  updated_at REAL,
+  deleted_at REAL
 );
 
 CREATE TABLE IF NOT EXISTS chats (
   id         TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id),
+  space_id   TEXT REFERENCES spaces(id),
   name       TEXT NOT NULL,
   created_at REAL,
-  updated_at REAL
+  updated_at REAL,
+  deleted_at REAL
 );
 
 CREATE TABLE IF NOT EXISTS branches (
@@ -113,6 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_branches_chat ON branches(chat_id);
 CREATE INDEX IF NOT EXISTS idx_branches_parent ON branches(parent_id);
 CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(org_id);
 CREATE INDEX IF NOT EXISTS idx_chats_project ON chats(project_id);
+CREATE INDEX IF NOT EXISTS idx_spaces_project ON spaces(project_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_branch ON artifacts(branch_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_project ON artifacts(project_id);
 CREATE INDEX IF NOT EXISTS idx_costs_branch ON costs(branch_id);
@@ -154,6 +168,52 @@ export class Store {
     if (!msgCols.find((c: any) => c.name === "user_id")) {
       this.db.exec("ALTER TABLE messages ADD COLUMN user_id TEXT");
     }
+    const projectCols = this.db.prepare("PRAGMA table_info(projects)").all() as any[];
+    if (!projectCols.find((c: any) => c.name === "deleted_at")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN deleted_at REAL");
+    }
+    if (!projectCols.find((c: any) => c.name === "sort_order")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN sort_order INTEGER");
+    }
+    // Backfill: creation time preserves the existing order and keeps sorting
+    // stable for rows created before ordering existed. New rows get their
+    // created_at too, so they append after any explicitly reordered 0..n run.
+    this.db.exec("UPDATE projects SET sort_order = CAST(created_at AS INTEGER) WHERE sort_order IS NULL");
+    const spaceCols = this.db.prepare("PRAGMA table_info(spaces)").all() as any[];
+    if (!spaceCols.find((c: any) => c.name === "deleted_at")) {
+      this.db.exec("ALTER TABLE spaces ADD COLUMN deleted_at REAL");
+    }
+    const chatCols = this.db.prepare("PRAGMA table_info(chats)").all() as any[];
+    if (!chatCols.find((c: any) => c.name === "space_id")) {
+      this.db.exec("ALTER TABLE chats ADD COLUMN space_id TEXT REFERENCES spaces(id)");
+    }
+    if (!chatCols.find((c: any) => c.name === "deleted_at")) {
+      this.db.exec("ALTER TABLE chats ADD COLUMN deleted_at REAL");
+    }
+    // Index lives here, not in SCHEMA: on a pre-spaces DB the schema pass runs
+    // before the ALTER above, and indexing a column that doesn't exist yet
+    // kills the whole Store constructor.
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_chats_space ON chats(space_id)");
+    // Backfill: chats that predate spaces move into their project's default space.
+    const orphanProjects = this.db
+      .prepare("SELECT DISTINCT project_id FROM chats WHERE space_id IS NULL")
+      .all() as any[];
+    for (const row of orphanProjects) {
+      const space = this.ensureDefaultSpace(row.project_id);
+      this.db
+        .prepare("UPDATE chats SET space_id = ? WHERE project_id = ? AND space_id IS NULL")
+        .run(space.id, row.project_id);
+    }
+    // Backfill the "every chat has a trunk" invariant: live chats with no live
+    // branches (pre-auto-main chats, or chats whose branches were all deleted)
+    // get a fresh empty "main" so they're usable. Model resolves to the
+    // configured default at runtime.
+    const branchless = this.db
+      .prepare("SELECT id FROM chats WHERE deleted_at IS NULL AND id NOT IN (SELECT DISTINCT chat_id FROM branches WHERE chat_id IS NOT NULL AND deleted_at IS NULL)")
+      .all() as any[];
+    for (const row of branchless) {
+      this.createBranch("main", "", undefined, undefined, row.id);
+    }
   }
 
   // ── Organisations ──────────────────────────────────────────────────────────
@@ -179,38 +239,228 @@ export class Store {
 
   createProject(orgId: string, name: string): Project {
     const p: Project = { id: randomUUID(), orgId, name, createdAt: Date.now() };
-    this.db.prepare("INSERT INTO projects (id, org_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(p.id, p.orgId, p.name, p.createdAt, p.createdAt);
+    // sort_order = creation time, so new projects append after reordered rows.
+    this.db.prepare("INSERT INTO projects (id, org_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(p.id, p.orgId, p.name, p.createdAt, p.createdAt, p.createdAt);
     return p;
   }
 
   getProject(id: string): Project | undefined {
-    const row = this.db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as any;
+    const row = this.db.prepare("SELECT * FROM projects WHERE id = ? AND deleted_at IS NULL").get(id) as any;
     if (!row) return undefined;
     return { id: row.id, orgId: row.org_id, name: row.name, createdAt: row.created_at };
   }
 
   listProjects(orgId: string): Project[] {
-    return (this.db.prepare("SELECT * FROM projects WHERE org_id = ? ORDER BY created_at").all(orgId) as any[])
+    return (this.db.prepare("SELECT * FROM projects WHERE org_id = ? AND deleted_at IS NULL ORDER BY sort_order, created_at").all(orgId) as any[])
       .map(r => ({ id: r.id, orgId: r.org_id, name: r.name, createdAt: r.created_at }));
   }
 
-  // ── Chats ──────────────────────────────────────────────────────────────────
-
-  createChat(projectId: string, name: string): Chat {
-    const c: Chat = { id: randomUUID(), projectId, name, createdAt: Date.now() };
-    this.db.prepare("INSERT INTO chats (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(c.id, c.projectId, c.name, c.createdAt, c.createdAt);
-    return c;
+  renameProject(id: string, name: string): void {
+    this.db.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
   }
 
-  getChat(id: string): Chat | undefined {
-    const row = this.db.prepare("SELECT * FROM chats WHERE id = ?").get(id) as any;
+  /** Persist a drag-reorder: ids in display order become sort_order 0..n-1. */
+  reorderProjects(orgId: string, ids: string[]): void {
+    const now = Date.now();
+    const update = this.db.prepare("UPDATE projects SET sort_order = ?, updated_at = ? WHERE id = ? AND org_id = ?");
+    this.db.transaction(() => {
+      ids.forEach((id, index) => update.run(index, now, id, orgId));
+    })();
+  }
+
+  /**
+   * What deleting this project takes with it: live spaces and chats, every
+   * branch of those chats (soft-deleted ones included — their artifacts and
+   * scoped memories are still live), and the live artifact count. Callers use
+   * the ids to purge project-/chat-/branch-scoped memories.
+   */
+  projectImpact(id: string): { spaceIds: string[]; chatIds: string[]; branchIds: string[]; artifacts: number } {
+    const spaceIds = (this.db
+      .prepare("SELECT id FROM spaces WHERE project_id = ? AND deleted_at IS NULL")
+      .all(id) as any[]).map(r => r.id);
+    const chatIds = (this.db
+      .prepare("SELECT id FROM chats WHERE project_id = ? AND deleted_at IS NULL")
+      .all(id) as any[]).map(r => r.id);
+    const branchIds = (this.db
+      .prepare("SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ? AND deleted_at IS NULL)")
+      .all(id) as any[]).map(r => r.id);
+    const artifacts = (this.db
+      .prepare("SELECT COUNT(*) AS n FROM artifacts WHERE project_id = ? AND deleted_at IS NULL")
+      .get(id) as any).n as number;
+    return { spaceIds, chatIds, branchIds, artifacts };
+  }
+
+  /**
+   * HARD-delete a project and everything in it — spaces, chats, branches,
+   * messages, summaries, costs, artifacts — including rows earlier deletes
+   * only soft-deleted. This is the app's one irreversible delete (the UI
+   * gates it behind a typed challenge); space/chat deletion stays soft.
+   * Returns the purged chat/branch ids so callers can also clear scoped
+   * memories and knowledge-graph nodes, or null if the project is unknown.
+   */
+  deleteProject(id: string): { chatIds: string[]; branchIds: string[] } | null {
+    const project = this.getProject(id);
+    if (!project) return null;
+    // ALL rows, soft-deleted included — this purge is total.
+    const chatIds = (this.db
+      .prepare("SELECT id FROM chats WHERE project_id = ?")
+      .all(id) as any[]).map(r => r.id);
+    const branchIds = (this.db
+      .prepare("SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ?)")
+      .all(id) as any[]).map(r => r.id);
+    this.db.transaction(() => {
+      // Children before parents — foreign keys are enforced.
+      const branchesOfProject = "SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ?)";
+      this.db.prepare(`DELETE FROM messages WHERE branch_id IN (${branchesOfProject})`).run(id);
+      this.db.prepare(`DELETE FROM summaries WHERE branch_id IN (${branchesOfProject})`).run(id);
+      this.db.prepare(`DELETE FROM costs WHERE branch_id IN (${branchesOfProject})`).run(id);
+      this.db.prepare("DELETE FROM artifacts WHERE project_id = ?").run(id);
+      this.db.prepare("DELETE FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE project_id = ?)").run(id);
+      this.db.prepare("DELETE FROM chats WHERE project_id = ?").run(id);
+      this.db.prepare("DELETE FROM spaces WHERE project_id = ?").run(id);
+      this.db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+    })();
+    return { chatIds, branchIds };
+  }
+
+  // ── Spaces ─────────────────────────────────────────────────────────────────
+
+  createSpace(projectId: string, name: string): Space {
+    const s: Space = { id: randomUUID(), projectId, name, createdAt: Date.now() };
+    this.db.prepare("INSERT INTO spaces (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(s.id, s.projectId, s.name, s.createdAt, s.createdAt);
+    return s;
+  }
+
+  getSpace(id: string): Space | undefined {
+    const row = this.db.prepare("SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL").get(id) as any;
     if (!row) return undefined;
     return { id: row.id, projectId: row.project_id, name: row.name, createdAt: row.created_at };
   }
 
-  listChats(projectId: string): Chat[] {
-    return (this.db.prepare("SELECT * FROM chats WHERE project_id = ? ORDER BY created_at").all(projectId) as any[])
+  listSpaces(projectId: string): Space[] {
+    return (this.db.prepare("SELECT * FROM spaces WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at").all(projectId) as any[])
       .map(r => ({ id: r.id, projectId: r.project_id, name: r.name, createdAt: r.created_at }));
+  }
+
+  renameSpace(id: string, name: string): void {
+    this.db.prepare("UPDATE spaces SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
+  }
+
+  /**
+   * What deleting this space takes with it: its live chats, every branch of
+   * those chats (soft-deleted ones included — their artifacts and scoped
+   * memories are still live), and the live artifact count on those branches.
+   * Callers use the ids to purge chat-/branch-scoped memories, which live
+   * outside this store.
+   */
+  spaceImpact(id: string): { chatIds: string[]; branchIds: string[]; artifacts: number } {
+    const chatIds = (this.db
+      .prepare("SELECT id FROM chats WHERE space_id = ? AND deleted_at IS NULL")
+      .all(id) as any[]).map(r => r.id);
+    const branchIds = (this.db
+      .prepare("SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE space_id = ? AND deleted_at IS NULL)")
+      .all(id) as any[]).map(r => r.id);
+    const artifacts = (this.db
+      .prepare("SELECT COUNT(*) AS n FROM artifacts WHERE deleted_at IS NULL AND branch_id IN (SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE space_id = ? AND deleted_at IS NULL))")
+      .get(id) as any).n as number;
+    return { chatIds, branchIds, artifacts };
+  }
+
+  /**
+   * Soft-delete a space and everything in it — chats, their branches, and
+   * those branches' artifacts — matching deleteChat's model. Soft, not hard:
+   * kept rows still satisfy the FKs from soft-deleted chats, and "git for
+   * context" shouldn't destroy context. The knowledge graph is a separate
+   * store and is deliberately untouched. A project may end up with no
+   * spaces; ensureDefaultSpace recreates "General" on demand.
+   */
+  deleteSpace(id: string): boolean {
+    const space = this.getSpace(id);
+    if (!space) return false;
+    const now = Date.now();
+    this.db.transaction(() => {
+      // Artifacts and branches resolve their targets through live chats, so
+      // they must run before the chats update marks those rows deleted.
+      this.db.prepare(
+        "UPDATE artifacts SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND branch_id IN (SELECT id FROM branches WHERE chat_id IN (SELECT id FROM chats WHERE space_id = ? AND deleted_at IS NULL))"
+      ).run(now, now, id);
+      this.db.prepare(
+        "UPDATE branches SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND chat_id IN (SELECT id FROM chats WHERE space_id = ? AND deleted_at IS NULL)"
+      ).run(now, now, id);
+      this.db.prepare("UPDATE chats SET deleted_at = ?, updated_at = ? WHERE space_id = ? AND deleted_at IS NULL").run(now, now, id);
+      this.db.prepare("UPDATE spaces SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+    })();
+    return true;
+  }
+
+  /** Oldest space of the project, creating "General" if the project has none. */
+  private ensureDefaultSpace(projectId: string): Space {
+    const existing = this.listSpaces(projectId);
+    if (existing.length) return existing[0];
+    return this.createSpace(projectId, "General");
+  }
+
+  // ── Chats ──────────────────────────────────────────────────────────────────
+
+  createChat(projectId: string, name: string, spaceId?: string, mainBranchModel?: string): Chat {
+    const space = spaceId ?? this.ensureDefaultSpace(projectId).id;
+    const c: Chat = { id: randomUUID(), projectId, spaceId: space, name, createdAt: Date.now() };
+    this.db.prepare("INSERT INTO chats (id, project_id, space_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(c.id, c.projectId, c.spaceId, c.name, c.createdAt, c.createdAt);
+    // Every chat is born on its trunk: a "main" branch, git-style, so there is
+    // never an unusable branchless chat. An empty model string is fine — the
+    // chat runtime falls back to the configured default model.
+    this.createBranch("main", mainBranchModel ?? "", undefined, undefined, c.id);
+    return c;
+  }
+
+  getChat(id: string): Chat | undefined {
+    const row = this.db.prepare("SELECT * FROM chats WHERE id = ? AND deleted_at IS NULL").get(id) as any;
+    if (!row) return undefined;
+    return { id: row.id, projectId: row.project_id, spaceId: row.space_id, name: row.name, createdAt: row.created_at };
+  }
+
+  listChats(projectId: string): Chat[] {
+    return (this.db.prepare("SELECT * FROM chats WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at").all(projectId) as any[])
+      .map(r => ({ id: r.id, projectId: r.project_id, spaceId: r.space_id, name: r.name, createdAt: r.created_at }));
+  }
+
+  renameChat(id: string, name: string): void {
+    this.db.prepare("UPDATE chats SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
+  }
+
+  /**
+   * What deleting this chat takes with it: every branch (soft-deleted ones
+   * included — their artifacts and scoped memories are still live), the live
+   * branch count for display, and the live artifact count. Callers use the
+   * ids to purge chat-/branch-scoped memories, which live outside this store.
+   */
+  chatImpact(id: string): { branchIds: string[]; branches: number; artifacts: number } {
+    const branchIds = (this.db
+      .prepare("SELECT id FROM branches WHERE chat_id = ?")
+      .all(id) as any[]).map(r => r.id);
+    const branches = (this.db
+      .prepare("SELECT COUNT(*) AS n FROM branches WHERE chat_id = ? AND deleted_at IS NULL")
+      .get(id) as any).n as number;
+    const artifacts = (this.db
+      .prepare("SELECT COUNT(*) AS n FROM artifacts WHERE deleted_at IS NULL AND branch_id IN (SELECT id FROM branches WHERE chat_id = ?)")
+      .get(id) as any).n as number;
+    return { branchIds, branches, artifacts };
+  }
+
+  /**
+   * Soft-delete a chat, its branches, and those branches' artifacts —
+   * the same cascade deleteSpace applies per chat.
+   */
+  deleteChat(id: string): boolean {
+    const chat = this.getChat(id);
+    if (!chat) return false;
+    const now = Date.now();
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE artifacts SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND branch_id IN (SELECT id FROM branches WHERE chat_id = ?)").run(now, now, id);
+      this.db.prepare("UPDATE branches SET deleted_at = ?, updated_at = ? WHERE chat_id = ?").run(now, now, id);
+      this.db.prepare("UPDATE chats SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+    })();
+    return true;
   }
 
   // ── Branches ───────────────────────────────────────────────────────────────
@@ -499,15 +749,12 @@ export class Store {
 
     const org = this.createOrganisation("Personal");
     const project = this.createProject(org.id, "Default Project");
-    const chat = this.createChat(project.id, "General");
-    const branches = this.listBranches();
-    if (!branches.length) {
-      this.createBranch("main", defaultModel, undefined, undefined, chat.id);
-    } else {
-      for (const b of branches) {
-        if (!b.chatId) {
-          this.db.prepare("UPDATE branches SET chat_id = ? WHERE id = ?").run(chat.id, b.id);
-        }
+    // createChat gives the chat its "main" trunk; adopt any orphaned
+    // pre-chats-era branches into it.
+    const chat = this.createChat(project.id, "General", undefined, defaultModel);
+    for (const b of this.listBranches()) {
+      if (!b.chatId) {
+        this.db.prepare("UPDATE branches SET chat_id = ? WHERE id = ?").run(chat.id, b.id);
       }
     }
   }

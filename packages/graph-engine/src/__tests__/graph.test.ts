@@ -134,3 +134,53 @@ describe("MetaGraph", () => {
     expect(text).toBe("A — C");
   });
 });
+
+describe("MetaGraph.removeByBranches", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "graph-remove-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("removes nodes and their edges whose meta._branch matches", async () => {
+    const graph = new MetaGraph(dir);
+    // Insert nodes directly — addNode needs the embedding model, which the
+    // test environment doesn't have.
+    const Database = (await import("better-sqlite3")).default;
+    const raw = new Database(join(dir, "graph.db"));
+    const insert = raw.prepare(
+      "INSERT INTO nodes (id, text, embedding, meta) VALUES (?, ?, ?, ?)",
+    );
+    insert.run(1, "a", Buffer.alloc(4), JSON.stringify({ _branch: "b1" }));
+    insert.run(2, "b", Buffer.alloc(4), JSON.stringify({ _branch: "b2" }));
+    insert.run(3, "c", Buffer.alloc(4), JSON.stringify({ _branch: "b1" }));
+    raw.prepare("INSERT INTO edges (source, target, weight) VALUES (1, 2, 0.5)").run();
+    raw.prepare("INSERT INTO edges (source, target, weight) VALUES (2, 3, 0.5)").run();
+    raw.close();
+
+    expect(graph.removeByBranches(["b1", "unrelated"])).toBe(2);
+    expect(graph.size).toBe(1);
+    expect(graph.getNode(2)).toBeDefined();
+    expect(graph.getNode(1)).toBeUndefined();
+    expect(graph.getNode(3)).toBeUndefined();
+    // Edges touching removed nodes are gone too.
+    expect(graph.edgeCount).toBe(0);
+  });
+
+  it("returns 0 for empty input, unknown branches, or nodes without _branch", async () => {
+    const graph = new MetaGraph(dir);
+    const Database = (await import("better-sqlite3")).default;
+    const raw = new Database(join(dir, "graph.db"));
+    raw.prepare("INSERT INTO nodes (id, text, embedding, meta) VALUES (1, 'a', ?, '{}')")
+      .run(Buffer.alloc(4));
+    raw.close();
+
+    expect(graph.removeByBranches([])).toBe(0);
+    expect(graph.removeByBranches(["nope"])).toBe(0);
+    expect(graph.size).toBe(1);
+  });
+});

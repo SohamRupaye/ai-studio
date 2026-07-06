@@ -194,6 +194,31 @@ export class MetaGraph {
     return rows.map(r => ({ id: r.id, weight: r.weight }));
   }
 
+  /**
+   * Permanently remove every node indexed from the given branches, plus the
+   * edges touching them. Nodes record their origin in meta._branch (set by
+   * the classifier). Used by hard project deletion. Returns nodes removed.
+   */
+  removeByBranches(branchIds: string[]): number {
+    if (!branchIds.length) return 0;
+    const doomed = new Set(branchIds);
+    const rows = this.db
+      .prepare("SELECT id, json_extract(meta, '$._branch') AS branch FROM nodes")
+      .all() as any[];
+    const ids = rows.filter(r => r.branch && doomed.has(r.branch)).map(r => r.id as number);
+    if (!ids.length) return 0;
+    this.db.transaction(() => {
+      const delEdges = this.db.prepare("DELETE FROM edges WHERE source = ? OR target = ?");
+      const delNode = this.db.prepare("DELETE FROM nodes WHERE id = ?");
+      for (const id of ids) {
+        delEdges.run(id, id);
+        delNode.run(id);
+        this.nodeCache.delete(id);
+      }
+    })();
+    return ids.length;
+  }
+
   get size(): number {
     const row = this.db.prepare("SELECT COUNT(*) as cnt FROM nodes").get() as any;
     return row.cnt;

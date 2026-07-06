@@ -31,3 +31,8 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+/** Counted noun for confirm-dialog copy: "1 memory", "3 chats". */
+export function counted(n: number, singular: string, plural = `${singular}s`) {
+  return `${n} ${n === 1 ? singular : plural}`;
+}

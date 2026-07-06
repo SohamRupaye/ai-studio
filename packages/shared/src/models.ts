@@ -27,9 +27,19 @@ export interface Project {
   createdAt: number;
 }
 
+// Functional area within a project (e.g. Design, Development, Business).
+// Owns chats today; memories/artifacts scope to it as those features land.
+export interface Space {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt: number;
+}
+
 export interface Chat {
   id: string;
   projectId: string;
+  spaceId: string;
   name: string;
   createdAt: number;
 }

@@ -2,7 +2,7 @@
 
 Context doc for whoever (human or agent) builds UI next. Everything described here is **implemented and working** in `apps/desktop/src/renderer/` — this is not a proposal. Read this instead of re-deriving the design system; read `ONBOARDING.md` for project-wide context.
 
-State as of 2026-07-06: tokens + 31-component library complete and demoed in a dev gallery (`components/ui-gallery.tsx`, mounted in `App.tsx`). No app shell or pages yet — that's the next phase. All of this is in the working tree; check `git status`.
+State as of 2026-07-06 (second session): tokens + 31-component library complete and demoed in a dev gallery (`components/ui-gallery.tsx`, now at the `/gallery` route). **The app shell is built and user-approved**: fixed topbar (hamburger + breadcrumb), project rail, sidebar with the spaces tree, routing. All destination pages are placeholders — the chat page is the next phase. Working tree is uncommitted; check `git status`.
 
 **This is a living system, not a spec.** Improve it when a real use case demands it — several of today's best decisions (raised selects, the `*-text` badge tones, the glow) came from exactly that kind of revision. The distinction that matters: *evolve with a reason* (a page needs something the system doesn't do well) vs. *relitigate settled taste* (the warm-mono palette, the one-hero rule, mono-for-data — those stay unless the user reopens them). When you change tokens or component behavior, add a dated entry to the **Changelog** at the bottom of this file saying what changed and why, so the next iteration inherits the reasoning and not just the diff.
 
@@ -13,7 +13,7 @@ The user (Soham) rejected two earlier UIs for looking "AI-generated": flat neutr
 **Rules that survive any redesign:**
 - One hero moment per screen (the composer on chat; one primary button anywhere else).
 - Depth comes from the **elevation ramp**, never decoration. Raised = lighter.
-- Mono font **only for data**: model names, tokens, costs, branch names, numbers. Never prose.
+- Mono font **only for data in content**: model names, tokens, costs, branch names, numbers. Never prose. **Navigation rows are uniform sans regardless** — the user overruled mono branch names in the sidebar tree (read as inconsistency, not information); a small icon carries the row's identity instead.
 - No colored icon chips. Color must mean state, not category.
 - Sentence case everywhere.
 - Every interactive element gets entrance/press micro-animation.
@@ -57,10 +57,11 @@ Tailwind text utilities (registered in `@theme`): `text-heading-lg/md/sm` (26/22
 - `prefers-reduced-motion` globally collapses all animation.
 - Focus: keyboard-only ring (`:focus-visible`, mono low-alpha). Disabled: universal fade via `:disabled`/`aria-disabled`.
 
-## Two hard-won gotchas (violating these WILL reintroduce fixed bugs)
+## Three hard-won gotchas (violating these WILL reintroduce fixed bugs)
 
 1. **`pressable` owns the entire interaction transition** (transform + colors + shadow + opacity). Never stack a `transition-*` utility on a pressable element — the CSS shorthand conflict silently kills one of the animations. If an element needs press feedback + color transitions, `pressable` alone already does both.
 2. **tailwind-merge is extended in `lib/utils.ts`** to know our custom `text-*` tokens are font *sizes* and `shadow-raised/sunken/float/glow` are shadows. Without that registration it classified `text-label-md` as a *color* and silently dropped `text-primary-fg`/`text-white` from buttons (invisible-label bug). If you add new custom `text-*` or `shadow-*` theme tokens, **register them there too**.
+3. **`MenuLabel`/`ContextMenuLabel` must sit inside a `MenuGroup`/`ContextMenuGroup`.** They're Base UI `GroupLabel` parts, which throw ("Menu group parts must be used within <Menu.Group>") when the popup mounts — and since popups mount on open, the crash presents as a blank screen on right-click, not at render time.
 
 ## Stack decisions
 
@@ -108,6 +109,20 @@ Hand-written visual primitives + Base UI-backed behavioral components. Everythin
 | Avatar | `avatar.tsx` | sm/md/lg, image + initials fallback. |
 | Collapsible | `collapsible.tsx` | For thinking blocks / tool activity ("Explored 4 files"): caret rotates, panel animates to measured height. |
 
+## App shell (`components/`, not `ui/` — app composition, built 2026-07-06)
+
+Elevation does the layout: **chrome (topbar, rail, sidebar) sits on bare `canvas`; the page is a raised `surface-1` card** (`rounded-lg border-line shadow-raised`, inset with margin). Widths: rail 64px + sidebar 256px = 320px chrome column; the collapse animation shrinks a fixed-width wrapper so text never reflows.
+
+| Piece | File | Notes |
+|---|---|---|
+| AppShell | `app-shell.tsx` | Layout + ⌘K command bar (shares `PRIMARY_NAV`/`FOOTER_NAV` with the sidebar so they can't drift). |
+| Topbar | `topbar.tsx` | Full-width drag region. Left zone's width mirrors the chrome column so the breadcrumb starts over the page card (Notion behavior); collapse slides it left. Fullscreen (via `window:fullscreen-changed` push + `window:is-fullscreen`) drops the 76px traffic-light gap. Breadcrumb = project / space / chat / branch (branch in mono — it's content-adjacent data in the topbar, not a nav row). |
+| ProjectRail | `project-rail.tsx` | 40px neutral initial tiles (color = state, never category), active = raised; dashed + opens NameDialog. |
+| Sidebar | `sidebar.tsx` | Header = **project name big, org as eyebrow menu** (rail item ↔ header must read as the same object — a Wheat-field-style pairing the user picked over org-led headers). Raised search (select-trigger language) → ⌘K. Nav: Home, Knowledge graph. Spaces tree: space ▸ Memories / Artifacts / Chats ▸ chat (pure accordion — you always land on a *branch*) ▸ branch rows. Hairline connector (`border-l`) carries nesting. Branch rows own the management context menu (Rename / Fork / Export→Markdown / Delete) headed by a "chat / branch" label; while a row's menu is open it holds its hover state via `group-data-[popup-open]`. |
+| NameDialog / ConfirmDialog | `name-dialog.tsx`, `confirm-dialog.tsx` | Shared name-prompt (supports `initialValue` for renames; stays open on error — caller toasts) and danger-confirm modals. |
+
+Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as the right panel.
+
 ## Deliberately NOT built yet (build when a page demands it, not before)
 
 - **Popover** (generic anchored panel), **progress/meter** (context-window %), **form field wrapper** (label+error glue for react-hook-form), **scroll-area** (native scrollbars fine for now).
@@ -115,14 +130,38 @@ Hand-written visual primitives + Base UI-backed behavioral components. Everythin
 
 ## Next phase
 
-1. Commit the working tree (design system / component library / legacy-page deletions as separate commits).
-2. App shell: title bar, sidebar, routing — composed from these primitives, following the elevation + one-hero rules.
-3. Chat page: composer + message scroller + message kit + markers + collapsible tool calls + the markdown renderer. Preserved data layer to wire into: `hooks/use-ipc-data.ts`, providers in `components/` (auth, workspace, ui-prefs), `auth-guard.tsx`.
-4. Replace `ui-gallery.tsx` with real routes when they exist (it's a dev scratchpad, not a shipping screen).
+1. Commit the working tree (design system / component library / spaces backend / app shell as separate commits).
+2. Chat page (the branch route): composer + message scroller + message kit + markers + collapsible tool calls + the markdown renderer. Preserved data layer to wire into: `hooks/use-ipc-data.ts`, providers in `components/` (auth, workspace, ui-prefs), `auth-guard.tsx`.
+3. Then the other placeholder pages (Home, per-space Memories/Artifacts, Knowledge graph, Compare, Costs, Settings) as they earn priority.
+4. Delete `ui-gallery.tsx` (`/gallery`) once real pages cover its components (it's a dev scratchpad, not a shipping screen).
 
 ## Changelog
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
+
+### 2026-07-06 (third session) — Spaces and chats get their management context menus
+
+- **Space and chat rows now carry context menus** (Rename / Delete), same pattern as branch rows: `ContextMenuLabel` header inside a Group (gotcha #3), row holds its hover state while its menu is open via `group-data-[popup-open]/space` (resp. `/chat`). With this, every level of the tree (space / chat / branch) has its management menu on the row that owns the object.
+- **Chat delete confirm counts branches**: `chat:impact` mirrors `space:impact` — "N artifacts, N memories and N branches" — and `deleteChat` now cascades to its branches' artifacts (it previously left them listed at project level).
+- **Chat rows navigate, GitHub-style (user reopened the pure-accordion decision)**: clicking a chat lands on its trunk (oldest live branch — "main" unless deleted) *and* expands the list; a separate caret button toggles without navigating. **Single-branch chats collapse to a leaf row** — no caret, no branch list (a spacer keeps names aligned) — so the tree matches the mental model "the chat *is* the conversation" until a fork makes structure real. When on a non-trunk branch with the list collapsed, the chat name brightens to say "you're in here". Rationale: main is the stable trunk the user always returns to; topic branches (flights / food / places) fork off and later merge back as facts/decisions — the extra chat ▸ main click punished the 90% single-branch case.
+- **Every chat is born on "main"**: `createChat` auto-creates the trunk (with the configured default model); a migration backfills branchless chats, and reopening the app restores a trunk to any chat whose branches were all deleted. "No branches yet" can no longer happen in practice. The chat context menu gained **New branch** (forks the trunk at its head — the branch-row Fork stays for forking non-trunk branches).
+- **Known trade-off**: while a chat has a single branch, that branch's own row (rename/export/delete-branch) is hidden — its manageable object is the chat. Revisit if users ask to rename "main".
+- **Project rail tiles gained the management menu + drag-reorder**: right-click gives Rename / Settings (activates the project, then `/settings`) / Delete with the counted confirm ("N spaces, N artifacts, N memories and N chats" via `project:impact`). Tiles drag to reorder — the rail live-previews the new order while dragging (no drop indicator), dragged tile at 40% opacity, order persisted via `project:reorder` (`sort_order` column; creation-time values mean new projects append after any explicit 0..n reorder). Deleting the active project routes home; the workspace provider already re-defaults to the first remaining project.
+- **Project delete is the app's one HARD delete, gated by a typed challenge**: `ConfirmDialog` gained an optional `challenge` prop — the danger button stays disabled until the user types the exact phrase ("I understand, delete project"); Enter submits once unlocked, the phrase is `select-all` for visibility but must be typed/pasted deliberately. Deleting a project permanently removes DB rows (soft-deleted ones included), scoped memories, **and its knowledge-graph nodes** (`MetaGraph.removeByBranches` matches `meta._branch`). Space/chat deletes stay soft and keep the graph — the copy in each dialog states which world it lives in. Rationale: "git for context" never destroys context *within* a project, but discarding an entire project is a deliberate, irreversible act and the friction should say so.
+- **Delete confirm states its cost**: a new `space:impact` IPC counts what goes with the space — "N artifacts, N memories and N chats" — and the copy says knowledge-graph entries stay (the graph is a separate store, so that's true, not marketing). Counts are fetched when the user picks Delete; on IPC failure the dialog falls back to "everything in it" rather than blocking.
+- **`deleteSpace` semantics changed underneath** (backend): it used to move chats to the oldest remaining space and refuse to delete the last space; now it soft-deletes the space and cascades (chats → branches → artifacts, plus chat-/branch-scoped memories in GlobalMemory). Spaces gained a `deleted_at` column (migration follows the migrated-column-index gotcha). Deleting the last space is allowed — "General" is recreated on demand.
+
+### 2026-07-06 (second session) — App shell built; sidebar iterated with the user in the live app
+
+- **Spaces became the sidebar's organizing concept** (user sketch): a space (Design / Development / Business…) contains Memories, Artifacts, and Chats; chats are **pure accordions** — you always navigate to a *branch* (git semantics: you're never "in the repo," always on a branch). Backed by a real `Space` entity (see ONBOARDING).
+- **Header hierarchy inverted after the first cut failed**: org-led header made the rail's initial tiles read as avatars. Now the **project name is the headline** with the org as a small eyebrow menu (caret hugging the text) — rail tile and header visibly name the same thing.
+- **Breadcrumb moved off the sidebar**: it starts over the page card (topbar's left zone mirrors the chrome width) instead of rendering project info above the sidebar's own header. Collapsing the sidebar slides it left, Notion-style.
+- **Branch names in nav rows: sans, not mono** (user overruled) + `GitBranchIcon` carries identity. Mono-for-data survives in *content* (breadcrumb branch segment, model names, costs).
+- **Context menu lives on branch rows, not chat rows** (first cut had it on the chat container — wrong object). Menu is headed by a "chat / branch" `ContextMenuLabel` (inside a Group — gotcha #3), and the row **holds its hover state while its menu is open** via `group-data-[popup-open]` so the menu's target is unambiguous next to the active-route row's raised state.
+- **Search bar raised** (`surface-2` + `shadow-raised`, the select-trigger "closed popup" language) — it was field-styled and read sunken next to the kbd chips.
+- **Fullscreen adaptation**: macOS hides traffic lights in fullscreen; main pushes `window:fullscreen-changed` and the topbar collapses the reserved 76px to 12px, animated.
+- **Spacing pass** (user-tuned): nav rows 4px apart, tree rows 2px + breathing room around nested groups; rail 64px with 40px tiles.
+- **Honest empty/error states**: IPC failure shows "Couldn't load spaces" + retry — never the empty-state message (the first version masked a migration crash as an empty project). Empty states carry their own inline action.
 
 ### 2026-07-06 — ButtonGroup gains a selected state (`ButtonGroupItem`)
 

@@ -1,1 +1,1 @@
-export type { Message, Summary, Branch, Organisation, Project, Chat } from "./models.js";
+export type { Message, Summary, Branch, Organisation, Project, Space, Chat } from "./models.js";

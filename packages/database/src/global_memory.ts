@@ -54,6 +54,16 @@ export class GlobalMemory {
     return true;
   }
 
+  /** Remove every fact in any of the given scopes (one save). Returns the count removed. */
+  removeScopes(scopes: MemoryScope[]): number {
+    const doomed = new Set<MemoryScope>(scopes);
+    const before = this.facts.length;
+    this.facts = this.facts.filter(f => !doomed.has(f.scope));
+    const removed = before - this.facts.length;
+    if (removed) this.save();
+    return removed;
+  }
+
   list(scope?: MemoryScope): MemoryFact[] {
     if (!scope) return this.facts;
     return this.facts.filter(f => f.scope === scope);

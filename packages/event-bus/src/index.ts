@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Chat } from "@ai-studio/shared";
+import type { Branch, Organisation, Project, Space, Chat } from "@ai-studio/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
@@ -118,10 +118,32 @@ export interface IpcInvokeMap {
   // Projects
   "project:list": [{ orgId: string }, Project[]];
   "project:create": [{ orgId: string; name: string }, Project];
+  "project:rename": [{ id: string; name: string }, void];
+  "project:delete": [{ id: string }, boolean];
+  /** What deleting a project would take with it — drives the delete confirm. */
+  "project:impact": [{ id: string }, { spaces: number; chats: number; artifacts: number; memories: number }];
+  /** Persist a drag-reorder of the project rail (ids in display order). */
+  "project:reorder": [{ orgId: string; ids: string[] }, void];
+
+  // Spaces
+  "space:list": [{ projectId: string }, Space[]];
+  "space:create": [{ projectId: string; name: string }, Space];
+  "space:rename": [{ id: string; name: string }, void];
+  "space:delete": [{ id: string }, boolean];
+  /** What deleting a space would take with it — drives the delete confirm. */
+  "space:impact": [{ id: string }, { chats: number; artifacts: number; memories: number }];
 
   // Chats
   "chat:list": [{ projectId: string }, Chat[]];
-  "chat:create": [{ projectId: string; name: string }, Chat];
+  "chat:create": [{ projectId: string; name: string; spaceId?: string }, Chat];
+  "chat:rename": [{ id: string; name: string }, void];
+  "chat:delete": [{ id: string }, boolean];
+  /** What deleting a chat would take with it — drives the delete confirm. */
+  "chat:impact": [{ id: string }, { branches: number; artifacts: number; memories: number }];
+  /** Fork a branch at its current head into a new sibling branch. */
+  "branch:fork": [{ branchId: string; name: string }, Branch];
+  /** Export one branch's conversation via a native save dialog; resolves to the file path, or null if cancelled. */
+  "branch:export": [{ id: string; format: "markdown" }, string | null];
 
   // Branches
   "branch:list": [void, Branch[]];
@@ -195,6 +217,9 @@ export interface IpcInvokeMap {
   "persona:get-active": [{ branchId: string }, string];
   "persona:set-active": [{ branchId: string; name: string }, void];
 
+  // Window
+  "window:is-fullscreen": [void, boolean];
+
   // Knowledge base
   "kb:list": [{ category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
   "kb:search": [{ query: string; category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
@@ -210,6 +235,9 @@ export interface IpcEventMap {
   /** Fired after a background model-list refresh completes, so the renderer
    * can refetch models:list without polling. */
   "models:refreshed": void;
+  /** macOS hides the traffic lights in fullscreen; the renderer drops the
+   * space it reserves for them. */
+  "window:fullscreen-changed": boolean;
 }
 
 // ── Channel name helpers ──────────────────────────────────────────────────────

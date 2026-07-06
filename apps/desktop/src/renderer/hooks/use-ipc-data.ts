@@ -144,6 +144,9 @@ export const useOrgs = () => useQuery("org:list", undefined);
 export const useProjects = (orgId: string | undefined) =>
   useQuery("project:list", { orgId: orgId! }, { enabled: !!orgId });
 
+export const useSpaces = (projectId: string | undefined) =>
+  useQuery("space:list", { projectId: projectId! }, { enabled: !!projectId });
+
 export const useChats = (projectId: string | undefined) =>
   useQuery("chat:list", { projectId: projectId! }, { enabled: !!projectId });
 
@@ -175,6 +178,17 @@ export function useModelsRefreshListener(): void {
     });
     return off;
   }, []);
+}
+
+/**
+ * Whether the window is fullscreen. macOS hides the traffic lights in
+ * fullscreen, so chrome that reserves space for them should collapse it.
+ */
+export function useIsFullscreen(): boolean {
+  const { data: initial } = useQuery("window:is-fullscreen", undefined);
+  const [live, setLive] = useState<boolean | null>(null);
+  useEffect(() => window.ipc.on("window:fullscreen-changed", setLive), []);
+  return live ?? initial ?? false;
 }
 
 export const useCodexStatus = () => useQuery("codex:status", undefined);
