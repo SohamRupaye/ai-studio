@@ -4,6 +4,7 @@
  * use the same OpenAI chat completions API with different base URLs.
  */
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { getConfig } from "./config.js";
 
 export interface OpenAICompatibleConfig {
   apiKey: string;
@@ -31,6 +32,7 @@ export class OpenAICompatibleProvider implements Provider {
   async call(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal) {
     const body: any = {
       model: model || this.config.defaultModel,
+      max_tokens: getConfig().maxTokens,
       messages: [{ role: "system", content: system }, ...this.fmt(messages)],
     };
     if (tools?.length) body.tools = tools.map(t => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
@@ -51,6 +53,7 @@ export class OpenAICompatibleProvider implements Provider {
   async *stream(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     const body: any = {
       model: model || this.config.defaultModel, stream: true,
+      max_tokens: getConfig().maxTokens,
       messages: [{ role: "system", content: system }, ...this.fmt(messages)],
     };
     if (tools?.length) body.tools = tools.map(t => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));

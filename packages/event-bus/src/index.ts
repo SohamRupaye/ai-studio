@@ -96,13 +96,17 @@ export interface KnowledgeEntryInfo {
 
 // ── Agent stream events pushed from main → renderer ──────────────────────────
 
+// Every variant carries the branchId it belongs to — main runs one agent
+// turn at a time but the renderer may have navigated to a different branch
+// (or a different branch's page may remount) before it resolves, so each
+// event must self-identify rather than relying on "whichever page is open".
 export type AgentStreamEvent =
-  | { type: "text"; text: string }
-  | { type: "tool_start"; name: string; args: Record<string, unknown> }
-  | { type: "tool_end"; name: string; result: string; success: boolean }
-  | { type: "tool_call_streaming"; name: string; bytesReceived: number }
-  | { type: "done"; text: string; iterations: number; cost?: string }
-  | { type: "error"; message: string; turn?: number; rateLimited?: boolean; retryAfterSeconds?: number };
+  | { type: "text"; branchId: string; text: string }
+  | { type: "tool_start"; branchId: string; name: string; args: Record<string, unknown> }
+  | { type: "tool_end"; branchId: string; name: string; result: string; success: boolean }
+  | { type: "tool_call_streaming"; branchId: string; name: string; bytesReceived: number }
+  | { type: "done"; branchId: string; text: string; iterations: number; cost?: string }
+  | { type: "error"; branchId: string; message: string; turn?: number; rateLimited?: boolean; retryAfterSeconds?: number };
 
 // ── IPC invoke channels: renderer → main (request/response) ──────────────────
 
@@ -114,16 +118,30 @@ export interface IpcInvokeMap {
   // Organisations
   "org:list": [void, Organisation[]];
   "org:create": [{ name: string }, Organisation];
+  "org:rename": [{ id: string; name: string }, void];
+  /** HARD delete: every project in the org goes the project:delete way. False = refused (last org) or unknown. */
+  "org:delete": [{ id: string }, boolean];
+  /** What deleting an org would take with it — drives the delete confirm. */
+  "org:impact": [{ id: string }, { projects: number; spaces: number; chats: number; artifacts: number; memories: number }];
+  /** Which providers have an org-level API key set (never returns the keys themselves). */
+  "org:keys": [{ id: string }, Record<string, boolean>];
+  /** Merge org-level API keys: null clears, empty strings are ignored, values are set. */
+  "org:set-keys": [{ id: string; keys: Record<string, string | null> }, void];
 
   // Projects
   "project:list": [{ orgId: string }, Project[]];
   "project:create": [{ orgId: string; name: string }, Project];
+  "project:get": [{ id: string }, Project | null];
   "project:rename": [{ id: string; name: string }, void];
+  /** Partial update from project settings; omitted fields stay untouched. */
+  "project:update": [{ id: string; name?: string; description?: string; icon?: string | null; systemPrompt?: string }, void];
   "project:delete": [{ id: string }, boolean];
   /** What deleting a project would take with it — drives the delete confirm. */
   "project:impact": [{ id: string }, { spaces: number; chats: number; artifacts: number; memories: number }];
   /** Persist a drag-reorder of the project rail (ids in display order). */
   "project:reorder": [{ orgId: string; ids: string[] }, void];
+  /** Move a project into another organisation. */
+  "project:move": [{ id: string; orgId: string }, void];
 
   // Spaces
   "space:list": [{ projectId: string }, Space[]];
@@ -173,7 +191,10 @@ export interface IpcInvokeMap {
   "memory:remove": [{ id: number }, boolean];
 
   // Models
+  /** Selectable models per router entry — the full catalogue minus disabled ones. */
   "models:list": [void, Record<string, string[]>];
+  /** The unfiltered catalogue, for the per-provider model management page. */
+  "models:all": [void, Record<string, string[]>];
 
   // Codex OAuth account
   "codex:status": [void, { connected: boolean; accountId?: string; email?: string }];
@@ -188,6 +209,8 @@ export interface IpcInvokeMap {
   // Config
   "config:get": [void, Record<string, unknown>];
   "config:set": [Record<string, unknown>, void];
+  /** Which providers have a global API key set (never returns the keys themselves). */
+  "config:keys": [void, Record<string, boolean>];
 
   // Costs
   "costs:branch": [{ branchId: string }, Array<{ model: string; inputTokens: number; outputTokens: number; costUsd: number; timestamp: number }>];

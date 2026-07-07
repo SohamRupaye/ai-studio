@@ -19,7 +19,7 @@ import {
   createAlibabaProvider,
 } from "./openai_compatible.js";
 import { FREE_MODELS } from "./free_models.js";
-import { getConfig } from "./config.js";
+import { getConfig, type ApiKeyProvider } from "./config.js";
 
 interface ProviderEntry {
   name: string;
@@ -228,10 +228,18 @@ export class Router {
    * Build a router from config/env. Registration order matters: entries are
    * matched first-wins, so exact-id prefixes (OpenRouter's curated list)
    * register before namespace catch-alls that could shadow them.
+   *
+   * `keyOverrides` layers scope-specific API keys (e.g. an organisation's)
+   * over the global config — non-empty values win, everything else inherits.
    */
-  static fromEnv(): Router {
+  static fromEnv(keyOverrides?: Partial<Record<ApiKeyProvider, string>>): Router {
     const cfg = getConfig();
-    const keys = cfg.apiKeys;
+    const keys = { ...cfg.apiKeys };
+    if (keyOverrides) {
+      for (const [provider, key] of Object.entries(keyOverrides)) {
+        if (key) keys[provider as ApiKeyProvider] = key;
+      }
+    }
     const router = new Router();
 
     // Codex OAuth — built in, no key required.

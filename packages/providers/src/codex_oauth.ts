@@ -9,10 +9,15 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { getConfig } from "./config.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const ISSUER = "https://auth.openai.com";
 const CODEX_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
+// Undocumented catalogue endpoint (the Codex CLI refreshes its model list
+// from here) — availability depends on subscription tier. listModels() fails
+// soft: the router keeps its hardcoded fallback list when this breaks.
+const CODEX_MODELS_ENDPOINT = "https://chatgpt.com/backend-api/codex/models";
 const OAUTH_PORT = 1455;
 const REDIRECT_URI = `http://localhost:${OAUTH_PORT}/auth/callback`;
 
@@ -84,6 +89,58 @@ export class CodexOAuthProvider implements Provider {
     return { text, toolCalls, usage };
   }
 
+  /**
+   * Live model catalogue for the signed-in account (tier-dependent — Pro
+   * accounts see models Plus accounts don't). The endpoint is undocumented,
+   * so parsing is defensive and every failure path throws: the Router treats
+   * a throw as "keep the hardcoded fallback list", never zero models.
+   */
+  async listModels(): Promise<string[]> {
+    // Deliberately NOT ensureAuth(): that falls back to an interactive
+    // browser login, and this runs from the background model refresh at
+    // startup. Signed out → throw → the router keeps the fallback list.
+    if (!this.auth) throw new Error("Codex not connected");
+    const auth =
+      this.auth.expires < Date.now() + 60_000 ? await this.refresh() : this.auth;
+    const headers: Record<string, string> = {
+      "Authorization": `Bearer ${auth.access}`,
+      "User-Agent": "opencode/latest",
+      "originator": "opencode",
+    };
+    if (auth.account_id) headers["ChatGPT-Account-Id"] = auth.account_id;
+
+    let res = await fetch(CODEX_MODELS_ENDPOINT, { headers });
+    if (res.status === 401) {
+      const refreshed = await this.refresh();
+      headers["Authorization"] = `Bearer ${refreshed.access}`;
+      res = await fetch(CODEX_MODELS_ENDPOINT, { headers });
+    }
+    if (!res.ok) throw new Error(`Codex models ${res.status}`);
+
+    const payload: any = await res.json();
+    // Accept the shapes this backend family has been seen to use:
+    // { models: [...] } | { data: [...] } | bare array; items either strings
+    // or objects carrying slug/id/model/name.
+    const list: any[] = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.models)
+        ? payload.models
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+    const ids = [
+      ...new Set(
+        list
+          .map((item) =>
+            typeof item === "string" ? item : (item?.slug ?? item?.id ?? item?.model ?? item?.name),
+          )
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+    if (!ids.length) throw new Error("Codex models: empty/unrecognised payload");
+    return ids;
+  }
+
   async *stream(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     const auth = await this.ensureAuth();
     const headers: Record<string, string> = {
@@ -95,7 +152,7 @@ export class CodexOAuthProvider implements Provider {
     if (auth.account_id) headers["ChatGPT-Account-Id"] = auth.account_id;
 
     const input = this.formatMessages(messages);
-    const body: any = { model, instructions: system, input, stream: true, store: false };
+    const body: any = { model, instructions: system, input, stream: true, store: false, max_output_tokens: getConfig().maxTokens };
 
     if (tools?.length) {
       body.tools = tools.map(t => ({ type: "function", name: t.name, description: t.description || "", parameters: t.parameters || {} }));

@@ -65,6 +65,13 @@ export interface Config {
   maxTokens: number;
   classifierMaxTokens: number;
   apiKeys: Record<ApiKeyProvider, string>;
+  /**
+   * Models hidden from selection menus, keyed by router entry name (e.g.
+   * "nvidia", "codex_oauth"). A filter, not routing — branches already
+   * pinned to a hidden model keep working. Disabled-list semantics so newly
+   * released models show up automatically.
+   */
+  disabledModels: Record<string, string[]>;
   context: { hotWindow: number; hotTokenBudget: number; summaryEvery: number };
   classifier: { enabled: boolean };
   mcpServers: MCPServerConfigEntry[];
@@ -124,6 +131,15 @@ export function loadConfig(configPath?: string): Config {
     maxTokens: Number(raw.max_tokens) || 8192,
     classifierMaxTokens: Number(raw.classifier_max_tokens) || 200,
     apiKeys,
+    disabledModels:
+      raw.disabled_models && typeof raw.disabled_models === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.disabled_models).filter(([, v]) => Array.isArray(v)) as [
+              string,
+              string[],
+            ][],
+          )
+        : {},
     context: {
       hotWindow: Number(raw.context?.hot_window) || 10,
       hotTokenBudget: Number(raw.context?.hot_token_budget) || 8000,
@@ -162,6 +178,8 @@ export function saveConfig(patch: {
   defaultModel?: string;
   classifierEnabled?: boolean;
   mcpServers?: MCPServerConfigEntry[];
+  /** Per-provider replacement of the hidden-model list; empty array clears it. */
+  disabledModels?: Record<string, string[]>;
 }): Config {
   const path = _configPath || join(process.cwd(), "config.yaml");
   _configPath = path;
@@ -185,6 +203,15 @@ export function saveConfig(patch: {
       ...(s.url ? { url: s.url } : {}),
       ...(s.headers ? { headers: s.headers } : {}),
     }));
+  }
+
+  if (patch.disabledModels) {
+    raw.disabled_models = raw.disabled_models || {};
+    for (const [provider, models] of Object.entries(patch.disabledModels)) {
+      if (models.length) raw.disabled_models[provider] = models;
+      else delete raw.disabled_models[provider];
+    }
+    if (!Object.keys(raw.disabled_models).length) delete raw.disabled_models;
   }
 
   if (patch.apiKeys) {

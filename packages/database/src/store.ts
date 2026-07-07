@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS organisations (
   id         TEXT PRIMARY KEY,
   name       TEXT NOT NULL,
+  api_keys   TEXT,
   created_at REAL,
   updated_at REAL
 );
@@ -35,13 +36,16 @@ CREATE TABLE IF NOT EXISTS team_members (
 );
 
 CREATE TABLE IF NOT EXISTS projects (
-  id         TEXT PRIMARY KEY,
-  org_id     TEXT NOT NULL REFERENCES organisations(id),
-  name       TEXT NOT NULL,
-  sort_order INTEGER,
-  created_at REAL,
-  updated_at REAL,
-  deleted_at REAL
+  id            TEXT PRIMARY KEY,
+  org_id        TEXT NOT NULL REFERENCES organisations(id),
+  name          TEXT NOT NULL,
+  icon          TEXT,
+  description   TEXT,
+  system_prompt TEXT,
+  sort_order    INTEGER,
+  created_at    REAL,
+  updated_at    REAL,
+  deleted_at    REAL
 );
 
 CREATE TABLE IF NOT EXISTS spaces (
@@ -168,12 +172,21 @@ export class Store {
     if (!msgCols.find((c: any) => c.name === "user_id")) {
       this.db.exec("ALTER TABLE messages ADD COLUMN user_id TEXT");
     }
+    const orgCols = this.db.prepare("PRAGMA table_info(organisations)").all() as any[];
+    if (!orgCols.find((c: any) => c.name === "api_keys")) {
+      this.db.exec("ALTER TABLE organisations ADD COLUMN api_keys TEXT");
+    }
     const projectCols = this.db.prepare("PRAGMA table_info(projects)").all() as any[];
     if (!projectCols.find((c: any) => c.name === "deleted_at")) {
       this.db.exec("ALTER TABLE projects ADD COLUMN deleted_at REAL");
     }
     if (!projectCols.find((c: any) => c.name === "sort_order")) {
       this.db.exec("ALTER TABLE projects ADD COLUMN sort_order INTEGER");
+    }
+    for (const col of ["icon", "description", "system_prompt"]) {
+      if (!projectCols.find((c: any) => c.name === col)) {
+        this.db.exec(`ALTER TABLE projects ADD COLUMN ${col} TEXT`);
+      }
     }
     // Backfill: creation time preserves the existing order and keeps sorting
     // stable for rows created before ordering existed. New rows get their
@@ -235,6 +248,63 @@ export class Store {
       .map(r => ({ id: r.id, name: r.name, createdAt: r.created_at }));
   }
 
+  renameOrganisation(id: string, name: string): void {
+    this.db.prepare("UPDATE organisations SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
+  }
+
+  /**
+   * Every project row of the org — soft-deleted ones included. Org deletion
+   * iterates this (not listProjects) so rows left over from the soft-delete
+   * era get purged too; otherwise their org_id FK blocks the org row delete.
+   */
+  listProjectIds(orgId: string): string[] {
+    return (this.db.prepare("SELECT id FROM projects WHERE org_id = ?").all(orgId) as any[])
+      .map(r => r.id);
+  }
+
+  /**
+   * Hard-delete an organisation row and its memberships. Callers must have
+   * emptied it first (hard-deleting each project via listProjectIds);
+   * refuses while any project row remains — live or soft-deleted — and
+   * callers should refuse to delete the last organisation.
+   */
+  deleteOrganisation(id: string): boolean {
+    const org = this.getOrganisation(id);
+    if (!org) return false;
+    if (this.listProjectIds(id).length) return false;
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM team_members WHERE org_id = ?").run(id);
+      this.db.prepare("DELETE FROM organisations WHERE id = ?").run(id);
+    })();
+    return true;
+  }
+
+  /** Org-scoped API keys ({provider: key}) — override the global config keys. */
+  getOrgApiKeys(id: string): Record<string, string> {
+    const row = this.db.prepare("SELECT api_keys FROM organisations WHERE id = ?").get(id) as any;
+    if (!row?.api_keys) return {};
+    try {
+      return JSON.parse(row.api_keys) ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Merge a patch into an org's API keys, mirroring saveConfig's semantics:
+   * `null` clears a key, empty strings are ignored (so a form can submit all
+   * fields without wiping saved keys), non-empty values are set.
+   */
+  setOrgApiKeys(id: string, patch: Record<string, string | null>): void {
+    const keys = this.getOrgApiKeys(id);
+    for (const [provider, value] of Object.entries(patch)) {
+      if (value === null) delete keys[provider];
+      else if (typeof value === "string" && value.trim()) keys[provider] = value.trim();
+    }
+    this.db.prepare("UPDATE organisations SET api_keys = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(keys), Date.now(), id);
+  }
+
   // ── Projects ───────────────────────────────────────────────────────────────
 
   createProject(orgId: string, name: string): Project {
@@ -244,19 +314,52 @@ export class Store {
     return p;
   }
 
+  private rowToProject(r: any): Project {
+    return {
+      id: r.id,
+      orgId: r.org_id,
+      name: r.name,
+      icon: r.icon ?? null,
+      description: r.description ?? "",
+      systemPrompt: r.system_prompt ?? "",
+      createdAt: r.created_at,
+    };
+  }
+
   getProject(id: string): Project | undefined {
     const row = this.db.prepare("SELECT * FROM projects WHERE id = ? AND deleted_at IS NULL").get(id) as any;
     if (!row) return undefined;
-    return { id: row.id, orgId: row.org_id, name: row.name, createdAt: row.created_at };
+    return this.rowToProject(row);
   }
 
   listProjects(orgId: string): Project[] {
     return (this.db.prepare("SELECT * FROM projects WHERE org_id = ? AND deleted_at IS NULL ORDER BY sort_order, created_at").all(orgId) as any[])
-      .map(r => ({ id: r.id, orgId: r.org_id, name: r.name, createdAt: r.created_at }));
+      .map(r => this.rowToProject(r));
   }
 
   renameProject(id: string, name: string): void {
     this.db.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
+  }
+
+  /** Partial update from the settings page; omitted fields stay untouched. */
+  updateProject(id: string, patch: { name?: string; description?: string; icon?: string | null; systemPrompt?: string }): void {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    if (patch.name !== undefined) { sets.push("name = ?"); values.push(patch.name); }
+    if (patch.description !== undefined) { sets.push("description = ?"); values.push(patch.description); }
+    if (patch.icon !== undefined) { sets.push("icon = ?"); values.push(patch.icon); }
+    if (patch.systemPrompt !== undefined) { sets.push("system_prompt = ?"); values.push(patch.systemPrompt); }
+    if (!sets.length) return;
+    sets.push("updated_at = ?");
+    values.push(Date.now(), id);
+    this.db.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+  }
+
+  /** Move a project to another organisation, appending at the rail's end. */
+  moveProject(id: string, orgId: string): void {
+    const now = Date.now();
+    this.db.prepare("UPDATE projects SET org_id = ?, sort_order = ?, updated_at = ? WHERE id = ?")
+      .run(orgId, now, now, id);
   }
 
   /** Persist a drag-reorder: ids in display order become sort_order 0..n-1. */
@@ -299,8 +402,10 @@ export class Store {
    * memories and knowledge-graph nodes, or null if the project is unknown.
    */
   deleteProject(id: string): { chatIds: string[]; branchIds: string[] } | null {
-    const project = this.getProject(id);
-    if (!project) return null;
+    // Raw existence check, NOT getProject: rows soft-deleted during the
+    // soft-delete era must still be hard-deletable (org purge relies on it).
+    const exists = this.db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    if (!exists) return null;
     // ALL rows, soft-deleted included — this purge is total.
     const chatIds = (this.db
       .prepare("SELECT id FROM chats WHERE project_id = ?")

@@ -14,6 +14,7 @@ export * from "./input";
 export * from "./kbd";
 export * from "./highlighter";
 export * from "./marker";
+export * from "./markdown";
 export * from "./menu";
 export * from "./message";
 export * from "./message-scroller";

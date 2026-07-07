@@ -1,4 +1,5 @@
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { getConfig } from "./config.js";
 
 export class AnthropicProvider implements Provider {
   private apiKey: string;
@@ -11,7 +12,7 @@ export class AnthropicProvider implements Provider {
   async call(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): Promise<{ text: string; toolCalls: any[]; usage: any }> {
     const body: any = {
       model,
-      max_tokens: 8192,
+      max_tokens: getConfig().maxTokens,
       system,
       messages: this.formatMessages(messages),
     };
@@ -38,7 +39,7 @@ export class AnthropicProvider implements Provider {
   async *stream(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     const body: any = {
       model,
-      max_tokens: 8192,
+      max_tokens: getConfig().maxTokens,
       stream: true,
       system,
       messages: this.formatMessages(messages),

@@ -10,6 +10,8 @@ import { popupClasses, itemClasses } from "./menu";
 interface ComboboxItem {
   value: string;
   label: string;
+  /** Small leading mark (e.g. a provider mono icon) shown in the trigger and the item row. */
+  icon?: React.ReactNode;
 }
 
 interface ComboboxProps {
@@ -22,6 +24,9 @@ interface ComboboxProps {
   emptyMessage?: string;
   disabled?: boolean;
   className?: string;
+  side?: React.ComponentProps<typeof BaseCombobox.Positioner>["side"];
+  align?: React.ComponentProps<typeof BaseCombobox.Positioner>["align"];
+  sideOffset?: number;
 }
 
 function Combobox({
@@ -34,6 +39,9 @@ function Combobox({
   emptyMessage = "No results.",
   disabled,
   className,
+  side = "bottom",
+  align = "start",
+  sideOffset = 6,
 }: ComboboxProps) {
   const [innerValue, setInnerValue] = React.useState<string | null>(defaultValue ?? null);
   const currentValue = value !== undefined ? value : innerValue;
@@ -58,13 +66,21 @@ function Combobox({
           className,
         )}
       >
-        <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          {selected?.icon}
+          {selected?.label ?? placeholder}
+        </span>
         <span className="flex shrink-0 text-fg-subtle transition-transform duration-200 ease-(--ease-standard) in-data-[popup-open]:rotate-180">
           <CaretDownIcon size={12} weight="bold" />
         </span>
       </BaseCombobox.Trigger>
       <BaseCombobox.Portal>
-        <BaseCombobox.Positioner className="z-50 outline-none" sideOffset={6}>
+        <BaseCombobox.Positioner
+          className="z-50 outline-none"
+          side={side}
+          align={align}
+          sideOffset={sideOffset}
+        >
           <BaseCombobox.Popup
             className={cn(popupClasses, "w-(--anchor-width) min-w-52 p-0")}
           >
@@ -85,7 +101,10 @@ function Combobox({
                   value={item}
                   className={cn(itemClasses, "relative pr-8")}
                 >
-                  <span className="min-w-0 truncate">{item.label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    {item.icon}
+                    {item.label}
+                  </span>
                   <BaseCombobox.ItemIndicator className="absolute right-2.5 flex">
                     <CheckIcon size={14} weight="bold" />
                   </BaseCombobox.ItemIndicator>

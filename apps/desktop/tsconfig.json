@@ -6,12 +6,11 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/*"],
-      "@main/*": ["src/main/*"],
-      "@preload/*": ["src/preload/*"],
-      "@renderer/*": ["src/renderer/*"]
+      "@/*": ["./src/renderer/*"],
+      "@main/*": ["./src/main/*"],
+      "@preload/*": ["./src/preload/*"],
+      "@renderer/*": ["./src/renderer/*"]
     }
   },
   "include": ["src/**/*"],

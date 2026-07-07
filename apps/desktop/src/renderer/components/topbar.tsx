@@ -1,8 +1,20 @@
+import { useMemo } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import type { Branch } from "@ai-studio/shared";
 import { cn } from "../lib/utils";
 import { useWorkspace } from "./workspace-provider";
-import { useBranches, useChats, useIsFullscreen, useSpaces } from "../hooks/use-ipc-data";
+import {
+  useBranches,
+  useChats,
+  useIsFullscreen,
+  useModels,
+  useMutation,
+  useSpaces,
+} from "../hooks/use-ipc-data";
+import { Combobox, type ComboboxItem } from "./ui/combobox";
+import { hasProviderLogo, ProviderTile } from "./provider-logos";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +50,8 @@ export function Topbar({
   const { data: spaces } = useSpaces(activeProjectId);
   const { data: chats } = useChats(activeProjectId);
   const { data: branches } = useBranches();
+  const { data: modelCatalogue } = useModels();
+  const updateModel = useMutation("branch:update-model");
   const fullscreen = useIsFullscreen();
 
   const crumbs: Crumb[] = [];
@@ -48,13 +62,16 @@ export function Topbar({
     matchPath("/chats/:chatId", pathname);
   const spaceMatch = matchPath("/spaces/:spaceId/:section", pathname);
 
+  // Resolved when on a branch page — drives the model switcher on the right.
+  let branch: Branch | undefined;
+
   if (chatMatch) {
     const chat = chats?.find((c) => c.id === chatMatch.params.chatId);
     const space = spaces?.find((s) => s.id === chat?.spaceId);
     if (space) crumbs.push({ label: space.name });
     if (chat) crumbs.push({ label: chat.name });
     const branchId = (chatMatch.params as { branchId?: string }).branchId;
-    const branch = branches?.find((b) => b.id === branchId);
+    branch = branches?.find((b) => b.id === branchId);
     if (branch) crumbs.push({ label: branch.name, mono: true });
   } else if (spaceMatch) {
     const space = spaces?.find((s) => s.id === spaceMatch.params.spaceId);
@@ -64,6 +81,30 @@ export function Topbar({
   } else if (STATIC_LABELS[pathname] && pathname !== "/") {
     crumbs.push({ label: STATIC_LABELS[pathname] });
   }
+
+  // Grouped by provider (the catalogue's own key order) with a small mono
+  // mark per entry — reused from the Settings provider work.
+  const modelItems = useMemo(() => {
+    const items: ComboboxItem[] = [];
+    const seen = new Set<string>();
+    for (const [entry, ids] of Object.entries(modelCatalogue ?? {})) {
+      const logoKey = entry === "codex_oauth" ? "codex" : entry;
+      const icon = hasProviderLogo(logoKey) ? (
+        <ProviderTile
+          provider={logoKey}
+          monogram={entry.slice(0, 1).toUpperCase()}
+          active={false}
+          className="size-4 shrink-0 rounded-sm border-none bg-transparent p-0 shadow-none text-fg-subtle"
+        />
+      ) : undefined;
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        items.push({ value: id, label: id, icon });
+      }
+    }
+    return items;
+  }, [modelCatalogue]);
 
   return (
     <header className="flex h-11 shrink-0 items-center [-webkit-app-region:drag]">
@@ -126,6 +167,24 @@ export function Topbar({
           );
         })}
       </nav>
+
+      {branch && modelItems.length > 0 && (
+        <div className="shrink-0 pr-3 [-webkit-app-region:no-drag]">
+          <Combobox
+            items={modelItems}
+            value={branch.model}
+            onValueChange={(value) => {
+              if (value && branch && value !== branch.model) {
+                updateModel
+                  .mutate({ id: branch.id, model: value })
+                  .catch(() => toast.error("Couldn't switch models"));
+              }
+            }}
+            align="end"
+            className="h-7 min-w-0 max-w-56 rounded-md border-none bg-transparent px-2 font-mono text-[12px] shadow-none hover:bg-surface-1 hover:text-fg data-[popup-open]:bg-surface-1 data-[popup-open]:text-fg"
+          />
+        </div>
+      )}
     </header>
   );
 }

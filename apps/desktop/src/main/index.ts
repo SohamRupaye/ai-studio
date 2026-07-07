@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { join } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { Store, GlobalMemory } from "@ai-studio/database";
-import { Router, getConfig, loadConfig, saveConfig, ProviderRateLimitError } from "@ai-studio/providers";
+import { Router, API_KEY_PROVIDERS, getConfig, loadConfig, saveConfig, ProviderRateLimitError } from "@ai-studio/providers";
 import type { MCPServerConfigEntry } from "@ai-studio/providers";
 import {
   Agent, CostTracker, createRuntime, classifyAndIndex, loadPending, resumeQueue, loadNodeCounter,
@@ -48,6 +48,27 @@ let summaryTimer: ReturnType<typeof setTimeout> | null = null;
 /** Scope string for a chat-originated memory: project if known, else global. */
 function memoryScope(): "global" | `project:${string}` {
   return currentProjectId ? `project:${currentProjectId}` : "global";
+}
+
+/**
+ * Per-organisation routers: an org with API keys of its own gets a router
+ * built from global config + those overrides, so its chats hit the org's
+ * accounts. Cached per org and invalidated when the org's keys change
+ * (org:set-keys) or the base config is rewritten (config:update).
+ */
+const orgRouters = new Map<string, { keysJson: string; router: Router }>();
+
+function routerFor(orgId: string | undefined): Router {
+  if (!orgId) return router;
+  const keys = store.getOrgApiKeys(orgId);
+  const entries = Object.entries(keys).filter(([, v]) => v);
+  if (!entries.length) return router;
+  const keysJson = JSON.stringify(entries.sort());
+  const cached = orgRouters.get(orgId);
+  if (cached && cached.keysJson === keysJson) return cached.router;
+  const orgRouter = Router.fromEnv(Object.fromEntries(entries));
+  orgRouters.set(orgId, { keysJson, router: orgRouter });
+  return orgRouter;
 }
 
 /** Serialize an MCPManager entry into the shape the frontend expects. */
@@ -262,7 +283,7 @@ function registerHandlers() {
     const userTurn = store.getMessageCount(branchId) - 1;
     const branch = store.getBranch(branchId);
     if (!branch) {
-      mainWindow.webContents.send("chat:stream", { type: "error", message: `Branch ${branchId} not found`, turn: userTurn });
+      mainWindow.webContents.send("chat:stream", { type: "error", branchId, message: `Branch ${branchId} not found`, turn: userTurn });
       return;
     }
 
@@ -272,19 +293,26 @@ function registerHandlers() {
     const payload = await buildPayload(store, branch, graph, globalMem, message);
     const cfg = getConfig();
     const model = branch.model || cfg.defaultModel;
-    createRuntime(router, registry, model);
+    // Org-level API keys override the globals: this chat runs on its org's router.
+    const chatRouter = routerFor(
+      currentProjectId ? store.getProject(currentProjectId)?.orgId : undefined,
+    );
+    createRuntime(chatRouter, registry, model);
 
     // Active persona for this branch (if any) layers its own system prompt
     // ahead of the base instructions and restricts which tools it can see.
     const activePersonaName = store.getMeta(`persona:${branchId}`) || "default";
     const persona = personas.get(activePersonaName);
 
-    const baseSystem = `You are a helpful AI assistant in AI Studio, a desktop AI workspace. Use your tools to help the user accomplish tasks.\n\nMEMORY: When the user asks you to remember, save, note, or store a fact about them or their preferences, you MUST call the \`remember\` tool to persist it — never just say you will remember without calling it. To recall what you know about the user, call \`recall_memories\`. Persisted memories are durable across all conversations.\n\n${payload.systemContext}`;
+    // Project-level custom instructions (set in project settings) sit between
+    // the app boilerplate and the per-conversation context.
+    const projectPrompt = (currentProjectId ? store.getProject(currentProjectId)?.systemPrompt : undefined)?.trim();
+    const baseSystem = `You are a helpful AI assistant in AI Studio, a desktop AI workspace. Use your tools to help the user accomplish tasks.\n\nMEMORY: When the user asks you to remember, save, note, or store a fact about them or their preferences, you MUST call the \`remember\` tool to persist it — never just say you will remember without calling it. To recall what you know about the user, call \`recall_memories\`. Persisted memories are durable across all conversations.\n\n${projectPrompt ? `PROJECT INSTRUCTIONS (set by the user for this project):\n${projectPrompt}\n\n` : ""}${payload.systemContext}`;
     const system = persona && persona.name !== "default"
       ? `${persona.systemPrompt}\n\n${baseSystem}`
       : baseSystem;
     // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
-    const agent = new Agent(router, registry, { sessionId: branchId });
+    const agent = new Agent(chatRouter, registry, { sessionId: branchId });
 
     try {
       for await (const event of runAgentCooperative(agent, model, payload.messages, system, signal)) {
@@ -293,16 +321,17 @@ function registerHandlers() {
           // newer message — an explicit user Stop already cleans up its own
           // UI client-side and doesn't need (or want) an error toast here.
           if (myController.supersededByNewMessage) {
-            mainWindow?.webContents.send("chat:stream", { type: "error", message: "Cancelled — a newer message was sent.", turn: userTurn });
+            mainWindow?.webContents.send("chat:stream", { type: "error", branchId, message: "Cancelled — a newer message was sent.", turn: userTurn });
           }
           break;
         }
         if (event.type === "text" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
-          mainWindow?.webContents.send("chat:stream", event);
+          mainWindow?.webContents.send("chat:stream", { ...event, branchId });
         } else if (event.type === "done") {
           if (!event.result.text && !event.result.toolCalls.length) {
             mainWindow?.webContents.send("chat:stream", {
               type: "error",
+              branchId,
               message: `${model} returned an empty response. This can happen with free-tier models under load — try again or switch models.`,
               turn: userTurn,
             });
@@ -320,7 +349,7 @@ function registerHandlers() {
           store.recordCost(branchId, model, payload.tokenEstimate, estOut, costUsd);
 
           mainWindow?.webContents.send("chat:stream", {
-            type: "done", text: assistantText, iterations: event.result.iterations, cost: lastEntry,
+            type: "done", branchId, text: assistantText, iterations: event.result.iterations, cost: lastEntry,
           });
 
           // Classify + index
@@ -354,6 +383,7 @@ function registerHandlers() {
       if (!signal.aborted) {
         mainWindow?.webContents.send("chat:stream", {
           type: "error",
+          branchId,
           message: err.message,
           turn: userTurn,
           rateLimited: err instanceof ProviderRateLimitError,
@@ -369,6 +399,41 @@ function registerHandlers() {
 
   handle("org:list", () => store.listOrganisations());
   handle("org:create", ({ name }) => store.createOrganisation(name));
+  handle("org:rename", ({ id, name }) => { store.renameOrganisation(id, name); });
+  handle("org:impact", ({ id }) => {
+    // Sum the org's projects' impacts, plus each project's scoped memories.
+    const projects = store.listProjects(id);
+    let spaces = 0, chats = 0, artifacts = 0, memories = 0;
+    for (const project of projects) {
+      const impact = store.projectImpact(project.id);
+      spaces += impact.spaceIds.length;
+      chats += impact.chatIds.length;
+      artifacts += impact.artifacts;
+      const scopes = new Set<string>(projectMemoryScopes(project.id, impact));
+      memories += globalMem.list().filter((f) => scopes.has(f.scope)).length;
+    }
+    return { projects: projects.length, spaces, chats, artifacts, memories };
+  });
+  handle("org:delete", ({ id }) => {
+    // HARD delete, one project at a time (each purge takes its memories and
+    // graph nodes along). The last organisation can't be deleted — the app
+    // needs somewhere to stand.
+    if (store.listOrganisations().length <= 1) return false;
+    if (!store.getOrganisation(id)) return false;
+    // ALL project rows, soft-deleted included — leftovers from the
+    // soft-delete era otherwise block the org row's FK.
+    for (const projectId of store.listProjectIds(id)) hardDeleteProject(projectId);
+    orgRouters.delete(id);
+    return store.deleteOrganisation(id);
+  });
+  handle("org:keys", ({ id }) => {
+    const keys = store.getOrgApiKeys(id);
+    return Object.fromEntries(API_KEY_PROVIDERS.map((p) => [p, Boolean(keys[p])]));
+  });
+  handle("org:set-keys", ({ id, keys }) => {
+    store.setOrgApiKeys(id, keys);
+    orgRouters.delete(id); // rebuild this org's router with the new keys
+  });
 
   // ── Projects ────────────────────────────────────────────────────────────────
 
@@ -379,7 +444,9 @@ function registerHandlers() {
     store.createSpace(project.id, "General");
     return project;
   });
+  handle("project:get", ({ id }) => store.getProject(id) ?? null);
   handle("project:rename", ({ id, name }) => { store.renameProject(id, name); });
+  handle("project:update", ({ id, ...patch }) => { store.updateProject(id, patch); });
   handle("project:reorder", ({ orgId, ids }) => { store.reorderProjects(orgId, ids); });
 
   const projectMemoryScopes = (projectId: string, impact: { chatIds: string[]; branchIds: string[] }) => [
@@ -397,18 +464,20 @@ function registerHandlers() {
       memories: globalMem.list().filter((f) => scopes.has(f.scope)).length,
     };
   });
-  handle("project:delete", ({ id }) => {
-    // Unlike space/chat deletion this is a HARD delete: the store returns the
-    // purged ids (soft-deleted rows included) and we take the scoped memories
-    // and the knowledge-graph nodes with them. Gated by a typed challenge in
-    // the UI.
+  // Unlike space/chat deletion this is a HARD delete: the store returns the
+  // purged ids (soft-deleted rows included) and we take the scoped memories
+  // and the knowledge-graph nodes with them. Gated by a typed challenge in
+  // the UI. Shared with org:delete, which empties the org project by project.
+  const hardDeleteProject = (id: string): boolean => {
     const purged = store.deleteProject(id);
     if (purged) {
       globalMem.removeScopes(projectMemoryScopes(id, purged));
       graph.removeByBranches(purged.branchIds);
     }
     return purged !== null;
-  });
+  };
+  handle("project:delete", ({ id }) => hardDeleteProject(id));
+  handle("project:move", ({ id, orgId }) => { store.moveProject(id, orgId); });
 
   // ── Window ──────────────────────────────────────────────────────────────────
 
@@ -565,7 +634,18 @@ function registerHandlers() {
 
   // ── Models ──────────────────────────────────────────────────────────────────
 
-  handle("models:list", () => router.listModels());
+  // Selection menus get the catalogue minus the user's disabled models;
+  // routing is deliberately unfiltered so pinned branches keep working.
+  handle("models:list", () => {
+    const disabled = getConfig().disabledModels;
+    return Object.fromEntries(
+      Object.entries(router.listModels()).map(([entry, models]) => {
+        const hidden = new Set(disabled[entry] ?? []);
+        return [entry, hidden.size ? models.filter((m) => !hidden.has(m)) : models];
+      }),
+    );
+  });
+  handle("models:all", () => router.listModels());
 
   // ── Codex OAuth account ──────────────────────────────────────────────────────
 
@@ -593,7 +673,17 @@ function registerHandlers() {
 
   handle("config:get", () => {
     const cfg = getConfig();
-    return { defaultModel: cfg.defaultModel, classifierEnabled: cfg.classifier.enabled, mcpServers: cfg.mcpServers };
+    return {
+      defaultModel: cfg.defaultModel,
+      classifierEnabled: cfg.classifier.enabled,
+      mcpServers: cfg.mcpServers,
+      disabledModels: cfg.disabledModels,
+    };
+  });
+
+  handle("config:keys", () => {
+    const keys = getConfig().apiKeys;
+    return Object.fromEntries(API_KEY_PROVIDERS.map((p) => [p, Boolean(keys[p])]));
   });
 
   handle("config:set", (payload) => {
@@ -603,6 +693,7 @@ function registerHandlers() {
     saveConfig(payload as Parameters<typeof saveConfig>[0]);
     const cfg = getConfig();
     router = Router.fromEnv();
+    orgRouters.clear(); // org routers layer over the base config — rebuild them too
     refreshModelsInBackground(router);
     createRuntime(router, registry, cfg.defaultModel);
   });

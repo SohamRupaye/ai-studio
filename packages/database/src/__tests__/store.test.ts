@@ -39,6 +39,50 @@ describe("Organisation CRUD", () => {
   it("getOrganisation returns undefined for unknown id", () => {
     expect(store.getOrganisation("nonexistent")).toBeUndefined();
   });
+
+  it("renameOrganisation updates the name", () => {
+    const org = store.createOrganisation("Old");
+    store.renameOrganisation(org.id, "New");
+    expect(store.getOrganisation(org.id)!.name).toBe("New");
+  });
+
+  it("org API keys: set merges, empty is ignored, null clears", () => {
+    const org = store.createOrganisation("Org");
+    expect(store.getOrgApiKeys(org.id)).toEqual({});
+
+    store.setOrgApiKeys(org.id, { anthropic: "sk-a", openai: "sk-o" });
+    expect(store.getOrgApiKeys(org.id)).toEqual({ anthropic: "sk-a", openai: "sk-o" });
+
+    // Empty strings don't wipe saved keys; null does.
+    store.setOrgApiKeys(org.id, { anthropic: "", openai: null, google: " sk-g " });
+    expect(store.getOrgApiKeys(org.id)).toEqual({ anthropic: "sk-a", google: "sk-g" });
+  });
+
+  it("deleteOrganisation removes an emptied org but refuses one with projects", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "P");
+    expect(store.deleteOrganisation(org.id)).toBe(false); // still has a project
+    store.deleteProject(project.id);
+    expect(store.deleteOrganisation(org.id)).toBe(true);
+    expect(store.getOrganisation(org.id)).toBeUndefined();
+    expect(store.deleteOrganisation(org.id)).toBe(false); // already gone
+  });
+
+  it("org deletion copes with soft-delete-era project rows (FK regression)", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Legacy");
+    // Simulate a row left over from when project deletion was soft.
+    const raw = new Database(dbPath);
+    raw.prepare("UPDATE projects SET deleted_at = ? WHERE id = ?").run(Date.now(), project.id);
+    raw.close();
+    expect(store.listProjects(org.id)).toEqual([]); // invisible to the UI…
+    expect(store.listProjectIds(org.id)).toEqual([project.id]); // …but the purge sees it
+
+    // hardDeleteProject path: deleteProject must accept the soft-deleted row.
+    expect(store.deleteProject(project.id)).not.toBeNull();
+    // The org row delete no longer trips the projects.org_id FK.
+    expect(store.deleteOrganisation(org.id)).toBe(true);
+  });
 });
 
 // ── Projects ─────────────────────────────────────────────────────────────────
@@ -65,6 +109,40 @@ describe("Project CRUD", () => {
     const project = store.createProject(org.id, "Old");
     store.renameProject(project.id, "New");
     expect(store.getProject(project.id)!.name).toBe("New");
+  });
+
+  it("moveProject reassigns the org and appends at the target's end", () => {
+    const orgA = store.createOrganisation("A");
+    const orgB = store.createOrganisation("B");
+    const existing = store.createProject(orgB.id, "Existing");
+    const moved = store.createProject(orgA.id, "Moved");
+
+    store.moveProject(moved.id, orgB.id);
+    expect(store.getProject(moved.id)!.orgId).toBe(orgB.id);
+    expect(store.listProjects(orgA.id)).toEqual([]);
+    expect(store.listProjects(orgB.id).map(p => p.id)).toEqual([existing.id, moved.id]);
+  });
+
+  it("updateProject patches only the given fields", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "P");
+    store.updateProject(project.id, { description: "About P", systemPrompt: "Be terse." });
+    let fetched = store.getProject(project.id)!;
+    expect(fetched.name).toBe("P");
+    expect(fetched.description).toBe("About P");
+    expect(fetched.systemPrompt).toBe("Be terse.");
+
+    store.updateProject(project.id, { icon: "data:image/png;base64,AAAA", name: "P2" });
+    fetched = store.getProject(project.id)!;
+    expect(fetched.icon).toBe("data:image/png;base64,AAAA");
+    expect(fetched.name).toBe("P2");
+    expect(fetched.description).toBe("About P"); // untouched
+
+    store.updateProject(project.id, { icon: null }); // explicit removal
+    expect(store.getProject(project.id)!.icon).toBeNull();
+
+    store.updateProject(project.id, {}); // no-op patch doesn't throw
+    expect(store.getProject(project.id)!.name).toBe("P2");
   });
 
   it("reorderProjects persists the order; new projects append after it", () => {

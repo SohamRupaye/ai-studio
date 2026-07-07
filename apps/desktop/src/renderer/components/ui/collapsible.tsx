@@ -10,8 +10,16 @@ const Collapsible = BaseCollapsible.Root;
 function CollapsibleTrigger({
   className,
   children,
+  caret = true,
   ...props
-}: React.ComponentProps<typeof BaseCollapsible.Trigger>) {
+}: React.ComponentProps<typeof BaseCollapsible.Trigger> & {
+  /**
+   * Set false to omit the built-in leading caret and place your own inside
+   * children (style it with `group-data-[panel-open]/collapsible:rotate-90`)
+   * — for rows whose caret belongs at the trailing edge.
+   */
+  caret?: boolean;
+}) {
   return (
     <BaseCollapsible.Trigger
       className={cn(
@@ -20,11 +28,13 @@ function CollapsibleTrigger({
       )}
       {...props}
     >
-      <CaretRightIcon
-        size={12}
-        weight="bold"
-        className="shrink-0 text-fg-subtle transition-transform duration-200 ease-(--ease-standard) group-data-[panel-open]/collapsible:rotate-90"
-      />
+      {caret && (
+        <CaretRightIcon
+          size={12}
+          weight="bold"
+          className="shrink-0 text-fg-subtle transition-transform duration-200 ease-(--ease-standard) group-data-[panel-open]/collapsible:rotate-90"
+        />
+      )}
       {children}
     </BaseCollapsible.Trigger>
   );

@@ -24,6 +24,11 @@ export interface Project {
   id: string;
   orgId: string;
   name: string;
+  /** Small data-URL image for the rail tile; absent = initial letter. */
+  icon?: string | null;
+  description?: string;
+  /** Custom instructions layered into the system prompt of every chat in the project. */
+  systemPrompt?: string;
   createdAt: number;
 }
 

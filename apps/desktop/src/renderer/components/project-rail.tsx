@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { GearIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import type { Project } from "@ai-studio/shared";
-import { cn, counted } from "../lib/utils";
+import { cn } from "../lib/utils";
 import { useWorkspace } from "./workspace-provider";
 import { useMutation } from "../hooks/use-ipc-data";
 import { NameDialog } from "./name-dialog";
-import { ConfirmDialog } from "./confirm-dialog";
+import { DeleteProjectDialog } from "./delete-project-dialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -143,31 +143,8 @@ function ProjectTile({
 }) {
   const navigate = useNavigate();
   const renameProject = useMutation("project:rename");
-  const deleteProject = useMutation("project:delete");
   const [renaming, setRenaming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [impact, setImpact] = useState<{
-    spaces: number;
-    chats: number;
-    artifacts: number;
-    memories: number;
-  } | null>(null);
-
-  // Count the contents before asking — the confirm should say what it costs.
-  const openDeleteConfirm = async () => {
-    try {
-      setImpact(await window.ipc.invoke("project:impact", { id: project.id }));
-    } catch {
-      setImpact(null); // fall back to generic copy rather than blocking the dialog
-    }
-    setConfirmingDelete(true);
-  };
-
-  // Project deletion is the one HARD delete: DB rows, scoped memories and
-  // knowledge-graph nodes all go, permanently — hence the typed challenge.
-  const deleteDescription = impact
-    ? `"${project.name}" will be permanently deleted along with ${counted(impact.spaces, "space")}, ${counted(impact.artifacts, "artifact")}, ${counted(impact.memories, "memory", "memories")}, ${counted(impact.chats, "chat")} and its knowledge-graph entries. This cannot be undone.`
-    : `"${project.name}" and everything in it will be permanently deleted, including its knowledge-graph entries. This cannot be undone.`;
 
   return (
     <>
@@ -189,7 +166,7 @@ function ProjectTile({
                   onDragOver={(e) => e.preventDefault()}
                   onDragEnd={onDragEnd}
                   className={cn(
-                    "pressable flex size-10 shrink-0 items-center justify-center rounded-md text-label-lg font-semibold",
+                    "pressable flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md text-label-lg font-semibold",
                     active
                       ? "border border-line-strong bg-surface-2 text-fg shadow-raised"
                       : "text-fg-muted hover:bg-surface-1 hover:text-fg",
@@ -197,7 +174,16 @@ function ProjectTile({
                     dragging && "opacity-40",
                   )}
                 >
-                  {project.name.slice(0, 1).toUpperCase()}
+                  {project.icon ? (
+                    <img
+                      src={project.icon}
+                      alt=""
+                      draggable={false}
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    project.name.slice(0, 1).toUpperCase()
+                  )}
                 </button>
               }
             />
@@ -213,19 +199,16 @@ function ProjectTile({
             <PencilSimpleIcon />
             Rename
           </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              onSelect();
-              navigate("/settings");
-            }}
-          >
+          {/* Settings routes carry the project id, so this needn't switch the
+              workspace's active project just to view settings. */}
+          <ContextMenuItem onClick={() => navigate(`/settings/project/${project.id}`)}>
             <GearIcon />
             Settings
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
             className="text-danger-text data-[highlighted]:bg-danger-soft [&_svg]:text-danger-text"
-            onClick={openDeleteConfirm}
+            onClick={() => setConfirmingDelete(true)}
           >
             <TrashIcon />
             Delete
@@ -244,20 +227,13 @@ function ProjectTile({
           await renameProject.mutate({ id: project.id, name });
         }}
       />
-      <ConfirmDialog
+      <DeleteProjectDialog
+        project={project}
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title="Delete project"
-        description={deleteDescription}
-        challenge="I understand, delete project"
-        onConfirm={async () => {
-          const deleted = await deleteProject.mutate({ id: project.id });
-          if (!deleted) {
-            toast.error("Couldn't delete project");
-            return;
-          }
-          // The workspace provider re-defaults to the first remaining project;
-          // leave any route that pointed into the deleted one.
+        // The workspace provider re-defaults to the first remaining project;
+        // leave any route that pointed into the deleted one.
+        onDeleted={() => {
           if (active) navigate("/");
         }}
       />

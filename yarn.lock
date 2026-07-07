@@ -74,6 +74,7 @@ __metadata:
     "@electron/rebuild": "npm:3.7.1"
     "@fontsource-variable/mona-sans": "npm:^5.2.8"
     "@hookform/resolvers": "npm:^5.4.0"
+    "@lobehub/icons-static-svg": "npm:^1.91.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@shadcn/react": "npm:^0.2.0"
     "@tailwindcss/vite": "npm:^4.3.0"
@@ -1855,6 +1856,13 @@ __metadata:
     "@jridgewell/resolve-uri": "npm:^3.1.0"
     "@jridgewell/sourcemap-codec": "npm:^1.4.14"
   checksum: 10c0/4b30ec8cd56c5fd9a661f088230af01e0c1a3888d11ffb6b47639700f71225be21d1f7e168048d6d4f9449207b978a235c07c8f15c07705685d16dc06280e9d9
+  languageName: node
+  linkType: hard
+
+"@lobehub/icons-static-svg@npm:^1.91.0":
+  version: 1.91.0
+  resolution: "@lobehub/icons-static-svg@npm:1.91.0"
+  checksum: 10c0/fdf48d6c475b927c8ff93cd236ab885dfbf006b3ddf79fa1fb7a2d557c6106c76aeffd6eab0233a74ec01506f27deffd95bc1322576f1c43c698d12635bbcef4
   languageName: node
   linkType: hard
 

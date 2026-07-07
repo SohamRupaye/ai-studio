@@ -1,4 +1,5 @@
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { getConfig } from "./config.js";
 
 export class GoogleProvider implements Provider {
   private apiKey: string;
@@ -12,6 +13,7 @@ export class GoogleProvider implements Provider {
     const body: any = {
       system_instruction: { parts: [{ text: system }] },
       contents: this.formatMessages(messages),
+      generationConfig: { maxOutputTokens: getConfig().maxTokens },
     };
     if (tools?.length) {
       body.tools = [{ function_declarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
@@ -39,6 +41,7 @@ export class GoogleProvider implements Provider {
     const body: any = {
       system_instruction: { parts: [{ text: system }] },
       contents: this.formatMessages(messages),
+      generationConfig: { maxOutputTokens: getConfig().maxTokens },
     };
     if (tools?.length) {
       body.tools = [{ function_declarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }];

@@ -1,4 +1,5 @@
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { getConfig } from "./config.js";
 
 export class OpenAIProvider implements Provider {
   private apiKey: string;
@@ -12,6 +13,7 @@ export class OpenAIProvider implements Provider {
   async call(model: string, messages: ProviderMessage[], system: string, tools?: any[], signal?: AbortSignal): Promise<{ text: string; toolCalls: any[]; usage: any }> {
     const body: any = {
       model,
+      max_tokens: getConfig().maxTokens,
       messages: [{ role: "system", content: system }, ...this.formatMessages(messages)],
     };
     if (tools?.length) body.tools = tools.map(t => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
@@ -35,6 +37,7 @@ export class OpenAIProvider implements Provider {
     const body: any = {
       model,
       stream: true,
+      max_tokens: getConfig().maxTokens,
       messages: [{ role: "system", content: system }, ...this.formatMessages(messages)],
     };
     if (tools?.length) body.tools = tools.map(t => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
