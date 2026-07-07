@@ -4,6 +4,10 @@ export interface Message {
   content: string;
   turn: number;
   timestamp: number;
+  /** Model that generated this message — set on assistant turns. */
+  model?: string;
+  /** Tool activity of the turn that produced this assistant message. */
+  toolCalls?: Array<{ name: string; success: boolean }>;
 }
 
 export interface Summary {

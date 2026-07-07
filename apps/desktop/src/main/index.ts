@@ -14,7 +14,7 @@ import {
   kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry,
 } from "@ai-studio/tools-runtime";
 import { MetaGraph } from "@ai-studio/graph-engine";
-import { buildPayload, compareBranches } from "@ai-studio/prompt-engine";
+import { buildPayload, compareBranches, getAncestryMessages } from "@ai-studio/prompt-engine";
 import { runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
 import type { IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
@@ -338,7 +338,13 @@ function registerHandlers() {
             break;
           }
           const assistantText = event.result.text;
-          store.addMessage(branchId, "assistant", assistantText, model);
+          store.addMessage(
+            branchId,
+            "assistant",
+            assistantText,
+            model,
+            event.result.toolCalls.map((tc) => ({ name: tc.name, success: tc.success })),
+          );
 
           // Cost tracking
           costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });
@@ -596,7 +602,20 @@ function registerHandlers() {
 
   // ── Messages ────────────────────────────────────────────────────────────────
 
-  handle("message:list", ({ branchId }) => store.getMessages(branchId).map(m => ({ id: m.id, role: m.role, content: m.content, turn: m.turn, timestamp: m.timestamp })));
+  handle("message:list", ({ branchId }) => {
+    // Forked branches inherit their ancestry's transcript — the SAME walk
+    // prompt assembly uses (getAncestryMessages), so what the user sees is
+    // exactly what the model gets. Inherited rows are flagged: they belong
+    // to ancestor branches, so turn-based mutations must not target them.
+    const branch = store.getBranch(branchId);
+    const pack = (m: ReturnType<typeof store.getMessages>[number], inherited: boolean) => ({
+      id: m.id, role: m.role, content: m.content, turn: m.turn, timestamp: m.timestamp,
+      model: m.model, toolCalls: m.toolCalls, inherited: inherited || undefined,
+    });
+    const own = store.getMessages(branchId).map(m => pack(m, false));
+    if (!branch?.parentId) return own;
+    return [...getAncestryMessages(branch, store).map(m => pack(m, true)), ...own];
+  });
   handle("message:undo", ({ branchId }) => store.undoLastTurn(branchId));
   handle("message:edit", ({ branchId, turn }) => { store.editMessage(branchId, turn); });
   handle("message:delete", ({ branchId, turn }) => store.deleteMessagePair(branchId, turn));

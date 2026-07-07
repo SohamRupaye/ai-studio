@@ -16,7 +16,7 @@ export interface ToolContext {
 export interface AgentResult {
   text: string;
   iterations: number;
-  toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string }>;
+  toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string; success: boolean }>;
   cost?: string;
 }
 
@@ -156,7 +156,7 @@ export class Agent {
         const result = await this.tools.execute(tc.name, tc.arguments, ctx);
         const output = result.output;
         const success = !(result as any).metadata?.error;
-        allToolCalls.push({ name: tc.name, args: tc.arguments, result: output });
+        allToolCalls.push({ name: tc.name, args: tc.arguments, result: output, success });
         yield { type: "tool_end", name: tc.name, result: output, success };
         history.push({ role: "tool_result", content: output, toolCallId: tc.id });
       }

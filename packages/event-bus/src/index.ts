@@ -175,7 +175,8 @@ export interface IpcInvokeMap {
   "branch:compare": [{ branchIdA: string; branchIdB: string }, BranchDiff];
 
   // Messages
-  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number }>];
+  /** A branch's transcript: inherited ancestry (same walk prompt assembly uses) followed by its own messages. */
+  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean }>; inherited?: boolean }>];
   "message:undo": [{ branchId: string }, number];
   "message:edit": [{ branchId: string; turn: number }, void];
   "message:delete": [{ branchId: string; turn: number }, number];

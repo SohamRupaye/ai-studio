@@ -83,7 +83,7 @@ describe("Agent.run", () => {
     expect(execute).toHaveBeenCalledWith("write_file", { path: "a.ts" }, expect.anything());
     const result = doneResult(events);
     expect(result.iterations).toBe(2);
-    expect(result.toolCalls).toEqual([{ name: "write_file", args: { path: "a.ts" }, result: "wrote file" }]);
+    expect(result.toolCalls).toEqual([{ name: "write_file", args: { path: "a.ts" }, result: "wrote file", success: true }]);
     expect(result.text).toBe("I fixed the bug.");
   });
 

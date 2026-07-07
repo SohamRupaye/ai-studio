@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowsClockwiseIcon,
@@ -7,13 +7,22 @@ import {
   CheckIcon,
   CopyIcon,
   CubeIcon,
+  FileTextIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  GlobeIcon,
   ImagesIcon,
   LightningIcon,
+  ListChecksIcon,
+  NotebookIcon,
   PaperclipIcon,
   PencilSimpleIcon,
+  PushPinIcon,
   StopIcon,
+  TerminalWindowIcon,
   TrashIcon,
   WarningCircleIcon,
+  WrenchIcon,
 } from "@phosphor-icons/react";
 import { counted } from "../lib/utils";
 import { invalidateQueries, useBranches, useMessages, useMutation } from "../hooks/use-ipc-data";
@@ -28,8 +37,10 @@ import {
   MessageAction,
   MessageActions,
   MessageContent,
+  MessageModel,
   MessageTimestamp,
 } from "./ui/message";
+import { NameDialog } from "./name-dialog";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -45,10 +56,9 @@ import { Spinner } from "./ui/spinner";
 // Chat / branch page — the composer + message scroller composed against real
 // IPC: chat:send / chat:stream (text deltas, tool activity, done, error),
 // message:edit/delete/undo for the edit-and-resend / retry / regenerate
-// flows. Per-message fork is deliberately omitted — branch:fork only ever
-// forks at the branch's current head, and the sidebar's branch row already
-// exposes that; a message-level button here would imply a capability
-// (fork-from-this-point) the backend doesn't have.
+// flows. Assistant rows also expose "branch from here" (branch:create with
+// forkAtIndex = that turn — git semantics, fork mid-history) and "pin"
+// (branch:pin-add; pins feed the branch's context assembly).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ToolCallState = { name: string; status: "running" | "done" | "error" };
@@ -71,6 +81,7 @@ function formatTime(ts: number): string {
 
 export function ChatPage() {
   const { branchId } = useParams();
+  const navigate = useNavigate();
   const { data: branches } = useBranches();
   const branch = branches?.find((b) => b.id === branchId);
 
@@ -81,9 +92,14 @@ export function ChatPage() {
   const editMessage = useMutation("message:edit");
   const deleteMessage = useMutation("message:delete");
   const undoTurn = useMutation("message:undo");
+  const createBranch = useMutation("branch:create");
+  const addPin = useMutation("branch:pin-add");
 
   const [draft, setDraft] = useState("");
   const [editingTurn, setEditingTurn] = useState<number | null>(null);
+  // Turn to fork at — set by an assistant row's "Branch from here", drives
+  // the name dialog.
+  const [branchingFromTurn, setBranchingFromTurn] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState<StreamState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
@@ -234,6 +250,15 @@ export function ChatPage() {
     toast("Copied to clipboard");
   };
 
+  // Pins are branch-level context snippets — prompt assembly carries them
+  // into every future turn on this branch.
+  const pin = (text: string) => {
+    addPin
+      .mutate({ branchId: branchId!, text })
+      .then(() => toast.success("Pinned — this stays in the branch's context"))
+      .catch(() => toast.error("Couldn't pin that"));
+  };
+
   const turns = useMemo(
     () => (messages ?? []).filter((m) => m.role === "user" || m.role === "assistant"),
     [messages],
@@ -316,14 +341,36 @@ export function ChatPage() {
               {turns.map((m, i) => {
                 const isLastAssistant = m.role === "assistant" && i === turns.length - 1 && !streaming;
                 const precedingUser = isLastAssistant ? turns[i - 1] : undefined;
+                // Divider where inherited ancestry ends and this branch's own
+                // conversation begins.
+                const forkPoint = m.inherited && !turns[i + 1]?.inherited;
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id}>
                     <Message role={m.role as "user" | "assistant"}>
+                      {m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0 && (
+                        <ToolActivity
+                          calls={m.toolCalls!.map((tc) => ({
+                            name: tc.name,
+                            status: tc.success ? "done" : "error",
+                          }))}
+                        />
+                      )}
                       <MessageContent>
                         <Markdown text={m.content} />
                       </MessageContent>
                       <MessageActions>
-                        {m.role === "user" ? (
+                        {m.inherited ? (
+                          // Inherited rows belong to ancestor branches —
+                          // turn-based mutations (edit/retry/delete) would hit
+                          // the wrong branch, so they're read-only here.
+                          <>
+                            <MessageAction label="Copy" onClick={() => copy(m.content)}>
+                              <CopyIcon />
+                            </MessageAction>
+                            <MessageTimestamp>{formatTime(m.timestamp)}</MessageTimestamp>
+                            {m.model && <MessageModel>{m.model}</MessageModel>}
+                          </>
+                        ) : m.role === "user" ? (
                           <>
                             <MessageAction
                               label="Edit message"
@@ -366,11 +413,39 @@ export function ChatPage() {
                                 <ArrowsClockwiseIcon />
                               </MessageAction>
                             )}
+                            <MessageAction
+                              label="Branch from here"
+                              onClick={() => setBranchingFromTurn(m.turn)}
+                            >
+                              <GitForkIcon />
+                            </MessageAction>
+                            <MessageAction
+                              label="Pin to branch context"
+                              onClick={() => pin(m.content)}
+                            >
+                              <PushPinIcon />
+                            </MessageAction>
                             <MessageTimestamp>{formatTime(m.timestamp)}</MessageTimestamp>
+                            {m.model && <MessageModel>{m.model}</MessageModel>}
                           </>
                         )}
                       </MessageActions>
                     </Message>
+                    {forkPoint && (
+                      <Marker rule className="my-4">
+                        <MarkerIcon>
+                          <GitForkIcon />
+                        </MarkerIcon>
+                        <MarkerContent>
+                          Forked here{branch?.name ? (
+                            <>
+                              {" — "}
+                              <span className="font-mono text-[12px]">{branch.name}</span> starts
+                            </>
+                          ) : null}
+                        </MarkerContent>
+                      </Marker>
+                    )}
                   </MessageScrollerItem>
                 );
               })}
@@ -458,37 +533,77 @@ export function ChatPage() {
         )}
         {composer}
       </div>
+
+      <NameDialog
+        open={branchingFromTurn !== null}
+        onOpenChange={(open) => {
+          if (!open) setBranchingFromTurn(null);
+        }}
+        title="Branch from here"
+        description="Forks the conversation at this reply — everything up to it is inherited, everything after stays on this branch."
+        placeholder="New branch name"
+        submitLabel="Branch"
+        onSubmit={async (name) => {
+          const turn = branchingFromTurn!;
+          try {
+            const fork = await createBranch.mutate({
+              name,
+              model: branch?.model ?? "",
+              parentId: branchId!,
+              forkAtIndex: turn,
+              chatId: branch?.chatId,
+            });
+            navigate(`/chats/${branch?.chatId}/branches/${fork.id}`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Couldn't create branch");
+            throw err;
+          }
+        }}
+      />
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tool activity — collapsible list of the current turn's tool calls, same
-// grammar as the "Explored 4 files" marker in the gallery.
+// Tool activity — collapsible list of a turn's tool calls, same grammar as
+// the "Explored 4 files" marker in the gallery. Rendered live while
+// streaming and again (from the persisted message) once the turn lands, so
+// what the assistant DID stays visible alongside what it said.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** What kind of work a tool name represents — drives the row's icon. */
+function toolIcon(name: string): React.ComponentProps<typeof MarkerIcon>["children"] {
+  if (/^(web_search|web_fetch|http_)/.test(name)) return <GlobeIcon />;
+  if (/^(read_file|write_file|edit_file|apply_patch|list_files|glob|grep)/.test(name)) return <FileTextIcon />;
+  if (/^(bash|terminal_)/.test(name)) return <TerminalWindowIcon />;
+  if (/^(remember|recall_memories)/.test(name)) return <BrainIcon />;
+  if (/^kb_/.test(name)) return <NotebookIcon />;
+  if (/^(todo_|think|delegate)/.test(name)) return <ListChecksIcon />;
+  if (/^git/.test(name)) return <GitBranchIcon />;
+  return <WrenchIcon />;
+}
 
 function ToolActivity({ calls }: { calls: ToolCallState[] }) {
   const running = calls.some((c) => c.status === "running");
+  const failed = calls.filter((c) => c.status === "error").length;
   return (
-    <Collapsible defaultOpen>
-      <CollapsibleTrigger>
+    <Collapsible defaultOpen className="mb-1.5">
+      <CollapsibleTrigger className="py-1">
         {running ? <Spinner size="sm" /> : <CheckIcon size={12} weight="bold" />}
         {counted(calls.length, "tool call")}
+        {failed > 0 && <span className="text-danger-text">· {failed} failed</span>}
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <div className="flex flex-col gap-1 pb-1 pl-1 pt-1.5">
+        <div className="flex flex-col gap-2 pb-1.5 pl-1.5 pt-2.5">
           {calls.map((call, i) => (
             <Marker key={i}>
-              <MarkerIcon>
-                {call.status === "running" ? (
-                  <Spinner size="sm" />
-                ) : call.status === "error" ? (
-                  <WarningCircleIcon />
-                ) : (
-                  <CheckIcon />
-                )}
+              <MarkerIcon className={call.status === "error" ? "text-danger-text" : undefined}>
+                {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
               </MarkerIcon>
               <MarkerContent className="font-mono text-[12px]">{call.name}</MarkerContent>
+              {call.status === "error" && (
+                <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
+              )}
             </Marker>
           ))}
         </div>

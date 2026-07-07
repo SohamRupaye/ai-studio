@@ -9,7 +9,6 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
-import { getConfig } from "./config.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const ISSUER = "https://auth.openai.com";
@@ -152,7 +151,9 @@ export class CodexOAuthProvider implements Provider {
     if (auth.account_id) headers["ChatGPT-Account-Id"] = auth.account_id;
 
     const input = this.formatMessages(messages);
-    const body: any = { model, instructions: system, input, stream: true, store: false, max_output_tokens: getConfig().maxTokens };
+    // No output cap: the codex backend-api rejects max_output_tokens
+    // ("Unsupported parameter") — limits are enforced server-side.
+    const body: any = { model, instructions: system, input, stream: true, store: false };
 
     if (tools?.length) {
       body.tools = tools.map(t => ({ type: "function", name: t.name, description: t.description || "", parameters: t.parameters || {} }));

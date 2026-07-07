@@ -126,18 +126,29 @@ Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as
 ## Deliberately NOT built yet (build when a page demands it, not before)
 
 - **Popover** (generic anchored panel), **progress/meter** (context-window %), **form field wrapper** (label+error glue for react-hook-form), **scroll-area** (native scrollbars fine for now).
-- **Markdown/code-block renderer** — the one important missing piece; it's a content component that must be built against real streamed output on the chat page. The old `markdown.tsx` was deleted; don't resurrect it blindly.
 
 ## Next phase
 
-1. Commit the working tree (design system / component library / spaces backend / app shell as separate commits).
-2. Chat page (the branch route): composer + message scroller + message kit + markers + collapsible tool calls + the markdown renderer. Preserved data layer to wire into: `hooks/use-ipc-data.ts`, providers in `components/` (auth, workspace, ui-prefs), `auth-guard.tsx`.
-3. Then the other placeholder pages (Home, per-space Memories/Artifacts, Knowledge graph, Compare, Costs, Settings) as they earn priority.
+1. Commit the working tree as clean separate commits.
+2. Remaining placeholder pages (Home, per-space Memories/Artifacts, Knowledge graph, Compare, Costs, project Artifacts/Memories) as they earn priority.
+3. Chat follow-ups when they hurt: mid-stream resume after navigating away (needs an "in-flight state for branch X" IPC), wiring the composer attach menu (currently visual-only), per-turn cost in message actions, chat auto-titling.
 4. Delete `ui-gallery.tsx` (`/gallery`) once real pages cover its components (it's a dev scratchpad, not a shipping screen).
 
 ## Changelog
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
+
+### 2026-07-07 (later still) — The chat page ships; markdown renderer built against real streams
+
+- **Chat page is real** (`components/chat-page.tsx`, the `/chats/:chatId/branches/:branchId` route; `App.tsx` keys it by branchId so switching branches resets draft/stream state). Empty state = centered composer (the one hero); active thread = `MessageScroller` (`autoScroll` — the primitive defaults it off) at `max-w-2xl` with the composer pinned below as a plain flex footer. The user's own message renders **optimistically** (`chat:send` doesn't resolve until the whole turn finishes — waiting on the refetch left it invisible for the entire generation), deduped once the persisted row lands.
+- **Streaming is frame-batched**: token deltas arrive as individual IPC tasks (hundreds/sec, each previously its own render); they buffer in a ref and flush once per `requestAnimationFrame`. `Markdown` is `React.memo`'d — without it every delta re-ran inline parsing for every historical message (O(history × tokens), visible stutter). The live bubble overrides the scroller item's `content-visibility:auto` (`[content-visibility:visible]`) — Chromium can defer painting rapid in-place updates under it, which read as "whole reply pops in at once".
+- **`chat:stream` events carry `branchId`** (event-bus type + every `send` in main): main runs one turn per window, so without the tag a turn left running for another branch rendered onto whatever page was open. The page filters on it; `done` triggers an unconditional refetch so a reply that finished while you were elsewhere still lands.
+- **Markdown renderer** (`ui/markdown.tsx`): dependency-free line-based parser (paragraphs, headings, ul/ol, quotes, fenced code with copy + lang chip, **tables** — header + `|---|` separator, `overflow-x-auto` container, surface-2 header row) + inline code/bold/italic/links. Tolerates an unterminated trailing fence mid-stream. **Gotcha fixed (real OOM, not hypothetical): `renderInline` recurses, so it must build a fresh regex per call** — a shared module-level global regex carries `lastIndex` on the object; the recursive call reset it and sent the outer loop back to 0, re-matching the same `**bold**` forever until the 2GB renderer heap died. Any message with bold crashed the app on open.
+- **Tool activity is persisted, not just streamed**: `messages.tool_calls` column (JSON `[{name, success}]`; migration follows the migrated-column rule), written on the assistant row, returned by `message:list`, rendered as the same `ToolActivity` collapsible above the reply — what the assistant *did* stays visible after the turn and across reopens. Rows get kind-of-work icons (globe = web/http, terminal = bash, file = read/write/patch, brain = memory, notebook = kb, checklist = todo/think/delegate, git; wrench fallback); failures tint danger with an "N failed" note. `AgentResult.toolCalls` gained `success`.
+- **Forked branches show inherited history**: `message:list` walks ancestry via prompt-engine's own `getAncestryMessages` (the SAME walk prompt assembly uses, so the visible transcript can't drift from what the model sees), flags rows `inherited`, and the page renders them read-only (copy only — turn-based edit/retry/delete would mutate the ancestor) above a "Forked here" rule marker.
+- **Assistant hover actions**: copy, regenerate (last turn), **Branch from here** (`branch:create` + `forkAtIndex` = that turn — inherits up to and including it, per `context.ts`'s slice), **Pin** (`branch:pin-add`; pins genuinely feed prompt assembly), timestamp, mono model name (`message:list` now returns each row's stored `model`). User rows: edit-and-resend (discards everything after; banner + cancel), copy, retry, delete-pair.
+- **Model switcher moved composer → topbar** (right-aligned after the breadcrumb, branch pages only): two composer iterations failed — a boxed Combobox read as a chip-inside-a-chip, and any quiet variant still sat in the bottom-anchored action row that drifts away from tall drafts. It's a branch-level setting, so it lives with the branch identity; quiet mono trigger in the topbar's own hover language, popup `align="end"`. `Combobox` grew `side`/`align`/`sideOffset` + per-item `icon` (provider mono marks via `ProviderTile` — catalogue order groups providers implicitly).
+- **Provider plumbing fixed while wiring this**: every provider now sends the config's `maxTokens` (was: defined+validated in config.yaml but sent by NOBODY except Anthropic's hardcoded 8192; unbounded free-tier runaways were a crash risk) — EXCEPT Codex, whose backend-api 400s on `max_output_tokens` (limits are server-side). MCP quick-connect presets swapped Linear/Sentry/Stripe (no icon assets) for Canva/Slack (official endpoints verified); `ProviderTile` now brightens on row hover for mono-only brands (elevation + tone, not just color-swap brands).
 
 ### 2026-07-07 (later) — Organization settings become real; the first working override
 

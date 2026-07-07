@@ -172,6 +172,12 @@ export class Store {
     if (!msgCols.find((c: any) => c.name === "user_id")) {
       this.db.exec("ALTER TABLE messages ADD COLUMN user_id TEXT");
     }
+    // Tool activity of the turn that produced an assistant message (JSON
+    // [{name, success}]) — persisted so the chat page can keep showing what
+    // the assistant did, not just what it said.
+    if (!msgCols.find((c: any) => c.name === "tool_calls")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN tool_calls TEXT");
+    }
     const orgCols = this.db.prepare("PRAGMA table_info(organisations)").all() as any[];
     if (!orgCols.find((c: any) => c.name === "api_keys")) {
       this.db.exec("ALTER TABLE organisations ADD COLUMN api_keys TEXT");
@@ -662,7 +668,7 @@ export class Store {
 
   // ── Messages ───────────────────────────────────────────────────────────────
 
-  addMessage(branchId: string, role: string, content: string, model?: string): Message {
+  addMessage(branchId: string, role: string, content: string, model?: string, toolCalls?: Array<{ name: string; success: boolean }>): Message {
     // Use MAX(turn)+1 to avoid reuse after undo
     const row = this.db.prepare("SELECT MAX(turn) as maxTurn FROM messages WHERE branch_id = ?").get(branchId) as any;
     const turn = (row?.maxTurn ?? -1) + 1;
@@ -672,16 +678,23 @@ export class Store {
       content,
       turn,
       timestamp: Date.now(),
+      toolCalls,
     };
     this.db.prepare(
-      `INSERT INTO messages (id, branch_id, role, content, model, turn, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(msg.id, branchId, msg.role, msg.content, model ?? null, msg.turn, msg.timestamp);
+      `INSERT INTO messages (id, branch_id, role, content, model, turn, timestamp, tool_calls) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(msg.id, branchId, msg.role, msg.content, model ?? null, msg.turn, msg.timestamp, toolCalls?.length ? JSON.stringify(toolCalls) : null);
     return msg;
   }
 
   getMessages(branchId: string): Message[] {
     const rows = this.db.prepare("SELECT * FROM messages WHERE branch_id = ? ORDER BY turn").all(branchId) as any[];
-    return rows.map(r => ({ id: r.id, role: r.role, content: r.content, turn: r.turn, timestamp: r.timestamp }));
+    return rows.map(r => {
+      let toolCalls: Message["toolCalls"];
+      if (r.tool_calls) {
+        try { toolCalls = JSON.parse(r.tool_calls); } catch { /* corrupt row — show the message without activity */ }
+      }
+      return { id: r.id, role: r.role, content: r.content, turn: r.turn, timestamp: r.timestamp, model: r.model ?? undefined, toolCalls };
+    });
   }
 
   getMessageCount(branchId: string): number {

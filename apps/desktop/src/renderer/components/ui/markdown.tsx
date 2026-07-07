@@ -11,12 +11,24 @@ import { Button } from "./button";
 // just renders as an in-progress code block instead of breaking.
 
 interface Block {
-  kind: "paragraph" | "heading" | "code" | "ul" | "ol" | "quote";
+  kind: "paragraph" | "heading" | "code" | "ul" | "ol" | "quote" | "table";
   text?: string;
   level?: number;
   lang?: string;
   items?: string[];
+  header?: string[];
+  rows?: string[][];
 }
+
+/** Split a `| a | b |` row into trimmed cells, dropping the edge pipes. */
+function splitTableRow(line: string): string[] {
+  const cells = line.trim().split("|");
+  if (cells[0]?.trim() === "") cells.shift();
+  if (cells[cells.length - 1]?.trim() === "") cells.pop();
+  return cells.map((c) => c.trim());
+}
+
+const TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/;
 
 function parseBlocks(source: string): Block[] {
   const lines = source.replace(/\r\n/g, "\n").split("\n");
@@ -82,6 +94,24 @@ function parseBlocks(source: string): Block[] {
       continue;
     }
 
+    // Table: a |-delimited header row directly followed by a |---|---|
+    // separator, then any run of |-rows.
+    const isTableStart = (at: number) =>
+      lines[at]?.trimStart().startsWith("|") &&
+      at + 1 < lines.length &&
+      TABLE_SEPARATOR.test(lines[at + 1]!);
+    if (isTableStart(i)) {
+      const header = splitTableRow(line);
+      i += 2; // header + separator
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i]!.trimStart().startsWith("|")) {
+        rows.push(splitTableRow(lines[i]!));
+        i++;
+      }
+      blocks.push({ kind: "table", header, rows });
+      continue;
+    }
+
     // Paragraph: gather until a blank line or the start of another block kind.
     const paraLines: string[] = [];
     while (
@@ -91,7 +121,8 @@ function parseBlocks(source: string): Block[] {
       !/^#{1,6}\s/.test(lines[i]!) &&
       !/^>\s?/.test(lines[i]!) &&
       !/^(-|\*)\s+/.test(lines[i]!) &&
-      !/^\d+[.)]\s+/.test(lines[i]!)
+      !/^\d+[.)]\s+/.test(lines[i]!) &&
+      !isTableStart(i)
     ) {
       paraLines.push(lines[i]!);
       i++;
@@ -239,6 +270,33 @@ const Markdown = React.memo(function Markdown({
               <ol key={i} className="list-decimal space-y-1 pl-5">
                 {block.items?.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
               </ol>
+            );
+          case "table":
+            return (
+              <div key={i} className="my-1 overflow-x-auto rounded-md border border-line">
+                <table className="w-full border-collapse text-body-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-surface-2">
+                      {block.header?.map((cell, j) => (
+                        <th key={j} className="px-3 py-2 text-left text-label-sm font-medium text-fg-muted">
+                          {renderInline(cell)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {block.rows?.map((row, j) => (
+                      <tr key={j}>
+                        {row.map((cell, k) => (
+                          <td key={k} className="px-3 py-2 align-top">
+                            {renderInline(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           default:
             return <p key={i}>{renderInline(block.text ?? "")}</p>;
