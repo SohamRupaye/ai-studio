@@ -87,6 +87,30 @@ describe("Agent.run", () => {
     expect(result.text).toBe("I fixed the bug.");
   });
 
+  it("keeps text written BEFORE a tool call in the final result (long answer + remember + follow-up)", async () => {
+    const registry = makeRegistry(async () => ({ title: "remember", output: "saved" }));
+    const router = makeRouter([
+      async function* () {
+        // Model answers first, then calls a tool at the end of the same turn —
+        // the common GPT pattern that used to wipe the answer from the result.
+        yield { type: "text", text: "Day 1: Rome. Day 2: Florence." };
+        yield { type: "tool_call", id: "1", name: "remember", arguments: { text: "planning an Italy trip" } };
+      },
+      async function* () {
+        yield { type: "text", text: "Done — I've stored that." };
+      },
+    ]);
+    const agent = new Agent(router, registry);
+
+    const events = await collect(agent.run("model", [{ role: "user", content: "plan my italy trip" }], "sys"));
+
+    const result = doneResult(events);
+    expect(result.text).toBe("Day 1: Rome. Day 2: Florence.\n\nDone — I've stored that.");
+    expect(result.toolCalls).toEqual([
+      { name: "remember", args: { text: "planning an Italy trip" }, result: "saved", success: true },
+    ]);
+  });
+
   it("respects maxIterations even if the model keeps requesting tools forever", async () => {
     const registry = makeRegistry(async () => ({ title: "", output: "ok" }));
     const router = makeRouter([
@@ -144,6 +168,36 @@ describe("Agent.run", () => {
       const result = doneResult(events);
       expect(result.iterations).toBe(2);
       expect(result.text).toBe("Sure thing.");
+    });
+
+    it("does not reject a long complete answer that ends with a closing offer", async () => {
+      // Regression: a full itinerary ending "If you want, I can…" was flagged
+      // as a deflection and destroyed — only short responses are deflections.
+      const itinerary =
+        "Day 1: Rome — Colosseum, Forum, evening in Trastevere.\n" +
+        "Day 2: Vatican museums and St Peter's.\n" +
+        "Day 3: Train to Florence — Uffizi, Ponte Vecchio.\n" +
+        "Day 4: Day trip to Siena and San Gimignano.\n" +
+        "Day 5: Bologna food walk.\n" +
+        "Day 6: Venice — San Marco, Doge's Palace.\n" +
+        "Day 7: Murano and Burano islands.\n" +
+        "Day 8: Milan — Duomo, Last Supper (book ahead).\n" +
+        "Day 9: Lake Como day trip.\n" +
+        "Day 10: Return to Rome, Borghese gallery before departure.\n\n" +
+        "If you want, I can tailor this to your budget and pace.";
+      const router = makeRouter([
+        async function* () {
+          yield { type: "text", text: itinerary };
+        },
+      ]);
+      const agent = new Agent(router, makeRegistry(), { maxIterations: 5 });
+
+      const events = await collect(agent.run("model", [{ role: "user", content: "can you help me make an itinerary for italy?" }], "sys"));
+
+      expect((router.stream as any).mock.calls).toHaveLength(1);
+      const result = doneResult(events);
+      expect(result.iterations).toBe(1);
+      expect(result.text).toBe(itinerary);
     });
 
     it("does not fire for a plain informational question", async () => {

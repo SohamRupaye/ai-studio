@@ -111,7 +111,7 @@ export async function buildPayload(
     const projectId = branch.chatId ? store.getChat(branch.chatId)?.projectId : undefined;
     const memBlock = globalMem.asContextBlock(branch.id, branch.chatId, projectId);
     if (memBlock) {
-      systemContextBlocks.push(`<global_memory>\n${memBlock}\n</global_memory>`);
+      systemContextBlocks.push(`<global_memory>\nDurable facts saved about the user, grouped by scope (global → project → chat → branch; narrower scopes are more specific). Treat them as true unless the user says otherwise.\n${memBlock}\n</global_memory>`);
     }
   }
 
@@ -122,7 +122,7 @@ export async function buildPayload(
       parentSummaries = store.getSummaries(branch.parentId);
     }
     const summaryText = await inlineAncestrySummary(ancestryMsgs, parentSummaries, branch.model);
-    systemContextBlocks.push(`<ancestry>\n${summaryText}\n</ancestry>`);
+    systemContextBlocks.push(`<ancestry>\nThis branch was forked from a parent conversation. This is what happened before the fork — treat it as real prior conversation with this user.\n${summaryText}\n</ancestry>`);
     tierAncestry = ancestryMsgs.length;
   }
 
@@ -130,7 +130,7 @@ export async function buildPayload(
     const summariesText = summaries
       .map(s => `[Turns ${s.fromTurn}-${s.toTurn}]:\n${s.content}`)
       .join("\n\n");
-    systemContextBlocks.push(`<conversation_summaries>\n${summariesText}\n</conversation_summaries>`);
+    systemContextBlocks.push(`<conversation_summaries>\nOlder turns of THIS conversation, compacted to save space; the recent turns follow verbatim in the message history.\n${summariesText}\n</conversation_summaries>`);
   }
 
   let retrievedBlocks: string[] = [];
@@ -138,14 +138,14 @@ export async function buildPayload(
     retrievedBlocks = await retrieveFromGraph(currentQuery, graph, 3, 0.4, branch.id);
     if (retrievedBlocks.length) {
       const contextText = retrievedBlocks.map(b => `• ${b}`).join("\n");
-      systemContextBlocks.push(`<retrieved_context>\n${contextText}\n</retrieved_context>`);
+      systemContextBlocks.push(`<retrieved_context>\nEntries retrieved from this project's knowledge graph because they MAY relate to the current message — judge relevance before relying on them.\n${contextText}\n</retrieved_context>`);
       tierRetrieved = retrievedBlocks.length;
     }
   }
 
   if (branch.pins.length) {
     const pinBlock = branch.pins.map((p, i) => `${i + 1}. ${p}`).join("\n");
-    systemContextBlocks.push(`<pinned_rules>\n${pinBlock}\n</pinned_rules>`);
+    systemContextBlocks.push(`<pinned_rules>\nThe user pinned these instructions to this branch. They are BINDING — follow them even over your general defaults.\n${pinBlock}\n</pinned_rules>`);
   }
 
   // startTurn is a TURN NUMBER, not an array index — turn numbers only match

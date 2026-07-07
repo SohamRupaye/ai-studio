@@ -172,7 +172,7 @@ async function initRuntime() {
     {
       name: "remember",
       description:
-        "Persist a durable fact about the user or their preferences to long-term memory so it is available in every future conversation. Call this whenever the user asks you to remember, save, note, or store something about them (preferences, constraints, personal details, travel dates, etc.). Phrase the fact as a standalone statement.",
+        "Persist a durable fact about the user to long-term memory so it is available in every future conversation. Call this when the user explicitly asks you to remember, save, note, or store something, or states a clearly durable fact about themselves (stable preferences, standing constraints, personal details). Do NOT store transient details of the current task — those live in the conversation. Phrase the fact as a standalone statement.",
       parameters: {
         type: "object",
         properties: {
@@ -307,7 +307,7 @@ function registerHandlers() {
     // Project-level custom instructions (set in project settings) sit between
     // the app boilerplate and the per-conversation context.
     const projectPrompt = (currentProjectId ? store.getProject(currentProjectId)?.systemPrompt : undefined)?.trim();
-    const baseSystem = `You are a helpful AI assistant in AI Studio, a desktop AI workspace. Use your tools to help the user accomplish tasks.\n\nMEMORY: When the user asks you to remember, save, note, or store a fact about them or their preferences, you MUST call the \`remember\` tool to persist it — never just say you will remember without calling it. To recall what you know about the user, call \`recall_memories\`. Persisted memories are durable across all conversations.\n\n${projectPrompt ? `PROJECT INSTRUCTIONS (set by the user for this project):\n${projectPrompt}\n\n` : ""}${payload.systemContext}`;
+    const baseSystem = buildBaseSystem(projectPrompt, payload.systemContext);
     const system = persona && persona.name !== "default"
       ? `${persona.systemPrompt}\n\n${baseSystem}`
       : baseSystem;
@@ -803,6 +803,62 @@ function registerHandlers() {
   handle("kb:search", ({ query, category, tags }) => kbSearchEntries(dataDirPath, query, category, tags));
   handle("kb:add", ({ title, content, category, tags }) => kbAddEntry(dataDirPath, { title, content, category, tags }));
   handle("kb:remove", ({ id }) => kbRemoveEntry(dataDirPath, id));
+}
+
+// ── System prompt ─────────────────────────────────────────────────────────────
+
+const PLATFORM_NAMES: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
+
+/**
+ * The app-level system prompt, rebuilt each turn so the date is always
+ * current. Deliberately compact: it runs on every model of every provider
+ * (the default is a small one), and small models follow short prompts best —
+ * resist growing this into an epic. Layering (outermost first): persona
+ * prompt (if any) → this → project instructions → workspace context blocks
+ * (assembled in prompt-engine's buildPayload, semantics explained per block).
+ */
+function buildBaseSystem(projectPrompt?: string, systemContext?: string): string {
+  const date = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const platform = PLATFORM_NAMES[process.platform] ?? process.platform;
+  const userName = store.getMeta("user_name");
+
+  const parts: string[] = [];
+
+  parts.push(
+    `You are the assistant inside AI Studio, a desktop AI workspace where conversations work like git: chats fork into branches, and durable context (memories, artifacts, pinned rules) accumulates per project so the user never has to re-explain themselves. You are talking to ${userName || "the user"} on one branch of that workspace.`,
+  );
+
+  parts.push(
+    `ENVIRONMENT
+- Today is ${date}. Trust this over your training data for anything date-sensitive, and mind the year when judging what is past vs. future.
+- Host machine: ${platform}. Target it when suggesting or running shell commands.`,
+  );
+
+  parts.push(
+    `HOW TO ACT
+- When the user asks for something your tools can do, do it now — don't ask permission first and don't say you'll do it later. If a request is ambiguous in a way that changes what you'd do, either state your assumption and proceed or ask ONE focused question; never reply with only questions when a useful answer is possible.
+- Never claim an action you didn't take (a file edit, a saved memory, a search). A claim of work requires the matching tool call.
+- If the same tool call fails twice, stop repeating it — say what's failing and try a different approach.`,
+  );
+
+  parts.push(
+    `MEMORY
+- Call \`remember\` when the user explicitly asks you to remember/save/note something, or states a clearly durable fact about themselves (stable preferences, standing constraints, personal details). Phrase the fact as a standalone statement.
+- Do NOT store transient task context — the current task's details live in the conversation. If unsure whether a fact is already saved, check with \`recall_memories\` instead of saving a duplicate.
+- Memory is housekeeping, never the deliverable: answer the user's actual request first and mention a save in at most one short closing sentence.`,
+  );
+
+  parts.push(
+    `RESPONSES
+- Lead with the answer, then supporting detail. Be concrete and concise; skip filler, hedging, and restating the question.
+- Your replies render as full markdown: use tables for comparisons and structured data, fenced code blocks with a language tag for code, and headings only in long multi-section answers.
+- Match the user's language and technical depth.`,
+  );
+
+  if (projectPrompt) parts.push(`PROJECT INSTRUCTIONS (set by the user for this project — follow them):\n${projectPrompt}`);
+  if (systemContext) parts.push(systemContext);
+
+  return parts.join("\n\n");
 }
 
 // ── Chat auto-titling ─────────────────────────────────────────────────────────

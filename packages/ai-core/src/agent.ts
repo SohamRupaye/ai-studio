@@ -51,7 +51,14 @@ function validateResponse(
       userMessage,
     );
 
-  if (isActionRequest) {
+  // A genuine deflection is SHORT — the model asked instead of answering
+  // ("Would you like me to fix this now?"). A longer response that merely
+  // ends with "if you want, I can…" is a complete answer with a closing offer
+  // (itineraries, research summaries, …); flagging it destroys the whole
+  // reply, because the correction path drops the draft.
+  const isDeflection = text.trim().length < 400;
+
+  if (isActionRequest && isDeflection) {
     const confirmPatterns = [
       /if you want,?\s*i can/i, /shall i (proceed|go ahead|do|apply|fix|update|change)/i,
       /would you like me to/i, /want me to (apply|do|fix|change|update|proceed)/i,
@@ -110,7 +117,10 @@ export class Agent {
     // Latest user turn — used to decide whether "act, don't ask" nudges apply.
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
     let iterations = 0;
-    let finalText = "";
+    // The reply is EVERYTHING the model wrote across iterations, not just the
+    // last chunk: models routinely write a long answer, then call a tool, then
+    // add a short follow-up — overwriting per iteration dropped the answer.
+    const textParts: string[] = [];
     const maxIter = this.config.maxIterations!;
 
     while (iterations < maxIter) {
@@ -128,14 +138,18 @@ export class Agent {
       if (!pendingToolCalls.length) {
         const correction = validateResponse(text, allToolCalls, lastUserMessage);
         if (correction && iterations < maxIter) {
+          // Rejected draft: it goes back to the model for correction but is
+          // deliberately NOT part of the reply — keeping it would duplicate
+          // whatever the corrected iteration says.
           history.push({ role: "assistant", content: text });
           history.push({ role: "user", content: correction });
           continue;
         }
-        finalText = text;
+        if (text) textParts.push(text);
         break;
       }
 
+      if (text) textParts.push(text);
       history.push({ role: "assistant", content: text, toolCalls: pendingToolCalls });
 
       for (const tc of pendingToolCalls) {
@@ -162,6 +176,6 @@ export class Agent {
       }
     }
 
-    yield { type: "done", result: { text: finalText, iterations, toolCalls: allToolCalls, cost: this.config.costTracker?.lastCost() } };
+    yield { type: "done", result: { text: textParts.join("\n\n"), iterations, toolCalls: allToolCalls, cost: this.config.costTracker?.lastCost() } };
   }
 }
