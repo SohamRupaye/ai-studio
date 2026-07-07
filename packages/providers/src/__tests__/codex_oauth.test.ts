@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 // In-memory fake filesystem so tests never touch the real ~/.ai-studio/auth.json.
 const files = new Map<string, string>();
@@ -29,7 +31,7 @@ describe("CodexOAuthProvider account management", () => {
   });
 
   it("reports connected account details when auth file exists", async () => {
-    const authPath = require("node:path").join(require("node:os").homedir(), ".ai-studio", "auth.json");
+    const authPath = join(homedir(), ".ai-studio", "auth.json");
     files.set(authPath, JSON.stringify({
       access: "access-token",
       refresh: "refresh-token",
@@ -49,7 +51,7 @@ describe("CodexOAuthProvider account management", () => {
   });
 
   it("logout clears in-memory auth and deletes the auth file", async () => {
-    const authPath = require("node:path").join(require("node:os").homedir(), ".ai-studio", "auth.json");
+    const authPath = join(homedir(), ".ai-studio", "auth.json");
     files.set(authPath, JSON.stringify({
       access: "access-token",
       refresh: "refresh-token",
