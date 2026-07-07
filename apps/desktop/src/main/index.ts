@@ -383,6 +383,12 @@ function registerHandlers() {
           }
 
           scheduleSummarization(branchId);
+
+          // Auto-title: a chat created without a name titles itself off this
+          // exchange. Fire-and-forget — a failure just leaves the flag set,
+          // so the next completed turn retries.
+          autoTitleChat(branch.chatId, branchId, assistantText, chatRouter, model)
+            .catch((e) => console.error("[auto-title]", e?.message ?? e));
         }
       }
     } catch (err: any) {
@@ -523,8 +529,11 @@ function registerHandlers() {
 
   handle("chat:list", ({ projectId }) => store.listChats(projectId));
   // New chats are born on a "main" branch carrying the current default model.
-  handle("chat:create", ({ projectId, name, spaceId }) =>
-    store.createChat(projectId, name, spaceId, getConfig().defaultModel));
+  // No name = a "New chat" placeholder that auto-titles off its first exchange.
+  handle("chat:create", ({ projectId, name, spaceId }) => {
+    const typed = name?.trim();
+    return store.createChat(projectId, typed || "New chat", spaceId, getConfig().defaultModel, !typed);
+  });
   handle("chat:rename", ({ id, name }) => { store.renameChat(id, name); });
 
   const chatMemoryScopes = (chatId: string, branchIds: string[]) => [
@@ -794,6 +803,54 @@ function registerHandlers() {
   handle("kb:search", ({ query, category, tags }) => kbSearchEntries(dataDirPath, query, category, tags));
   handle("kb:add", ({ title, content, category, tags }) => kbAddEntry(dataDirPath, { title, content, category, tags }));
   handle("kb:remove", ({ id }) => kbRemoveEntry(dataDirPath, id));
+}
+
+// ── Chat auto-titling ─────────────────────────────────────────────────────────
+
+const TITLE_SYSTEM = `You generate a title for a chat conversation from its first exchange. Rules:
+• 2-6 words capturing the topic or task
+• Sentence case (capitalize only the first word and proper nouns)
+• No quotes, no trailing punctuation, no emoji
+• Plain description, not a summary sentence ("Tokyo trip planning", not "The user is planning a trip")
+Output ONLY the title, nothing else.`;
+
+/**
+ * Title a still-unnamed chat ("New chat", created without a user-typed name)
+ * from its first user message + the reply that just finished. Any rename —
+ * this one or a user's — clears the flag, so it runs at most once per chat;
+ * on failure the flag survives and the next completed turn retries.
+ */
+async function autoTitleChat(
+  chatId: string | undefined,
+  branchId: string,
+  assistantText: string,
+  chatRouter: Router,
+  model: string,
+): Promise<void> {
+  if (!chatId) return;
+  const chat = store.getChat(chatId);
+  if (!chat?.autoName) return;
+
+  const firstUserMessage = store.getMessages(branchId).find((m) => m.role === "user")?.content ?? "";
+  const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s);
+  const prompt = `User: ${clip(firstUserMessage, 2000)}\n\nAssistant: ${clip(assistantText, 2000)}`;
+
+  const result = await chatRouter.call(model, [{ role: "user", content: prompt }], TITLE_SYSTEM);
+  // Defensive cleanup: first line only, unquoted, no trailing punctuation.
+  const title = (result.text ?? "")
+    .trim()
+    .split("\n")[0]!
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .replace(/[.!?,;:\s]+$/g, "")
+    .slice(0, 60)
+    .trim();
+  if (!title) return;
+
+  // The user may have renamed the chat while the call was in flight — their
+  // name wins, so re-check the flag before writing.
+  if (!store.getChat(chatId)?.autoName) return;
+  store.renameChat(chatId, title);
+  mainWindow?.webContents.send("chat:titled", { chatId, name: title });
 }
 
 // ── Memory extraction helper ──────────────────────────────────────────────────

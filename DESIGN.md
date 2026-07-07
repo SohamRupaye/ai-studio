@@ -2,7 +2,7 @@
 
 Context doc for whoever (human or agent) builds UI next. Everything described here is **implemented and working** in `apps/desktop/src/renderer/` — this is not a proposal. Read this instead of re-deriving the design system; read `ONBOARDING.md` for project-wide context.
 
-State as of 2026-07-06 (second session): tokens + 31-component library complete and demoed in a dev gallery (`components/ui-gallery.tsx`, now at the `/gallery` route). **The app shell is built and user-approved**: fixed topbar (hamburger + breadcrumb), project rail, sidebar with the spaces tree, routing. All destination pages are placeholders — the chat page is the next phase. Working tree is uncommitted; check `git status`.
+State as of 2026-07-07: tokens + 31-component library complete and demoed in a dev gallery (`components/ui-gallery.tsx`, at the `/gallery` route). **App shell, settings area, and the chat page are built and user-approved** (committed — see `git log`). Remaining destination pages (Home, Memories/Artifacts, Knowledge graph, Compare, Costs) are placeholders.
 
 **This is a living system, not a spec.** Improve it when a real use case demands it — several of today's best decisions (raised selects, the `*-text` badge tones, the glow) came from exactly that kind of revision. The distinction that matters: *evolve with a reason* (a page needs something the system doesn't do well) vs. *relitigate settled taste* (the warm-mono palette, the one-hero rule, mono-for-data — those stay unless the user reopens them). When you change tokens or component behavior, add a dated entry to the **Changelog** at the bottom of this file saying what changed and why, so the next iteration inherits the reasoning and not just the diff.
 
@@ -131,12 +131,17 @@ Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as
 
 1. Commit the working tree as clean separate commits.
 2. Remaining placeholder pages (Home, per-space Memories/Artifacts, Knowledge graph, Compare, Costs, project Artifacts/Memories) as they earn priority.
-3. Chat follow-ups when they hurt: mid-stream resume after navigating away (needs an "in-flight state for branch X" IPC), wiring the composer attach menu (currently visual-only), per-turn cost in message actions, chat auto-titling.
+3. Chat follow-ups when they hurt: mid-stream resume after navigating away (needs an "in-flight state for branch X" IPC), wiring the composer attach menu (currently visual-only), per-turn cost in message actions. (Auto-titling shipped 2026-07-07.)
 4. Delete `ui-gallery.tsx` (`/gallery`) once real pages cover its components (it's a dev scratchpad, not a shipping screen).
 
 ## Changelog
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
+
+### 2026-07-07 (evening) — Chats title themselves
+
+- **Chat auto-titling**: the New-chat dialog's name is now optional (`NameDialog` grew an `optional` prop — empty submit passes `""`; dialog copy says what leaving it blank does). An unnamed chat is born "New chat" with a `auto_name` DB flag; after its first completed turn, main generates a 2-6-word sentence-case title from the first user message + reply (`autoTitleChat` in `main/index.ts`, same router/model as the chat turn), renames the chat, and pushes a **`chat:titled`** event → `useChatTitledListener` (mounted in App.tsx, same pattern as `models:refreshed`) invalidates queries so sidebar + breadcrumb update live. **Any rename settles the name**: `store.renameChat` always clears the flag, and the titler re-checks the flag after its model call so a user rename mid-flight wins. Title generation failures leave the flag set — the next completed turn retries. Typed names never auto-title.
+- **Creating a chat now navigates to its trunk** — the first message is what titles an unnamed chat, so landing in the composer immediately is the point.
 
 ### 2026-07-07 (later still) — The chat page ships; markdown renderer built against real streams
 

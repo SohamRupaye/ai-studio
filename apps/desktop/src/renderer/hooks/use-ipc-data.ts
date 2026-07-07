@@ -181,6 +181,20 @@ export function useModelsRefreshListener(): void {
 }
 
 /**
+ * Subscribes once (mount in App.tsx) to "chat:titled" — pushed when a chat
+ * auto-titles itself off its first exchange — and refetches every active
+ * query so the sidebar tree and breadcrumb show the new name.
+ */
+export function useChatTitledListener(): void {
+  useEffect(() => {
+    const off = window.ipc.on("chat:titled", () => {
+      invalidateQueries();
+    });
+    return off;
+  }, []);
+}
+
+/**
  * Whether the window is fullscreen. macOS hides the traffic lights in
  * fullscreen, so chrome that reserves space for them should collapse it.
  */

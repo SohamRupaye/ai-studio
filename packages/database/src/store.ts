@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS chats (
   project_id TEXT NOT NULL REFERENCES projects(id),
   space_id   TEXT REFERENCES spaces(id),
   name       TEXT NOT NULL,
+  auto_name  INTEGER DEFAULT 0,
   created_at REAL,
   updated_at REAL,
   deleted_at REAL
@@ -208,6 +209,11 @@ export class Store {
     }
     if (!chatCols.find((c: any) => c.name === "deleted_at")) {
       this.db.exec("ALTER TABLE chats ADD COLUMN deleted_at REAL");
+    }
+    // Pre-existing chats keep their names: the flag marks only chats born
+    // without a user-typed name, awaiting a generated title.
+    if (!chatCols.find((c: any) => c.name === "auto_name")) {
+      this.db.exec("ALTER TABLE chats ADD COLUMN auto_name INTEGER DEFAULT 0");
     }
     // Index lives here, not in SCHEMA: on a pre-spaces DB the schema pass runs
     // before the ALTER above, and indexing a column that doesn't exist yet
@@ -513,10 +519,10 @@ export class Store {
 
   // ── Chats ──────────────────────────────────────────────────────────────────
 
-  createChat(projectId: string, name: string, spaceId?: string, mainBranchModel?: string): Chat {
+  createChat(projectId: string, name: string, spaceId?: string, mainBranchModel?: string, autoName = false): Chat {
     const space = spaceId ?? this.ensureDefaultSpace(projectId).id;
-    const c: Chat = { id: randomUUID(), projectId, spaceId: space, name, createdAt: Date.now() };
-    this.db.prepare("INSERT INTO chats (id, project_id, space_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(c.id, c.projectId, c.spaceId, c.name, c.createdAt, c.createdAt);
+    const c: Chat = { id: randomUUID(), projectId, spaceId: space, name, createdAt: Date.now(), autoName };
+    this.db.prepare("INSERT INTO chats (id, project_id, space_id, name, auto_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(c.id, c.projectId, c.spaceId, c.name, autoName ? 1 : 0, c.createdAt, c.createdAt);
     // Every chat is born on its trunk: a "main" branch, git-style, so there is
     // never an unusable branchless chat. An empty model string is fine — the
     // chat runtime falls back to the configured default model.
@@ -527,16 +533,17 @@ export class Store {
   getChat(id: string): Chat | undefined {
     const row = this.db.prepare("SELECT * FROM chats WHERE id = ? AND deleted_at IS NULL").get(id) as any;
     if (!row) return undefined;
-    return { id: row.id, projectId: row.project_id, spaceId: row.space_id, name: row.name, createdAt: row.created_at };
+    return { id: row.id, projectId: row.project_id, spaceId: row.space_id, name: row.name, createdAt: row.created_at, autoName: !!row.auto_name };
   }
 
   listChats(projectId: string): Chat[] {
     return (this.db.prepare("SELECT * FROM chats WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at").all(projectId) as any[])
-      .map(r => ({ id: r.id, projectId: r.project_id, spaceId: r.space_id, name: r.name, createdAt: r.created_at }));
+      .map(r => ({ id: r.id, projectId: r.project_id, spaceId: r.space_id, name: r.name, createdAt: r.created_at, autoName: !!r.auto_name }));
   }
 
+  /** Any rename — user-typed or generated — settles the name for good. */
   renameChat(id: string, name: string): void {
-    this.db.prepare("UPDATE chats SET name = ?, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
+    this.db.prepare("UPDATE chats SET name = ?, auto_name = 0, updated_at = ? WHERE id = ?").run(name, Date.now(), id);
   }
 
   /**

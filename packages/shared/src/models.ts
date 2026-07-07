@@ -51,6 +51,9 @@ export interface Chat {
   spaceId: string;
   name: string;
   createdAt: number;
+  /** True while the chat still carries its placeholder name and is waiting
+   * to be auto-titled from its first exchange. Cleared by any rename. */
+  autoName?: boolean;
 }
 
 export interface Branch {

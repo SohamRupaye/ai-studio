@@ -153,7 +153,8 @@ export interface IpcInvokeMap {
 
   // Chats
   "chat:list": [{ projectId: string }, Chat[]];
-  "chat:create": [{ projectId: string; name: string; spaceId?: string }, Chat];
+  /** Omitting the name creates a "New chat" that auto-titles itself after its first exchange. */
+  "chat:create": [{ projectId: string; name?: string; spaceId?: string }, Chat];
   "chat:rename": [{ id: string; name: string }, void];
   "chat:delete": [{ id: string }, boolean];
   /** What deleting a chat would take with it — drives the delete confirm. */
@@ -259,6 +260,9 @@ export interface IpcEventMap {
   /** Fired after a background model-list refresh completes, so the renderer
    * can refetch models:list without polling. */
   "models:refreshed": void;
+  /** Fired when a chat auto-titles itself off its first exchange, so the
+   * sidebar/breadcrumb pick up the new name without a manual refetch. */
+  "chat:titled": { chatId: string; name: string };
   /** macOS hides the traffic lights in fullscreen; the renderer drops the
    * space it reserves for them. */
   "window:fullscreen-changed": boolean;

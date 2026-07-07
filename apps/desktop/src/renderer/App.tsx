@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useTheme } from "./hooks/use-theme";
-import { useModelsRefreshListener } from "./hooks/use-ipc-data";
+import { useChatTitledListener, useModelsRefreshListener } from "./hooks/use-ipc-data";
 import { AuthProvider } from "./components/auth-provider";
 import { WorkspaceProvider } from "./components/workspace-provider";
 import { UiPrefsProvider } from "./components/ui-prefs";
@@ -30,6 +30,7 @@ function ChatPageRoute() {
 export default function App() {
   const { theme, setTheme } = useTheme();
   useModelsRefreshListener();
+  useChatTitledListener();
 
   const applied =
     theme === "system"

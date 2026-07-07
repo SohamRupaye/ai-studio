@@ -435,9 +435,20 @@ function SpaceItem({
         open={newChatOpen}
         onOpenChange={setNewChatOpen}
         title="New chat"
-        placeholder="Chat name"
+        description="Leave the name empty to auto-title the chat from its first message."
+        placeholder="Chat name (optional)"
+        optional
         onSubmit={async (name) => {
-          await createChat.mutate({ projectId: space.projectId, spaceId: space.id, name });
+          const chat = await createChat.mutate({
+            projectId: space.projectId,
+            spaceId: space.id,
+            name: name || undefined,
+          });
+          // Land on the fresh trunk so the first message can be typed
+          // immediately — that message is what titles an unnamed chat.
+          const branches = await window.ipc.invoke("branch:list", undefined);
+          const trunk = branches.find((b) => b.chatId === chat.id);
+          if (trunk) navigate(`/chats/${chat.id}/branches/${trunk.id}`);
         }}
       />
       <NameDialog

@@ -253,6 +253,33 @@ describe("Space CRUD", () => {
     expect(branches[0]!.model).toBe("gpt-4");
   });
 
+  it("createChat defaults to a settled name (autoName false)", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Typed name");
+    expect(chat.autoName).toBe(false);
+    expect(store.getChat(chat.id)!.autoName).toBe(false);
+    expect(store.listChats(project.id).find(c => c.id === chat.id)!.autoName).toBe(false);
+  });
+
+  it("createChat with autoName marks the chat as awaiting a title", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "New chat", undefined, undefined, true);
+    expect(chat.autoName).toBe(true);
+    expect(store.getChat(chat.id)!.autoName).toBe(true);
+  });
+
+  it("renameChat settles the name (clears autoName)", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "New chat", undefined, undefined, true);
+    store.renameChat(chat.id, "Tokyo trip planning");
+    const renamed = store.getChat(chat.id)!;
+    expect(renamed.name).toBe("Tokyo trip planning");
+    expect(renamed.autoName).toBe(false);
+  });
+
   it("renameSpace updates the name", () => {
     const org = store.createOrganisation("Org");
     const project = store.createProject(org.id, "Project");

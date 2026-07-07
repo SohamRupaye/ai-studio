@@ -20,6 +20,9 @@ interface NameDialogProps {
   submitLabel?: string;
   /** Pre-filled value — for rename flows. */
   initialValue?: string;
+  /** Allow submitting with an empty name (onSubmit receives "") — for flows
+   * where the caller has a sensible default, e.g. auto-titled chats. */
+  optional?: boolean;
   onSubmit: (name: string) => Promise<void> | void;
 }
 
@@ -31,6 +34,7 @@ export function NameDialog({
   placeholder = "Name",
   submitLabel = "Create",
   initialValue,
+  optional = false,
   onSubmit,
 }: NameDialogProps) {
   const [name, setName] = useState("");
@@ -42,7 +46,7 @@ export function NameDialog({
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed || busy) return;
+    if ((!trimmed && !optional) || busy) return;
     setBusy(true);
     try {
       await onSubmit(trimmed);
@@ -79,7 +83,7 @@ export function NameDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={!name.trim() || busy}>
+            <Button type="submit" variant="primary" disabled={(!name.trim() && !optional) || busy}>
               {submitLabel}
             </Button>
           </DialogFooter>
