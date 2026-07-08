@@ -1,14 +1,6 @@
 import type { Router } from "@ai-studio/providers";
-import type { ToolRegistry } from "@ai-studio/tools-runtime";
+import { setSubagentDependencies, type ToolRegistry } from "@ai-studio/tools-runtime";
 import { Agent } from "./agent.js";
-
-let _runTask: ((task: string, model: string, systemPrompt: string, allowedTools?: string[]) => Promise<string>) | null = null;
-let _defaultModel = "";
-
-export function setSubagentDependencies(runTask: typeof _runTask, defaultModel: string) {
-  _runTask = runTask;
-  _defaultModel = defaultModel;
-}
 
 export function createRuntime(router: Router, registry: ToolRegistry, defaultModel: string) {
   const BLOCKED = new Set(["subagent", "delegate", "delegate_result", "delegate_list"]);
@@ -35,7 +27,13 @@ export function createRuntime(router: Router, registry: ToolRegistry, defaultMod
     return finalText || "(Agent produced no output)";
   };
 
-  _runTask = runTask;
-  _defaultModel = defaultModel;
+  // The registered subagent/delegate tools live in tools-runtime and read
+  // ITS module state — inject there. (History: this used to set a private
+  // ai-core copy of the same variables that nothing read, so every
+  // subagent/delegate call errored "dependencies not initialized" and the
+  // agent's multi-model delegation was dead.) chat:send calls createRuntime
+  // per turn, so subagents inherit the current branch's router and model;
+  // each delegated task may override with its own `model`.
+  setSubagentDependencies(runTask, defaultModel);
   return { runTask };
 }

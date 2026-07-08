@@ -163,6 +163,15 @@ export const useArtifact = (id: string | undefined) =>
 
 export const useMemory = (scope?: string) => useQuery("memory:list", { scope });
 
+export const useBranchMemories = (branchId: string | undefined) =>
+  useQuery("memory:for-branch", { branchId: branchId! }, { enabled: !!branchId });
+
+export const useContextStats = (branchId: string | undefined) =>
+  useQuery("context:stats", { branchId: branchId! }, { enabled: !!branchId });
+
+export const useBranchArtifacts = (branchId: string | undefined) =>
+  useQuery("artifact:for-branch", { branchId: branchId! }, { enabled: !!branchId });
+
 export const useModels = () => useQuery("models:list", undefined);
 
 /**

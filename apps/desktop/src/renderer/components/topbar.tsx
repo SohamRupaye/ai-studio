@@ -4,6 +4,7 @@ import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Branch } from "@ai-studio/shared";
 import { cn } from "../lib/utils";
+import { useUiPrefs } from "./ui-prefs";
 import { useWorkspace } from "./workspace-provider";
 import {
   useBranches,
@@ -53,6 +54,7 @@ export function Topbar({
   const { data: modelCatalogue } = useModels();
   const updateModel = useMutation("branch:update-model");
   const fullscreen = useIsFullscreen();
+  const { rightPanelOpen, toggleRightPanel } = useUiPrefs();
 
   const crumbs: Crumb[] = [];
   if (activeProject) crumbs.push({ label: activeProject.name, to: "/" });
@@ -169,7 +171,7 @@ export function Topbar({
       </nav>
 
       {branch && modelItems.length > 0 && (
-        <div className="shrink-0 pr-3 [-webkit-app-region:no-drag]">
+        <div className="shrink-0 pr-1.5 [-webkit-app-region:no-drag]">
           <Combobox
             items={modelItems}
             value={branch.model}
@@ -183,6 +185,30 @@ export function Topbar({
             align="end"
             className="h-7 min-w-0 max-w-56 rounded-md border-none bg-transparent px-2 font-mono text-[12px] shadow-none hover:bg-surface-1 hover:text-fg data-[popup-open]:bg-surface-1 data-[popup-open]:text-fg"
           />
+        </div>
+      )}
+      {branch && (
+        <div className="shrink-0 pr-3 [-webkit-app-region:no-drag]">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Toggle context panel"
+                  aria-pressed={rightPanelOpen}
+                  onClick={toggleRightPanel}
+                  className={cn(
+                    "pressable flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-1 hover:text-fg",
+                    rightPanelOpen && "text-fg",
+                  )}
+                >
+                  {/* Mirrored sidebar glyph = the right-hand panel. */}
+                  <SidebarSimpleIcon size={16} className="-scale-x-100" />
+                </button>
+              }
+            />
+            <TooltipContent side="bottom">Toggle context panel</TooltipContent>
+          </Tooltip>
         </div>
       )}
     </header>

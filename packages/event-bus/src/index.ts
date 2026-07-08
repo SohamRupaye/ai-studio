@@ -94,6 +94,43 @@ export interface KnowledgeEntryInfo {
   updatedAt: number;
 }
 
+// ── Context inspector (right panel) ───────────────────────────────────────────
+
+/** What the model saw on this branch's last completed turn. Captured by
+ * chat:send when it assembles the payload and persisted — deliberately never
+ * recomputed on demand, because a payload dry-run can spend tokens
+ * (ancestry compression calls the model, retrieval runs embeddings). */
+export interface ContextStats {
+  model: string;
+  tokenEstimate: number;
+  contextLimit: number;
+  /** Inherited parent-branch messages in context. */
+  tierAncestry: number;
+  /** Compacted summaries of this conversation's older turns. */
+  tierWarm: number;
+  /** Knowledge-graph entries retrieved for the last message. */
+  tierRetrieved: number;
+  /** Recent turns sent verbatim. */
+  tierHot: number;
+  /** Tokens the <selected_artifacts> block contributed (0 when none) — the
+   * baseline the panel adjusts when the user changes the selection. */
+  artifactTokens: number;
+  capturedAt: number;
+}
+
+/** One artifact row in the right panel's selectable list. */
+export interface SelectableArtifact {
+  id: string;
+  type: string;
+  title: string;
+  version: number;
+  updatedAt: number;
+  /** Estimated tokens this artifact adds to context when selected. */
+  tokens: number;
+  /** Whether it was extracted on the branch being inspected. */
+  fromThisBranch: boolean;
+}
+
 // ── Agent stream events pushed from main → renderer ──────────────────────────
 
 // Every variant carries the branchId it belongs to — main runs one agent
@@ -191,6 +228,17 @@ export interface IpcInvokeMap {
   "memory:list": [{ scope?: string }, MemoryFact[]];
   "memory:add": [{ text: string; scope: string }, MemoryFact];
   "memory:remove": [{ id: number }, boolean];
+  /** The exact fact set feeding this branch's prompt (same resolution as prompt assembly). */
+  "memory:for-branch": [{ branchId: string }, MemoryFact[]];
+
+  // Context inspector (right panel)
+  /** Last-turn context stats for a branch; null until a turn has run. */
+  "context:stats": [{ branchId: string }, ContextStats | null];
+  /** The branch project's artifacts (live only), with token estimates and
+   * the branch's current selection — drives the panel's checkboxes. */
+  "artifact:for-branch": [{ branchId: string }, { selected: string[]; artifacts: SelectableArtifact[] }];
+  /** Replace the branch's attached-artifact selection (whole-array set). */
+  "branch:artifacts-set": [{ branchId: string; artifactIds: string[] }, void];
 
   // Models
   /** Selectable models per router entry — the full catalogue minus disabled ones. */

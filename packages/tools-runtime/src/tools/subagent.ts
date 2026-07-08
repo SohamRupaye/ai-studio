@@ -17,7 +17,9 @@ type RunTask = (
 ) => Promise<string>;
 
 let _runTask: RunTask | null = null;
-let _defaultModel = "gpt-5.4-mini";
+// Refreshed by setSubagentDependencies on every turn — falls back to the
+// current chat's model, never a hardcoded id.
+let _defaultModel = "";
 
 export function setSubagentDependencies(runTask: RunTask, defaultModel: string) {
   _runTask = runTask;
@@ -48,11 +50,11 @@ export const subagentDef: ToolDefinition = {
         items: {
           type: "object",
           properties: {
-            id: { type: "string" },
-            task: { type: "string" },
-            system_prompt: { type: "string" },
-            model: { type: "string" },
-            tools: { type: "array", items: { type: "string" } },
+            id: { type: "string", description: "Short identifier for this task, used to label its result." },
+            task: { type: "string", description: "The full task for this subagent, self-contained (it cannot see this conversation)." },
+            system_prompt: { type: "string", description: "Optional system prompt for this subagent." },
+            model: { type: "string", description: "Optional model id to run this task on. Omit to use the current chat's model." },
+            tools: { type: "array", items: { type: "string" }, description: "Optional allowlist of tool names this subagent may use." },
           },
         },
       },
@@ -109,10 +111,10 @@ export const delegateDef: ToolDefinition = {
   parameters: {
     type: "object",
     properties: {
-      task: { type: "string" },
-      job_id: { type: "string" },
-      model: { type: "string" },
-      tools: { type: "array", items: { type: "string" } },
+      task: { type: "string", description: "The full task, self-contained (the background agent cannot see this conversation)." },
+      job_id: { type: "string", description: "Unique id for this job, used to check its result later." },
+      model: { type: "string", description: "Optional model id to run the job on. Omit to use the current chat's model." },
+      tools: { type: "array", items: { type: "string" }, description: "Optional allowlist of tool names the job may use." },
     },
     required: ["task", "job_id"],
   },

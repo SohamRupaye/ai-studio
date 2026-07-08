@@ -17,7 +17,8 @@ import { MetaGraph } from "@ai-studio/graph-engine";
 import { buildPayload, compareBranches, getAncestryMessages } from "@ai-studio/prompt-engine";
 import { runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
-import type { IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
+import { estimateTokens, getContextLimit } from "@ai-studio/tokenizer";
+import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
 
 if (require("electron-squirrel-startup")) app.quit();
 
@@ -293,6 +294,23 @@ function registerHandlers() {
     const payload = await buildPayload(store, branch, graph, globalMem, message);
     const cfg = getConfig();
     const model = branch.model || cfg.defaultModel;
+
+    // Capture what the model sees this turn for the right panel's context
+    // inspector. Persisted (survives restarts) and captured here as a side
+    // effect — deliberately never recomputed on demand, since a payload
+    // dry-run can spend tokens (ancestry compression, embeddings).
+    const contextStats: ContextStats = {
+      model,
+      tokenEstimate: payload.tokenEstimate,
+      contextLimit: getContextLimit(model),
+      tierAncestry: payload.tierAncestry,
+      tierWarm: payload.tierWarm,
+      tierRetrieved: payload.tierRetrieved,
+      tierHot: payload.tierHot,
+      artifactTokens: payload.artifactTokens,
+      capturedAt: Date.now(),
+    };
+    store.setMeta(`ctxstats:${branchId}`, JSON.stringify(contextStats));
     // Org-level API keys override the globals: this chat runs on its org's router.
     const chatRouter = routerFor(
       currentProjectId ? store.getProject(currentProjectId)?.orgId : undefined,
@@ -640,6 +658,49 @@ function registerHandlers() {
   handle("memory:list", ({ scope }) => globalMem.list(scope as any));
   handle("memory:add", ({ text, scope }) => globalMem.add(text, scope as any));
   handle("memory:remove", ({ id }) => globalMem.remove(id));
+  // The exact fact set prompt assembly resolves for this branch — the right
+  // panel shows memories the way the model receives them.
+  handle("memory:for-branch", ({ branchId }) => {
+    const branch = store.getBranch(branchId);
+    if (!branch) return [];
+    const chat = branch.chatId ? store.getChat(branch.chatId) : undefined;
+    return globalMem.forBranch(branchId, branch.chatId, chat?.projectId);
+  });
+
+  // ── Context inspector (right panel) ─────────────────────────────────────────
+
+  handle("context:stats", ({ branchId }) => {
+    const raw = store.getMeta(`ctxstats:${branchId}`);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as ContextStats;
+      // Stats persisted before artifact selection existed lack the field.
+      return { ...parsed, artifactTokens: parsed.artifactTokens ?? 0 };
+    } catch { return null; }
+  });
+  // The whole project's artifacts (selection can pull docs from any branch)
+  // plus this branch's current selection. Token estimates let the panel
+  // project the context cost of a selection change before the next turn.
+  handle("artifact:for-branch", ({ branchId }) => {
+    const branch = store.getBranch(branchId);
+    const chat = branch?.chatId ? store.getChat(branch.chatId) : undefined;
+    if (!branch || !chat) return { selected: [], artifacts: [] };
+    const artifacts = store.listArtifacts(chat.projectId).map((a: any) => ({
+      id: a.id as string,
+      type: a.type as string,
+      title: a.title as string,
+      version: a.version as number,
+      updatedAt: a.updatedAt as number,
+      tokens: estimateTokens(store.getArtifact(a.id)?.content ?? ""),
+      fromThisBranch: a.branchId === branchId,
+    }));
+    // This branch's own artifacts first, then the rest, newest first.
+    artifacts.sort((x, y) => Number(y.fromThisBranch) - Number(x.fromThisBranch) || y.updatedAt - x.updatedAt);
+    return { selected: branch.selectedArtifacts, artifacts };
+  });
+  handle("branch:artifacts-set", ({ branchId, artifactIds }) => {
+    store.setSelectedArtifacts(branchId, artifactIds);
+  });
 
   // ── User ────────────────────────────────────────────────────────────────────
 

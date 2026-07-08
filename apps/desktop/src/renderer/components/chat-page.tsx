@@ -25,7 +25,7 @@ import {
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { counted } from "../lib/utils";
-import { invalidateQueries, useBranches, useMessages, useMutation } from "../hooks/use-ipc-data";
+import { invalidateQueries, useBranches, useMessages, useMutation, useUser } from "../hooks/use-ipc-data";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
 import { Composer, ComposerButton } from "./ui/composer";
@@ -79,11 +79,21 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Time-of-day greeting for the empty state — the sketch's "Good morning,
+// Soham!" moment. Name comes from the user profile; degrades to just the
+// greeting when none is set.
+function greetingLine(name?: string): string {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  return name ? `${greeting}, ${name}` : greeting;
+}
+
 export function ChatPage() {
   const { branchId } = useParams();
   const navigate = useNavigate();
   const { data: branches } = useBranches();
   const branch = branches?.find((b) => b.id === branchId);
+  const { data: user } = useUser();
 
   const { data: messages } = useMessages(branchId);
 
@@ -322,10 +332,8 @@ export function ChatPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-6 px-6">
         <div className="text-center">
-          <h1 className="text-heading-md text-fg">Ask anything</h1>
-          <p className="mt-1 text-body-md text-fg-muted">
-            {branch ? `Starts a new thread on “${branch.name}”.` : "Start the conversation."}
-          </p>
+          <h1 className="text-heading-md text-fg">{greetingLine(user?.name)}</h1>
+          <p className="mt-1 text-body-md text-fg-muted">What shall we build today?</p>
         </div>
         <div className="w-full max-w-2xl">{composer}</div>
       </div>

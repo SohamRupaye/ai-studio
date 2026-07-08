@@ -13,6 +13,9 @@ export interface ContextPayload {
   tierWarm: number;
   tierRetrieved: number;
   tierHot: number;
+  /** Tokens of the <selected_artifacts> block (0 when none attached) — lets
+   * the context inspector project "what if I change the selection". */
+  artifactTokens: number;
   tokenEstimate: number;
 }
 
@@ -148,6 +151,32 @@ export async function buildPayload(
     systemContextBlocks.push(`<pinned_rules>\nThe user pinned these instructions to this branch. They are BINDING — follow them even over your general defaults.\n${pinBlock}\n</pinned_rules>`);
   }
 
+  // Documents the user explicitly attached to this branch (the right panel's
+  // artifact checkboxes). Explicit user intent: the token-pressure fallbacks
+  // below drop summaries and ancestry but deliberately never touch this
+  // block. Oversized artifacts truncate with a visible marker instead of
+  // silently blowing the budget.
+  let artifactTokens = 0;
+  if (branch.selectedArtifacts?.length) {
+    const ARTIFACT_TOKEN_CAP = 8000;
+    const parts: string[] = [];
+    for (const artifactId of branch.selectedArtifacts) {
+      const artifact = store.getArtifact(artifactId);
+      if (!artifact) continue; // deleted since it was selected
+      let content: string = artifact.content;
+      if (estimateTokens(content) > ARTIFACT_TOKEN_CAP) {
+        content = content.slice(0, ARTIFACT_TOKEN_CAP * 4) +
+          `\n[truncated — "${artifact.title}" continues beyond this excerpt]`;
+      }
+      parts.push(`## ${artifact.title}\n${content}`);
+    }
+    if (parts.length) {
+      const block = `<selected_artifacts>\nDocuments the user explicitly attached to this branch's context — treat them as authoritative source material for this conversation.\n${parts.join("\n\n")}\n</selected_artifacts>`;
+      systemContextBlocks.push(block);
+      artifactTokens = estimateTokens(block);
+    }
+  }
+
   // startTurn is a TURN NUMBER, not an array index — turn numbers only match
   // array position when no message has ever been deleted from this branch.
   // Deleting/editing/retrying a message (any of which can remove a turn from
@@ -197,6 +226,7 @@ export async function buildPayload(
     tierWarm: summaries.length,
     tierRetrieved,
     tierHot: hot.length,
+    artifactTokens,
     tokenEstimate: total,
   };
 }

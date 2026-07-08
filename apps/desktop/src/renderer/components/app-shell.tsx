@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { matchPath, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChatCircleIcon, GearIcon } from "@phosphor-icons/react";
 import { cn } from "../lib/utils";
 import { useUiPrefs } from "./ui-prefs";
@@ -7,6 +7,7 @@ import { useWorkspace } from "./workspace-provider";
 import { useChats } from "../hooks/use-ipc-data";
 import { Sidebar, PRIMARY_NAV, FOOTER_NAV } from "./sidebar";
 import { ProjectRail } from "./project-rail";
+import { RightPanel } from "./right-panel";
 import { Topbar } from "./topbar";
 import { TooltipProvider } from "./ui/tooltip";
 import {
@@ -26,7 +27,12 @@ import {
 
 export function AppShell() {
   const [commandOpen, setCommandOpen] = useState(false);
-  const { sidebarOpen, toggleSidebar } = useUiPrefs();
+  const { sidebarOpen, toggleSidebar, rightPanelOpen } = useUiPrefs();
+  const { pathname } = useLocation();
+
+  // The right panel is a branch instrument — it exists only on branch pages.
+  const branchMatch = matchPath("/chats/:chatId/branches/:branchId", pathname);
+  const panelBranchId = branchMatch?.params.branchId;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -58,6 +64,17 @@ export function AppShell() {
           <main className="relative mx-2 mb-2 min-w-0 flex-1 overflow-hidden rounded-lg border border-line bg-surface-1 shadow-raised">
             <Outlet />
           </main>
+          {/* Right panel (context inspector): chrome like the left column —
+              fixed inner width behind an animated wrapper so text doesn't
+              reflow while it collapses. */}
+          <div
+            className={cn(
+              "shrink-0 overflow-hidden transition-[width] duration-200 ease-(--ease-standard)",
+              panelBranchId && rightPanelOpen ? "w-[280px]" : "w-0",
+            )}
+          >
+            {panelBranchId && <RightPanel key={panelBranchId} branchId={panelBranchId} />}
+          </div>
         </div>
       </div>
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />

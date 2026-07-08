@@ -64,5 +64,8 @@ export interface Branch {
   parentId?: string;
   forkAtIndex?: number;
   pins: string[];
+  /** Artifact ids the user attached to this branch's context (fed to prompt
+   * assembly as <selected_artifacts>). Forks inherit the parent's selection. */
+  selectedArtifacts: string[];
   createdAt: number;
 }

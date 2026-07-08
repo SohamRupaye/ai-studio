@@ -18,6 +18,7 @@ export * from "./markdown";
 export * from "./menu";
 export * from "./message";
 export * from "./message-scroller";
+export * from "./meter";
 export * from "./combobox";
 export * from "./command";
 export * from "./radio-group";

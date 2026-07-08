@@ -280,6 +280,24 @@ describe("Space CRUD", () => {
     expect(renamed.autoName).toBe(false);
   });
 
+  it("selected artifacts persist and round-trip through getBranch", () => {
+    const branch = store.createBranch("main", "m");
+    expect(branch.selectedArtifacts).toEqual([]);
+    store.setSelectedArtifacts(branch.id, ["a1", "a2"]);
+    expect(store.getBranch(branch.id)!.selectedArtifacts).toEqual(["a1", "a2"]);
+    store.setSelectedArtifacts(branch.id, []);
+    expect(store.getBranch(branch.id)!.selectedArtifacts).toEqual([]);
+  });
+
+  it("a fork inherits its parent's artifact selection; later changes don't leak back", () => {
+    const parent = store.createBranch("main", "m");
+    store.setSelectedArtifacts(parent.id, ["doc-1"]);
+    const fork = store.createBranch("topic", "m", parent.id, 0);
+    expect(fork.selectedArtifacts).toEqual(["doc-1"]);
+    store.setSelectedArtifacts(fork.id, ["doc-1", "doc-2"]);
+    expect(store.getBranch(parent.id)!.selectedArtifacts).toEqual(["doc-1"]);
+  });
+
   it("renameSpace updates the name", () => {
     const org = store.createOrganisation("Org");
     const project = store.createProject(org.id, "Project");

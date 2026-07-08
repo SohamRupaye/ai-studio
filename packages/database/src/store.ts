@@ -69,17 +69,18 @@ CREATE TABLE IF NOT EXISTS chats (
 );
 
 CREATE TABLE IF NOT EXISTS branches (
-  id            TEXT PRIMARY KEY,
-  chat_id       TEXT REFERENCES chats(id),
-  name          TEXT NOT NULL,
-  model         TEXT NOT NULL,
-  parent_id     TEXT,
-  fork_at_index INTEGER,
-  pins          TEXT DEFAULT '[]',
-  created_by    TEXT REFERENCES users(id),
-  created_at    REAL,
-  updated_at    REAL,
-  deleted_at    REAL
+  id                 TEXT PRIMARY KEY,
+  chat_id            TEXT REFERENCES chats(id),
+  name               TEXT NOT NULL,
+  model              TEXT NOT NULL,
+  parent_id          TEXT,
+  fork_at_index      INTEGER,
+  pins               TEXT DEFAULT '[]',
+  selected_artifacts TEXT DEFAULT '[]',
+  created_by         TEXT REFERENCES users(id),
+  created_at         REAL,
+  updated_at         REAL,
+  deleted_at         REAL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -165,6 +166,11 @@ export class Store {
     }
     if (!branchCols.find((c: any) => c.name === "created_by")) {
       this.db.exec("ALTER TABLE branches ADD COLUMN created_by TEXT");
+    }
+    // Artifacts the user attached to a branch's context (JSON id array,
+    // same convention as pins).
+    if (!branchCols.find((c: any) => c.name === "selected_artifacts")) {
+      this.db.exec("ALTER TABLE branches ADD COLUMN selected_artifacts TEXT DEFAULT '[]'");
     }
     const msgCols = this.db.prepare("PRAGMA table_info(messages)").all() as any[];
     if (!msgCols.find((c: any) => c.name === "model")) {
@@ -584,6 +590,9 @@ export class Store {
   // ── Branches ───────────────────────────────────────────────────────────────
 
   createBranch(name: string, model: string, parentId?: string, forkAt?: number, chatId?: string): Branch {
+    // A fork inherits the parent's attached artifacts — same git-for-context
+    // semantics as inheriting the transcript.
+    const inheritedArtifacts = parentId ? this.getBranch(parentId)?.selectedArtifacts ?? [] : [];
     const branch: Branch = {
       id: randomUUID(),
       chatId,
@@ -592,13 +601,20 @@ export class Store {
       parentId,
       forkAtIndex: forkAt,
       pins: [],
+      selectedArtifacts: inheritedArtifacts,
       createdAt: Date.now(),
     };
     this.db.prepare(
-      `INSERT INTO branches (id, chat_id, name, model, parent_id, fork_at_index, pins, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(branch.id, branch.chatId ?? null, branch.name, branch.model, branch.parentId ?? null, branch.forkAtIndex ?? null, "[]", branch.createdAt, branch.createdAt);
+      `INSERT INTO branches (id, chat_id, name, model, parent_id, fork_at_index, pins, selected_artifacts, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(branch.id, branch.chatId ?? null, branch.name, branch.model, branch.parentId ?? null, branch.forkAtIndex ?? null, "[]", JSON.stringify(inheritedArtifacts), branch.createdAt, branch.createdAt);
     return branch;
+  }
+
+  /** Replace a branch's attached-artifact selection (whole-array set). */
+  setSelectedArtifacts(branchId: string, artifactIds: string[]): void {
+    this.db.prepare("UPDATE branches SET selected_artifacts = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(artifactIds), Date.now(), branchId);
   }
 
   /** Lookup by exact ID only. */
@@ -669,6 +685,7 @@ export class Store {
       parentId: row.parent_id ?? undefined,
       forkAtIndex: row.fork_at_index ?? undefined,
       pins: JSON.parse(row.pins || "[]"),
+      selectedArtifacts: JSON.parse(row.selected_artifacts || "[]"),
       createdAt: row.created_at,
     };
   }
