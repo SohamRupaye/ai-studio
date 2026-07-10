@@ -3,6 +3,7 @@
  * Supports: Claude, GPT-4, Gemini, Mistral, Llama, DeepSeek, etc.
  */
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toOpenAIContent } from "./base.js";
 import { ProviderRateLimitError } from "./base.js";
 import { getConfig } from "./config.js";
 
@@ -151,7 +152,7 @@ export class OpenRouterProvider implements Provider {
   private formatMessages(messages: ProviderMessage[]): any[] {
     return messages.map(m => {
       if (m.role === "tool_result") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
-      const msg: any = { role: m.role, content: m.content };
+      const msg: any = { role: m.role, content: toOpenAIContent(m.content) };
       if (m.toolCalls?.length) {
         msg.tool_calls = m.toolCalls.map(tc => ({
           id: tc.id, type: "function", function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },

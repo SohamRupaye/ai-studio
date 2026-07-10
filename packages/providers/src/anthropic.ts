@@ -1,4 +1,5 @@
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toAnthropicContent } from "./base.js";
 import { getConfig } from "./config.js";
 
 export class AnthropicProvider implements Provider {
@@ -137,11 +138,14 @@ export class AnthropicProvider implements Provider {
         formatted.push({ role: "assistant", content });
       } else {
         const role = m.role === "assistant" ? "assistant" : "user";
+        const content = toAnthropicContent(m.content);
         const last = formatted[formatted.length - 1];
-        if (last && last.role === role && typeof last.content === "string") {
-          last.content += "\n\n" + m.content;
+        // Only merge consecutive same-role turns when both are plain strings;
+        // a message carrying image blocks stays its own entry.
+        if (last && last.role === role && typeof last.content === "string" && typeof content === "string") {
+          last.content += "\n\n" + content;
         } else {
-          formatted.push({ role, content: m.content });
+          formatted.push({ role, content });
         }
       }
     }

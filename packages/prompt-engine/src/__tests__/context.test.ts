@@ -33,6 +33,30 @@ describe("buildPayload — selected artifacts", () => {
     expect(payload.systemContext).toContain("## API spec");
     expect(payload.systemContext).toContain("The endpoint returns 42.");
     expect(payload.artifactTokens).toBeGreaterThan(0);
+    expect(payload.nativeDocuments).toEqual([]);
+  });
+
+  it("routes a selected PDF to nativeDocuments instead of text when the model reads PDFs", async () => {
+    const branch = store.createBranch("main", "m");
+    store.createUploadedArtifact({
+      id: "pdf-1", branchId: branch.id, projectId, type: "document",
+      title: "report.pdf", content: "extracted text layer", originalFilename: "report.pdf",
+      mime: "application/pdf", blobPath: "blobs/pdf-1.pdf", byteSize: 120_000, sha256: "x",
+    });
+    store.setSelectedArtifacts(branch.id, ["pdf-1"]);
+    store.addMessage(branch.id, "user", "hello");
+
+    const native = await buildPayload(store, store.getBranch(branch.id)!, undefined, undefined, undefined, { nativePdf: true });
+    expect(native.nativeDocuments).toEqual([
+      { id: "pdf-1", title: "report.pdf", blobPath: "blobs/pdf-1.pdf", mime: "application/pdf" },
+    ]);
+    expect(native.systemContext).not.toContain("extracted text layer");
+    expect(native.artifactTokens).toBeGreaterThan(0);
+
+    // Without native support the same PDF rides as extracted text, as before.
+    const textual = await buildPayload(store, store.getBranch(branch.id)!);
+    expect(textual.nativeDocuments).toEqual([]);
+    expect(textual.systemContext).toContain("extracted text layer");
   });
 
   it("includes no block and zero tokens when nothing is selected", async () => {

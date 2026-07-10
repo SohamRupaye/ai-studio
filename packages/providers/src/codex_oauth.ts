@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toResponsesContent } from "./base.js";
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const ISSUER = "https://auth.openai.com";
@@ -347,7 +348,7 @@ export class CodexOAuthProvider implements Provider {
           input.push({ type: "function_call", call_id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments) });
         }
       } else {
-        input.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
+        input.push({ role: m.role === "assistant" ? "assistant" : "user", content: toResponsesContent(m.content) });
       }
     }
     return input;

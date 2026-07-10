@@ -3,6 +3,7 @@
  * Uses the Bedrock converse API with AWS Sig V4 auth
  */
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toBedrockContent } from "./base.js";
 import { createHmac, createHash } from "crypto";
 
 export interface BedrockConfig {
@@ -96,7 +97,8 @@ export class BedrockProvider implements Provider {
       if (m.toolCalls?.length) {
         return { role: "assistant", content: m.toolCalls.map(tc => ({ toolUse: { toolUseId: tc.id, name: tc.name, input: tc.arguments } })) };
       }
-      return { role: m.role === "assistant" ? "assistant" : "user", content: [{ text: m.content }] };
+      const role = m.role === "assistant" ? "assistant" : "user";
+      return { role, content: toBedrockContent(m.content) };
     });
   }
 

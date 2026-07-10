@@ -1,6 +1,6 @@
-import type { Router, ProviderMessage, StreamEvent } from "@ai-studio/providers";
+import type { Router, ProviderMessage, StreamEvent, ContentBlock } from "@ai-studio/providers";
+import { contentToText } from "@ai-studio/providers";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
-import { detectImages, buildMultimodalContent, stripImagePaths } from "./images.js";
 import { CostTracker } from "./costs.js";
 
 export interface ToolContext {
@@ -95,27 +95,20 @@ export class Agent {
 
   async *run(
     model: string,
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | ContentBlock[] }>,
     system: string,
     signal?: AbortSignal,
   ): AsyncGenerator<AgentStreamEvent> {
-    const history: ProviderMessage[] = messages.map(m => {
-      // Detect images in user messages for multimodal
-      if (m.role === "user") {
-        const imagePaths = detectImages(m.content);
-        if (imagePaths.length) {
-          const parts = buildMultimodalContent(stripImagePaths(m.content, imagePaths), imagePaths);
-          // For now, flatten to text + image description (provider handles format)
-          return { role: m.role as any, content: m.content };
-        }
-      }
-      return { role: m.role as any, content: m.content };
-    });
+    // Content (string or text+image blocks) is already resolved by the caller;
+    // pass it straight through. Image blocks reach the provider adapters, which
+    // translate them to each wire format.
+    const history: ProviderMessage[] = messages.map(m => ({ role: m.role as any, content: m.content }));
 
     const toolDefs = this.tools.getDefinitions();
     const allToolCalls: AgentResult["toolCalls"] = [];
     // Latest user turn — used to decide whether "act, don't ask" nudges apply.
-    const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+    // Flatten to text: the nudge heuristics only inspect words, not images.
+    const lastUserMessage = contentToText([...messages].reverse().find(m => m.role === "user")?.content ?? "");
     let iterations = 0;
     // The reply is EVERYTHING the model wrote across iterations, not just the
     // last chunk: models routinely write a long answer, then call a tool, then

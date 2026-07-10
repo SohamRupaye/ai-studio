@@ -1,3 +1,11 @@
+/** An image attached to a user message. Bytes live on disk under data/blobs;
+ * the row stores this reference. mediaType is the image mime (e.g. image/png). */
+export interface MessageImage {
+  blobPath: string;
+  mediaType: string;
+  filename: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -8,6 +16,8 @@ export interface Message {
   model?: string;
   /** Tool activity of the turn that produced this assistant message. */
   toolCalls?: Array<{ name: string; success: boolean }>;
+  /** Images the user attached to this turn (user messages only). */
+  images?: MessageImage[];
 }
 
 export interface Summary {

@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Space, Chat } from "@ai-studio/shared";
+import type { Branch, Organisation, Project, Space, Chat, MessageImage } from "@ai-studio/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
@@ -129,6 +129,8 @@ export interface SelectableArtifact {
   tokens: number;
   /** Whether it was extracted on the branch being inspected. */
   fromThisBranch: boolean;
+  /** 'extracted' (from an agent reply) or 'upload' (a user-attached file). */
+  source: string;
 }
 
 // ── Agent stream events pushed from main → renderer ──────────────────────────
@@ -149,8 +151,27 @@ export type AgentStreamEvent =
 
 export interface IpcInvokeMap {
   // Chat
-  "chat:send": [{ branchId: string; message: string }, void];
+  "chat:send": [{ branchId: string; message: string; images?: MessageImage[] }, void];
   "chat:abort": [void, void];
+  /** Copy images into data/blobs (downscaling oversized PNG/JPEG to fit
+   * provider limits) and return references to attach to the next message,
+   * plus per-file reasons for anything skipped. With `paths` (drag-drop) the
+   * given files are staged directly; without, a native picker opens. Both
+   * arrays empty if cancelled. */
+  "image:stage": [
+    { branchId: string; paths?: string[] },
+    { staged: MessageImage[]; skipped: Array<{ filename: string; reason: string }> },
+  ];
+  /** Stage images from raw bytes — pasted bitmaps and drags with no backing
+   * file (e.g. an image dragged off a web page). Same staging pipeline and
+   * return shape as image:stage. */
+  "image:stage-data": [
+    { branchId: string; images: Array<{ filename: string; dataBase64: string }> },
+    { staged: MessageImage[]; skipped: Array<{ filename: string; reason: string }> },
+  ];
+  /** Read a staged/attached image back as a data URL for display in the
+   * renderer (which has no filesystem access). Null if the blob is missing. */
+  "attachment:data": [{ blobPath: string }, string | null];
 
   // Organisations
   "org:list": [void, Organisation[]];
@@ -214,7 +235,7 @@ export interface IpcInvokeMap {
 
   // Messages
   /** A branch's transcript: inherited ancestry (same walk prompt assembly uses) followed by its own messages. */
-  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean }>; inherited?: boolean }>];
+  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean }>; images?: MessageImage[]; inherited?: boolean }>];
   "message:undo": [{ branchId: string }, number];
   "message:edit": [{ branchId: string; turn: number }, void];
   "message:delete": [{ branchId: string; turn: number }, number];
@@ -239,6 +260,22 @@ export interface IpcInvokeMap {
   "artifact:for-branch": [{ branchId: string }, { selected: string[]; artifacts: SelectableArtifact[] }];
   /** Replace the branch's attached-artifact selection (whole-array set). */
   "branch:artifacts-set": [{ branchId: string; artifactIds: string[] }, void];
+  /**
+   * Attach files to a branch: parse each to text, persist as an artifact, and
+   * auto-add it to this branch's selection. With no `paths`, opens a native
+   * file picker; `paths` (e.g. from a drag-drop) skips the dialog. Returns what
+   * landed and what was skipped (unsupported type, or no extractable text —
+   * e.g. a scanned PDF), so the UI can report honestly.
+   */
+  "artifact:upload": [
+    { branchId: string; paths?: string[] },
+    {
+      /** `note` carries an accepted-with-caveat warning to surface (e.g. a
+       * scanned PDF only natively-PDF-capable models can read). */
+      created: Array<{ id: string; title: string; type: string; note?: string }>;
+      skipped: Array<{ filename: string; reason: string }>;
+    },
+  ];
 
   // Models
   /** Selectable models per router entry — the full catalogue minus disabled ones. */

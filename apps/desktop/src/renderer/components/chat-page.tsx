@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { toast } from "sonner";
 import {
   ArrowsClockwiseIcon,
@@ -23,7 +24,9 @@ import {
   TrashIcon,
   WarningCircleIcon,
   WrenchIcon,
+  XIcon,
 } from "@phosphor-icons/react";
+import type { MessageImage } from "@ai-studio/shared";
 import { counted } from "../lib/utils";
 import { invalidateQueries, useBranches, useMessages, useMutation, useUser } from "../hooks/use-ipc-data";
 import { Button } from "./ui/button";
@@ -79,6 +82,18 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Base64 for IPC transport, chunked so large images don't blow the one-shot
+ * String.fromCharCode argument limit. */
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 // Time-of-day greeting for the empty state — the sketch's "Good morning,
 // Soham!" moment. Name comes from the user profile; degrades to just the
 // greeting when none is set.
@@ -86,6 +101,95 @@ function greetingLine(name?: string): string {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   return name ? `${greeting}, ${name}` : greeting;
+}
+
+/** Loads a staged/attached image blob (main has the bytes; the renderer has no
+ * filesystem access) and renders it. Shows nothing until the data URL arrives. */
+function BlobImage({ blobPath, alt, className }: { blobPath: string; alt: string; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    window.ipc.invoke("attachment:data", { blobPath }).then((url) => { if (live) setSrc(url); });
+    return () => { live = false; };
+  }, [blobPath]);
+  if (!src) return <div className={className} aria-label={alt} />;
+  return <img src={src} alt={alt} className={className} />;
+}
+
+function StagedImage({ blobPath, filename }: { blobPath: string; filename: string }) {
+  return (
+    <BlobImage
+      blobPath={blobPath}
+      alt={filename}
+      className="size-16 rounded-lg border border-line object-cover"
+    />
+  );
+}
+
+/** A turn's images, rendered ABOVE the bubble (never inside it — an image
+ * inside MessageContent stretches the bubble around long text). Click opens
+ * the fullscreen viewer. Follows the Message's own role alignment. */
+function MessageImages({
+  images,
+  onOpen,
+}: {
+  images: MessageImage[];
+  onOpen: (image: MessageImage) => void;
+}) {
+  return (
+    <div className="flex max-w-[85%] flex-wrap gap-2 in-data-[role=user]:justify-end">
+      {images.map((img) => (
+        <button
+          key={img.blobPath}
+          type="button"
+          aria-label={`View ${img.filename} fullscreen`}
+          onClick={() => onOpen(img)}
+          className="cursor-zoom-in overflow-hidden rounded-md border border-line transition-opacity hover:opacity-90"
+        >
+          <BlobImage blobPath={img.blobPath} alt={img.filename} className="max-h-48 object-contain" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Fullscreen image viewer — Escape, the close button, or a click anywhere
+ * dismisses it. */
+function ImageLightbox({
+  image,
+  onClose,
+}: {
+  image: MessageImage | null;
+  onClose: () => void;
+}) {
+  return (
+    <BaseDialog.Root open={image !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/80 data-[open]:animate-fade-in data-[closed]:animate-fade-out" />
+        <BaseDialog.Popup
+          className="fixed inset-0 z-50 flex cursor-zoom-out flex-col items-center justify-center gap-3 p-8 outline-none data-[open]:animate-fade-in data-[closed]:animate-fade-out"
+          onClick={onClose}
+        >
+          {image && (
+            <>
+              <BlobImage
+                blobPath={image.blobPath}
+                alt={image.filename}
+                className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-xl"
+              />
+              <span className="text-body-sm text-white/70 select-none">{image.filename}</span>
+            </>
+          )}
+          <BaseDialog.Close
+            aria-label="Close"
+            className="pressable absolute right-4 top-4 flex size-8 items-center justify-center rounded-md bg-black/50 text-white/80 hover:bg-black/70 hover:text-white"
+          >
+            <XIcon size={18} />
+          </BaseDialog.Close>
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
+  );
 }
 
 export function ChatPage() {
@@ -118,7 +222,18 @@ export function ChatPage() {
   // finishes, so waiting for a real refetch would leave the user's own
   // message invisible for the entire generation.
   const [pendingUser, setPendingUser] = useState<string | null>(null);
+  // Images staged (copied into blobs) but not yet sent — ride the next message.
+  const [pendingImages, setPendingImages] = useState<MessageImage[]>([]);
+  // Images on the just-sent turn, shown in the optimistic bubble during
+  // generation (mirrors pendingUser) until the real message refetches.
+  const [pendingUserImages, setPendingUserImages] = useState<MessageImage[]>([]);
+  // Image open in the fullscreen viewer, or null.
+  const [viewerImage, setViewerImage] = useState<MessageImage | null>(null);
   const lastSentRef = useRef("");
+  // Images that rode the last send — Retry must resend them too (the composer
+  // chips are cleared optimistically, so this is the only surviving reference
+  // when a send fails, e.g. the "model can't view images" gate).
+  const lastSentImagesRef = useRef<MessageImage[]>([]);
   // Text deltas arrive as individual IPC messages — often hundreds per
   // second, each in its own task, each forcing a separate React render.
   // Buffer them and flush at most once per animation frame; the stream
@@ -193,22 +308,29 @@ export function ChatPage() {
     };
   }, [branchId]);
 
-  const send = async (text: string) => {
+  // Explicit `images` (retry/regenerate/edit resends) bypass the composer's
+  // staged chips; without it the staged chips ride along and are consumed.
+  const send = async (text: string, images?: MessageImage[]) => {
     const trimmed = text.trim();
-    if (!branchId || !trimmed || sending) return;
+    const imgs = images ?? pendingImages;
+    if (!branchId || sending || (!trimmed && imgs.length === 0)) return;
     lastSentRef.current = trimmed;
+    lastSentImagesRef.current = imgs;
     setErrorState(null);
     setSending(true);
     setPendingUser(trimmed);
+    setPendingUserImages(imgs);
+    if (images === undefined) setPendingImages([]);
     setStreaming({ text: "", toolCalls: [] });
     try {
-      await sendMessage.mutate({ branchId, message: trimmed });
+      await sendMessage.mutate({ branchId, message: trimmed, images: imgs.length ? imgs : undefined });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send message");
     } finally {
       setSending(false);
       setStreaming(null);
       setPendingUser(null);
+      setPendingUserImages([]);
     }
   };
 
@@ -226,10 +348,10 @@ export function ChatPage() {
     void send(value);
   };
 
-  const retryTurn = (turn: number, content: string) => {
+  const retryTurn = (turn: number, content: string, images?: MessageImage[]) => {
     editMessage
       .mutate({ branchId: branchId!, turn })
-      .then(() => send(content))
+      .then(() => send(content, images ?? []))
       .catch(() => toast.error("Couldn't retry that message"));
   };
 
@@ -237,21 +359,22 @@ export function ChatPage() {
     if (!errorState) return;
     const { turn } = errorState;
     const text = lastSentRef.current;
+    const images = lastSentImagesRef.current;
     setErrorState(null);
     if (turn >= 0) {
       editMessage
         .mutate({ branchId: branchId!, turn })
-        .then(() => send(text))
+        .then(() => send(text, images))
         .catch(() => toast.error("Couldn't retry that message"));
     } else {
-      void send(text);
+      void send(text, images);
     }
   };
 
-  const regenerate = (precedingUserText: string) => {
+  const regenerate = (precedingUserText: string, images?: MessageImage[]) => {
     undoTurn
       .mutate({ branchId: branchId! })
-      .then(() => send(precedingUserText))
+      .then(() => send(precedingUserText, images ?? []))
       .catch(() => toast.error("Couldn't regenerate that response"));
   };
 
@@ -279,8 +402,44 @@ export function ChatPage() {
   // duplicate of the same message.
   const lastTurn = turns[turns.length - 1];
   const showPendingUser = Boolean(
-    pendingUser && !(lastTurn?.role === "user" && lastTurn.content === pendingUser),
+    (pendingUser || pendingUserImages.length) && !(lastTurn?.role === "user" && lastTurn.content === pendingUser),
   );
+
+  // With `paths` (drag-drop) the files upload directly; without, main opens
+  // its picker.
+  const uploadFiles = async (paths?: string[]) => {
+    if (!branchId) return;
+    try {
+      const { created, skipped } = await window.ipc.invoke("artifact:upload", { branchId, paths });
+      if (created.length) {
+        invalidateQueries();
+        toast.success(
+          created.length === 1
+            ? `Attached “${created[0].title}” — it's now in this branch's context`
+            : `Attached ${created.length} files to this branch's context`,
+        );
+        for (const c of created) if (c.note) toast.info(`${c.title}: ${c.note}`);
+      }
+      for (const s of skipped) toast.error(`${s.filename}: ${s.reason}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't attach files");
+    }
+  };
+
+  // ⌘U / Ctrl+U — the shortcut the attach menu advertises. Ref keeps the
+  // listener stable while always calling the latest closure.
+  const uploadFilesRef = useRef(uploadFiles);
+  uploadFilesRef.current = uploadFiles;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "u") {
+        e.preventDefault();
+        void uploadFilesRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (branches && !branch) {
     return (
@@ -290,12 +449,107 @@ export function ChatPage() {
     );
   }
 
+  const reportStaged = (
+    staged: MessageImage[],
+    skipped: Array<{ filename: string; reason: string }>,
+  ) => {
+    if (staged.length) setPendingImages((prev) => [...prev, ...staged]);
+    for (const s of skipped) toast.error(`${s.filename}: ${s.reason}`);
+  };
+
+  const handleAttachImages = async () => {
+    if (!branchId) return;
+    try {
+      const { staged, skipped } = await window.ipc.invoke("image:stage", { branchId });
+      reportStaged(staged, skipped);
+      if (!staged.length && !skipped.length) toast("No images added");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't attach images");
+    }
+  };
+
+  // Pasted bitmaps and pathless drags (e.g. an image dragged off a web page)
+  // have no filesystem path — ship the bytes to main for staging.
+  const stageImageFiles = async (files: File[]) => {
+    if (!branchId || !files.length) return;
+    try {
+      const images = await Promise.all(
+        files.map(async (f) => ({
+          filename: f.name || "pasted-image",
+          dataBase64: arrayBufferToBase64(await f.arrayBuffer()),
+        })),
+      );
+      const { staged, skipped } = await window.ipc.invoke("image:stage-data", { branchId, images });
+      reportStaged(staged, skipped);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't attach images");
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+    e.preventDefault();
+    void stageImageFiles(files);
+  };
+
+  // Dropped files route by kind: images stage as attachments (by path when
+  // the OS provides one, by bytes otherwise), everything else goes down the
+  // document-upload path with its own per-file skip reasons.
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!branchId) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (!files.length) return;
+    const imagePaths: string[] = [];
+    const docPaths: string[] = [];
+    const pathless: File[] = [];
+    for (const f of files) {
+      const p = window.ipc.pathForFile(f);
+      if (!p) {
+        if (f.type.startsWith("image/")) pathless.push(f);
+        continue;
+      }
+      if (f.type.startsWith("image/")) imagePaths.push(p);
+      else docPaths.push(p);
+    }
+    if (pathless.length) void stageImageFiles(pathless);
+    if (imagePaths.length) {
+      window.ipc
+        .invoke("image:stage", { branchId, paths: imagePaths })
+        .then(({ staged, skipped }) => reportStaged(staged, skipped))
+        .catch(() => toast.error("Couldn't attach images"));
+    }
+    if (docPaths.length) void uploadFiles(docPaths);
+  };
+
+  const imageChips = pendingImages.length > 0 && (
+    <div className="flex w-full flex-wrap gap-3 rounded-[20px] border border-line bg-surface-1 p-3 shadow-float">
+      {pendingImages.map((img, i) => (
+        <div key={img.blobPath} className="relative">
+          <StagedImage blobPath={img.blobPath} filename={img.filename} />
+          <button
+            type="button"
+            aria-label={`Remove ${img.filename}`}
+            onClick={() => setPendingImages((prev) => prev.filter((_, j) => j !== i))}
+            className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/55 text-white backdrop-blur transition-colors hover:bg-black/75"
+          >
+            <XIcon size={12} weight="bold" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
   const composer = (
+    <div className="flex w-full flex-col gap-2">
+      {imageChips}
     <Composer
       className="w-full"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onSubmit={submitDraft}
+      onPaste={handlePaste}
       disabled={sending}
       placeholder={editingTurn !== null ? "Edit message…" : "Ask anything…"}
       leading={
@@ -304,11 +558,14 @@ export function ChatPage() {
             <PaperclipIcon size={18} />
           </MenuTrigger>
           <MenuContent side="top" align="start" sideOffset={10}>
-            <MenuItem>
-              <ImagesIcon /> Add files and photos
+            <MenuItem onClick={() => void uploadFiles()}>
+              <FileTextIcon /> Add files
               <MenuShortcut>
                 <KbdGroup keys={["⌘", "U"]} />
               </MenuShortcut>
+            </MenuItem>
+            <MenuItem onClick={handleAttachImages}>
+              <ImagesIcon /> Add photos
             </MenuItem>
             <MenuSeparator />
             <MenuItem>
@@ -324,13 +581,18 @@ export function ChatPage() {
         </Menu>
       }
     />
+    </div>
   );
 
   const empty = turns.length === 0 && !streaming;
 
   if (empty) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 px-6">
+      <div
+        className="flex h-full flex-col items-center justify-center gap-6 px-6"
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+      >
         <div className="text-center">
           <h1 className="text-heading-md text-fg">{greetingLine(user?.name)}</h1>
           <p className="mt-1 text-body-md text-fg-muted">What shall we build today?</p>
@@ -341,7 +603,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport className="px-6 py-6">
@@ -363,9 +625,14 @@ export function ChatPage() {
                           }))}
                         />
                       )}
-                      <MessageContent>
-                        <Markdown text={m.content} />
-                      </MessageContent>
+                      {m.images?.length ? (
+                        <MessageImages images={m.images} onOpen={setViewerImage} />
+                      ) : null}
+                      {m.content || !m.images?.length ? (
+                        <MessageContent>
+                          <Markdown text={m.content} />
+                        </MessageContent>
+                      ) : null}
                       <MessageActions>
                         {m.inherited ? (
                           // Inherited rows belong to ancestor branches —
@@ -385,6 +652,9 @@ export function ChatPage() {
                               onClick={() => {
                                 setEditingTurn(m.turn);
                                 setDraft(m.content);
+                                // The turn's images become removable chips so
+                                // the resend keeps (or drops) them explicitly.
+                                setPendingImages(m.images ?? []);
                               }}
                             >
                               <PencilSimpleIcon />
@@ -392,7 +662,7 @@ export function ChatPage() {
                             <MessageAction label="Copy message" onClick={() => copy(m.content)}>
                               <CopyIcon />
                             </MessageAction>
-                            <MessageAction label="Retry" onClick={() => retryTurn(m.turn, m.content)}>
+                            <MessageAction label="Retry" onClick={() => retryTurn(m.turn, m.content, m.images)}>
                               <ArrowsClockwiseIcon />
                             </MessageAction>
                             <MessageAction
@@ -416,7 +686,7 @@ export function ChatPage() {
                             {precedingUser && (
                               <MessageAction
                                 label="Regenerate"
-                                onClick={() => regenerate(precedingUser.content)}
+                                onClick={() => regenerate(precedingUser.content, precedingUser.images)}
                               >
                                 <ArrowsClockwiseIcon />
                               </MessageAction>
@@ -461,9 +731,14 @@ export function ChatPage() {
               {showPendingUser && (
                 <MessageScrollerItem messageId="__pending-user" className="[content-visibility:visible]">
                   <Message role="user">
-                    <MessageContent>
-                      <Markdown text={pendingUser!} />
-                    </MessageContent>
+                    {pendingUserImages.length > 0 && (
+                      <MessageImages images={pendingUserImages} onOpen={setViewerImage} />
+                    )}
+                    {pendingUser ? (
+                      <MessageContent>
+                        <Markdown text={pendingUser} />
+                      </MessageContent>
+                    ) : null}
                   </Message>
                 </MessageScrollerItem>
               )}
@@ -521,6 +796,8 @@ export function ChatPage() {
               onClick={() => {
                 setEditingTurn(null);
                 setDraft("");
+                // Drop the chips the edit staged from the original turn.
+                setPendingImages([]);
               }}
             >
               Cancel
@@ -541,6 +818,8 @@ export function ChatPage() {
         )}
         {composer}
       </div>
+
+      <ImageLightbox image={viewerImage} onClose={() => setViewerImage(null)} />
 
       <NameDialog
         open={branchingFromTurn !== null}

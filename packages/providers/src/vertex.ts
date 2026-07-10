@@ -2,6 +2,7 @@
  * Google Vertex AI Provider - GCP-native access to Gemini + Claude via Vertex
  */
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toGoogleParts } from "./base.js";
 
 export interface VertexAIConfig {
   projectId: string;
@@ -95,7 +96,7 @@ export class VertexAIProvider implements Provider {
       if (m.toolCalls?.length) {
         return { role: "model", parts: m.toolCalls.map(tc => ({ functionCall: { name: tc.name, args: tc.arguments } })) };
       }
-      return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] };
+      return { role: m.role === "assistant" ? "model" : "user", parts: toGoogleParts(m.content) };
     });
   }
 }

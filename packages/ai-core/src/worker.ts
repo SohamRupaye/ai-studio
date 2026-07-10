@@ -12,6 +12,7 @@
 
 import type { Agent } from "./agent.js";
 import type { AgentStreamEvent } from "./agent.js";
+import type { ContentBlock } from "@ai-studio/providers";
 
 /**
  * Run the agent loop with cooperative yielding to prevent blocking the event loop.
@@ -20,7 +21,7 @@ import type { AgentStreamEvent } from "./agent.js";
 export async function* runAgentCooperative(
   agent: Agent,
   model: string,
-  messages: Array<{ role: string; content: string }>,
+  messages: Array<{ role: string; content: string | ContentBlock[] }>,
   system: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentStreamEvent> {

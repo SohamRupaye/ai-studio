@@ -4,6 +4,7 @@
  * use the same OpenAI chat completions API with different base URLs.
  */
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toOpenAIContent } from "./base.js";
 import { getConfig } from "./config.js";
 
 export interface OpenAICompatibleConfig {
@@ -118,7 +119,7 @@ export class OpenAICompatibleProvider implements Provider {
     return messages.map(m => {
       if (m.role === "tool_result") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
       if (m.toolCalls?.length) return { role: "assistant", content: null, tool_calls: m.toolCalls.map(tc => ({ id: tc.id, type: "function", function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } })) };
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: toOpenAIContent(m.content) };
     });
   }
 

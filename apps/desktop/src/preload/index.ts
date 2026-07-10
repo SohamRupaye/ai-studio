@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   IpcInvokeMap,
   IpcEventMap,
@@ -37,6 +37,19 @@ const ipc = {
     };
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
+  },
+
+  /**
+   * Absolute filesystem path of a dropped/picked File, or "" when it has none
+   * (pasted bitmaps, images dragged from a web page). Electron ≥32 removed
+   * File.path; this is the sanctioned replacement, only callable in preload.
+   */
+  pathForFile(file: File): string {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return "";
+    }
   },
 };
 

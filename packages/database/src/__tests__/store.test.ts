@@ -826,3 +826,70 @@ describe("ensureDefaults", () => {
     expect(store.listOrganisations()).toHaveLength(1);
   });
 });
+
+// ── Uploaded artifacts ─────────────────────────────────────────────────────────
+
+describe("Uploaded artifacts", () => {
+  it("createUploadedArtifact persists text + provenance and reads back", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat");
+    const branch = store.createBranch("main", "m", undefined, undefined, chat.id);
+
+    const created = store.createUploadedArtifact({
+      id: "up-1", branchId: branch.id, projectId: project.id, type: "document",
+      title: "notes.pdf", content: "extracted text", originalFilename: "notes.pdf",
+      mime: "application/pdf", blobPath: "blobs/up-1.pdf", byteSize: 1234, sha256: "abc123",
+    });
+    expect(created.id).toBe("up-1");
+
+    const got = store.getArtifact("up-1");
+    expect(got.content).toBe("extracted text");
+    expect(got.source).toBe("upload");
+    expect(got.originalFilename).toBe("notes.pdf");
+    expect(got.mime).toBe("application/pdf");
+    expect(got.blobPath).toBe("blobs/up-1.pdf");
+
+    const listed = store.listArtifacts(project.id).find((x: any) => x.id === "up-1");
+    expect(listed.source).toBe("upload");
+  });
+
+  it("agent-extracted artifacts report source 'extracted'", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const branch = store.createBranch("main", "m");
+    const a = store.createArtifact(branch.id, project.id, "doc", "D", "c");
+    expect(store.getArtifact(a.id).source).toBe("extracted");
+  });
+
+  it("message images round-trip through addMessage/getMessages", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const chat = store.createChat(project.id, "Chat");
+    const branch = store.createBranch("main", "m", undefined, undefined, chat.id);
+
+    store.addMessage(branch.id, "user", "look at this", undefined, undefined, [
+      { blobPath: "blobs/x.png", mediaType: "image/png", filename: "x.png" },
+    ]);
+    const msgs = store.getMessages(branch.id);
+    expect(msgs[0].images).toEqual([
+      { blobPath: "blobs/x.png", mediaType: "image/png", filename: "x.png" },
+    ]);
+
+    // A text-only message carries no images field.
+    store.addMessage(branch.id, "assistant", "here");
+    expect(store.getMessages(branch.id)[1].images).toBeUndefined();
+  });
+
+  it("a text upload with no blob round-trips a null blobPath", () => {
+    const org = store.createOrganisation("Org");
+    const project = store.createProject(org.id, "Project");
+    const branch = store.createBranch("main", "m");
+    store.createUploadedArtifact({
+      id: "up-2", branchId: branch.id, projectId: project.id, type: "document",
+      title: "data.csv", content: "a,b\n1,2", originalFilename: "data.csv",
+      mime: "text/csv", blobPath: null, byteSize: 7, sha256: "def456",
+    });
+    expect(store.getArtifact("up-2").blobPath).toBeNull();
+  });
+});

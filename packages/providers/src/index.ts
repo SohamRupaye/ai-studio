@@ -1,5 +1,5 @@
-export type { Provider, ProviderMessage, StreamEvent } from "./base.js";
-export { ProviderRateLimitError } from "./base.js";
+export type { Provider, ProviderMessage, StreamEvent, ContentBlock, TextContent, ImageContent, DocumentContent } from "./base.js";
+export { ProviderRateLimitError, contentToText, imageBlocks } from "./base.js";
 
 // Core providers
 export { AnthropicProvider } from "./anthropic.js";

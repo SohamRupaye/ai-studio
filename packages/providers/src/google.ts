@@ -1,4 +1,5 @@
 import type { Provider, ProviderMessage, StreamEvent } from "./base.js";
+import { toGoogleParts } from "./base.js";
 import { getConfig } from "./config.js";
 
 export class GoogleProvider implements Provider {
@@ -140,11 +141,13 @@ export class GoogleProvider implements Provider {
         contents.push({ role: "model", parts });
       } else {
         const role = m.role === "assistant" ? "model" : "user";
+        const parts = toGoogleParts(m.content);
         const last = contents[contents.length - 1];
-        if (last && last.role === role && last.parts.length === 1 && typeof last.parts[0].text === "string") {
+        // Merge only plain-text turns; a turn with image parts stays separate.
+        if (last && last.role === role && last.parts.length === 1 && typeof last.parts[0].text === "string" && typeof m.content === "string") {
           last.parts[0].text += "\n\n" + m.content;
         } else {
-          contents.push({ role, parts: [{ text: m.content }] });
+          contents.push({ role, parts });
         }
       }
     }

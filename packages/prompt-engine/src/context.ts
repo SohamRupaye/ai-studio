@@ -1,4 +1,4 @@
-import type { Message, Summary, Branch } from "@ai-studio/shared";
+import type { Message, MessageImage, Summary, Branch } from "@ai-studio/shared";
 import type { Store } from "@ai-studio/database";
 import type { GlobalMemory } from "@ai-studio/database";
 import type { MetaGraph } from "@ai-studio/graph-engine";
@@ -7,20 +7,32 @@ import { retrieveFromGraph } from "@ai-studio/context-engine";
 import { runSummarizeAncestry, runSummarizeMiddle } from "./summarizer.js";
 
 export interface ContextPayload {
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: string; images?: MessageImage[] }>;
   systemContext: string;
   tierAncestry: number;
   tierWarm: number;
   tierRetrieved: number;
   tierHot: number;
-  /** Tokens of the <selected_artifacts> block (0 when none attached) — lets
-   * the context inspector project "what if I change the selection". */
+  /** Tokens of the <selected_artifacts> block plus native-document estimates
+   * (0 when none attached) — lets the context inspector project "what if I
+   * change the selection". */
   artifactTokens: number;
   tokenEstimate: number;
+  /** Selected PDFs to attach natively (as provider document blocks) instead
+   * of as extracted text — only populated when the caller says the model
+   * accepts PDF input. The caller reads each blob and builds the blocks. */
+  nativeDocuments: Array<{ id: string; title: string; blobPath: string; mime: string }>;
 }
 
-function countMessagesTokens(messages: Array<{ role: string; content: string }>): number {
-  return messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+// Rough per-image token cost — vision providers price an image around this;
+// enough for the context meter to move when an image is attached.
+const IMAGE_TOKEN_ESTIMATE = 1200;
+
+function countMessagesTokens(messages: Array<{ role: string; content: string; images?: MessageImage[] }>): number {
+  return messages.reduce(
+    (sum, m) => sum + estimateTokens(m.content) + (m.images?.length ?? 0) * IMAGE_TOKEN_ESTIMATE,
+    0,
+  );
 }
 
 const MAX_ANCESTRY_DEPTH = 30;
@@ -100,6 +112,11 @@ export async function buildPayload(
   graph?: MetaGraph,
   globalMem?: GlobalMemory,
   currentQuery?: string,
+  opts?: {
+    /** The model accepts PDFs natively — selected PDF artifacts with a
+     * preserved blob ride as document blocks instead of extracted text. */
+    nativePdf?: boolean;
+  },
 ): Promise<ContextPayload> {
   const messages = store.getMessages(branch.id);
   const summaries = store.getSummaries(branch.id);
@@ -157,14 +174,38 @@ export async function buildPayload(
   // block. Oversized artifacts truncate with a visible marker instead of
   // silently blowing the budget.
   let artifactTokens = 0;
+  let nativeDocTokens = 0;
+  const nativeDocuments: ContextPayload["nativeDocuments"] = [];
+  // Providers cap request size (Anthropic ~32MB) — native PDFs past this
+  // budget fall back to the extracted-text path below instead of 400ing.
+  let nativeDocBudget = 24 * 1024 * 1024;
   if (branch.selectedArtifacts?.length) {
     const ARTIFACT_TOKEN_CAP = 8000;
     const parts: string[] = [];
     for (const artifactId of branch.selectedArtifacts) {
       const artifact = store.getArtifact(artifactId);
       if (!artifact) continue; // deleted since it was selected
+      if (
+        opts?.nativePdf &&
+        artifact.mime === "application/pdf" &&
+        artifact.blobPath &&
+        (artifact.byteSize ?? Infinity) <= nativeDocBudget
+      ) {
+        nativeDocBudget -= artifact.byteSize;
+        nativeDocuments.push({ id: artifact.id, title: artifact.title, blobPath: artifact.blobPath, mime: artifact.mime });
+        // Very rough: ~50KB and ~2250 tokens per PDF page. Only feeds the
+        // context meter; providers do the real accounting server-side.
+        nativeDocTokens += Math.min(120_000, Math.max(1500, Math.round(artifact.byteSize / 50_000) * 2250));
+        continue;
+      }
       let content: string = artifact.content;
-      if (estimateTokens(content) > ARTIFACT_TOKEN_CAP) {
+      // This runs every turn, so don't tokenize huge documents just to decide
+      // to truncate them: at or under the cap in characters a text can't
+      // exceed it in tokens (a token is at least one character), and far
+      // above it the exact count doesn't change the outcome. Only the band
+      // between needs a real count.
+      const needsCount = content.length > ARTIFACT_TOKEN_CAP && content.length <= ARTIFACT_TOKEN_CAP * 8;
+      if (content.length > ARTIFACT_TOKEN_CAP * 8 || (needsCount && estimateTokens(content) > ARTIFACT_TOKEN_CAP)) {
         content = content.slice(0, ARTIFACT_TOKEN_CAP * 4) +
           `\n[truncated — "${artifact.title}" continues beyond this excerpt]`;
       }
@@ -175,6 +216,7 @@ export async function buildPayload(
       systemContextBlocks.push(block);
       artifactTokens = estimateTokens(block);
     }
+    artifactTokens += nativeDocTokens;
   }
 
   // startTurn is a TURN NUMBER, not an array index — turn numbers only match
@@ -187,21 +229,21 @@ export async function buildPayload(
   // but Codex's bare `input` field rejects outright with a 400.
   const startTurn = summaries.length ? Math.max(...summaries.map(s => s.toTurn)) + 1 : 0;
   const hot = messages.filter(m => m.turn >= startTurn);
-  const apiMessages = hot.map(m => ({ role: m.role, content: m.content }));
+  const apiMessages = hot.map(m => ({ role: m.role, content: m.content, images: m.images }));
 
   let systemContext = "";
   if (systemContextBlocks.length) {
     systemContext = `[WORKSPACE CONTEXT]\nThe following is the active context for this branching session:\n\n${systemContextBlocks.join("\n\n")}`;
   }
 
-  let total = estimateTokens(systemContext) + countMessagesTokens(apiMessages);
+  let total = estimateTokens(systemContext) + countMessagesTokens(apiMessages) + nativeDocTokens;
 
   if (total > contextLimit) {
     const sIdx = systemContextBlocks.findIndex(b => b.startsWith("<conversation_summaries>"));
     if (sIdx !== -1) {
       systemContextBlocks.splice(sIdx, 1);
       systemContext = systemContextBlocks.length ? `[WORKSPACE CONTEXT]\nThe following is the active context for this branching session:\n\n${systemContextBlocks.join("\n\n")}` : "";
-      total = estimateTokens(systemContext) + countMessagesTokens(apiMessages);
+      total = estimateTokens(systemContext) + countMessagesTokens(apiMessages) + nativeDocTokens;
     }
   }
 
@@ -210,13 +252,13 @@ export async function buildPayload(
     if (aIdx !== -1) {
       systemContextBlocks.splice(aIdx, 1);
       systemContext = systemContextBlocks.length ? `[WORKSPACE CONTEXT]\nThe following is the active context for this branching session:\n\n${systemContextBlocks.join("\n\n")}` : "";
-      total = estimateTokens(systemContext) + countMessagesTokens(apiMessages);
+      total = estimateTokens(systemContext) + countMessagesTokens(apiMessages) + nativeDocTokens;
     }
   }
 
   while (total > contextLimit && apiMessages.length > 1) {
     apiMessages.shift();
-    total = estimateTokens(systemContext) + countMessagesTokens(apiMessages);
+    total = estimateTokens(systemContext) + countMessagesTokens(apiMessages) + nativeDocTokens;
   }
 
   return {
@@ -228,5 +270,6 @@ export async function buildPayload(
     tierHot: hot.length,
     artifactTokens,
     tokenEstimate: total,
+    nativeDocuments,
   };
 }

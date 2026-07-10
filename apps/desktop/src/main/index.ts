@@ -1,6 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { join } from "node:path";
-import { existsSync, writeFileSync } from "node:fs";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
+import { basename, extname, join, sep } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { acceptedExtensions, extractText, isLossless } from "./ingestion.js";
 import { Store, GlobalMemory } from "@ai-studio/database";
 import { Router, API_KEY_PROVIDERS, getConfig, loadConfig, saveConfig, ProviderRateLimitError } from "@ai-studio/providers";
 import type { MCPServerConfigEntry } from "@ai-studio/providers";
@@ -17,7 +19,9 @@ import { MetaGraph } from "@ai-studio/graph-engine";
 import { buildPayload, compareBranches, getAncestryMessages } from "@ai-studio/prompt-engine";
 import { runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
-import { estimateTokens, getContextLimit } from "@ai-studio/tokenizer";
+import { estimateTokens, getContextLimit, supportsPdfInput, supportsVision } from "@ai-studio/tokenizer";
+import type { ContentBlock } from "@ai-studio/providers";
+import type { MessageImage } from "@ai-studio/shared";
 import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
 
 if (require("electron-squirrel-startup")) app.quit();
@@ -38,6 +42,74 @@ let dataDirPath = "";
 /** AbortController tagged with why it was aborted, so a superseded request
  * can tell the renderer (an explicit user Stop already handles its own UI). */
 type ExtendedAbortController = AbortController & { supersededByNewMessage?: boolean };
+
+/** Image mime for a file extension (with leading dot), or null if unsupported. */
+function imageMime(ext: string): string | null {
+  switch (ext) {
+    case ".png": return "image/png";
+    case ".jpg":
+    case ".jpeg": return "image/jpeg";
+    case ".gif": return "image/gif";
+    case ".webp": return "image/webp";
+    default: return null;
+  }
+}
+
+// Providers hard-reject oversized images (Anthropic caps around 5MB), and the
+// bytes ride every subsequent turn as base64 — so fit them at staging time.
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+/** Image extension from magic bytes, or null if not a supported format. */
+function sniffImageExt(bytes: Buffer): string | null {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return ".png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return ".jpg";
+  if (bytes.length >= 6 && bytes.subarray(0, 3).toString("ascii") === "GIF") return ".gif";
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return ".webp";
+  return null;
+}
+
+/**
+ * Bytes for an image that fits IMAGE_MAX_BYTES, re-encoding/downscaling
+ * PNG/JPEG as JPEG when needed (a returned buffer !== the input means it was
+ * converted). Null when it can't be made to fit — GIF/WebP aren't resized
+ * because that would strip animation.
+ */
+function fitImageBytes(bytes: Buffer, ext: string): Buffer | null {
+  if (bytes.byteLength <= IMAGE_MAX_BYTES) return bytes;
+  if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg") return null;
+  let img = nativeImage.createFromBuffer(bytes);
+  if (img.isEmpty()) return null;
+  for (let pass = 0; pass < 4; pass++) {
+    const out = Buffer.from(img.toJPEG(80));
+    if (out.byteLength <= IMAGE_MAX_BYTES) return out;
+    const { width } = img.getSize();
+    if (width <= 1) return null;
+    img = img.resize({ width: Math.max(1, Math.round(width * 0.7)) });
+  }
+  return null;
+}
+
+/**
+ * Blobs are written before any DB row references them (staged images before
+ * send, upload originals before the artifact insert), so files get orphaned
+ * by removed chips, abandoned drafts, deleted messages/branches, or a crash
+ * between write and insert. Sweep whatever no row references — but only files
+ * old enough that they can't belong to a draft still being composed.
+ */
+function sweepOrphanBlobs() {
+  const MIN_AGE_MS = 24 * 60 * 60 * 1000;
+  try {
+    const referenced = store.referencedBlobPaths();
+    const dir = join(dataDirPath, "blobs");
+    for (const name of readdirSync(dir)) {
+      if (referenced.has(join("blobs", name))) continue;
+      const abs = join(dir, name);
+      try {
+        if (Date.now() - statSync(abs).mtimeMs > MIN_AGE_MS) unlinkSync(abs);
+      } catch { /* raced or unreadable — leave it for the next sweep */ }
+    }
+  } catch { /* sweep is best-effort housekeeping */ }
+}
 
 let abortController: ExtendedAbortController | null = null;
 let nodeCounter = { current: 0 };
@@ -137,6 +209,10 @@ async function initRuntime() {
   const cfg = loadConfig(join(app.getPath("userData"), "config.yaml"));
 
   store = new Store(join(dataDir, "workspace.db"));
+  // Original bytes of uploaded files live here; the DB row holds a relative
+  // path into it. Kept out of SQLite so a 20MB PDF doesn't bloat the .db.
+  mkdirSync(join(dataDir, "blobs"), { recursive: true });
+  sweepOrphanBlobs();
   router = Router.fromEnv();
   refreshModelsInBackground(router);
   graph = new MetaGraph(join(dataDir, "graphs"));
@@ -263,7 +339,7 @@ function handle<C extends IpcInvokeChannel>(
 function registerHandlers() {
   // ── Chat ────────────────────────────────────────────────────────────────────
 
-  handle("chat:send", async ({ branchId, message }) => {
+  handle("chat:send", async ({ branchId, message, images }) => {
     if (!mainWindow) return;
     // If a prior request is still in flight, it's being superseded by this
     // new message (not a user-initiated Stop) — tag the OLD controller so
@@ -277,23 +353,41 @@ function registerHandlers() {
     abortController = myController;
     const signal = myController.signal;
 
-    store.addMessage(branchId, "user", message);
+    const branch = store.getBranch(branchId);
+    if (!branch) {
+      mainWindow.webContents.send("chat:stream", { type: "error", branchId, message: `Branch ${branchId} not found`, turn: store.getMessageCount(branchId) - 1 });
+      return;
+    }
+    const cfg = getConfig();
+    const model = branch.model || cfg.defaultModel;
+
+    // Capability gate (honest block): don't silently drop an attached image on
+    // a text-only model. Refuse before persisting so the user can switch model
+    // and resend — never a half-committed turn.
+    if (images?.length && !supportsVision(model)) {
+      mainWindow.webContents.send("chat:stream", {
+        type: "error",
+        branchId,
+        message: `${model} can't view images. Switch to a vision-capable model, then resend.`,
+        // Nothing was persisted, so there is no turn to point at — -1 routes
+        // the renderer's Retry down the plain-resend path (no edit).
+        turn: -1,
+      });
+      return;
+    }
+
+    store.addMessage(branchId, "user", message, undefined, undefined, images);
     // Turn number of the user message this invocation is answering — threaded
     // through every error event below so the renderer can mark specifically
     // THIS message (not whichever one is currently last) as failed.
     const userTurn = store.getMessageCount(branchId) - 1;
-    const branch = store.getBranch(branchId);
-    if (!branch) {
-      mainWindow.webContents.send("chat:stream", { type: "error", branchId, message: `Branch ${branchId} not found`, turn: userTurn });
-      return;
-    }
 
     // Track the project this branch belongs to, for scoping memories.
     currentProjectId = branch.chatId ? (store.getChat(branch.chatId)?.projectId ?? "") : "";
 
-    const payload = await buildPayload(store, branch, graph, globalMem, message);
-    const cfg = getConfig();
-    const model = branch.model || cfg.defaultModel;
+    const payload = await buildPayload(store, branch, graph, globalMem, message, {
+      nativePdf: supportsPdfInput(model),
+    });
 
     // Capture what the model sees this turn for the right panel's context
     // inspector. Persisted (survives restarts) and captured here as a side
@@ -332,8 +426,56 @@ function registerHandlers() {
     // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
     const agent = new Agent(chatRouter, registry, { sessionId: branchId });
 
+    // Resolve image refs on hot-window messages into content the model gets.
+    // Vision models receive native image blocks (base64 read from the blob);
+    // this is only reached when the model supports vision (the current turn is
+    // gated above, and historical images degrade to a text note for safety).
+    const vision = supportsVision(model);
+    const agentMessages = payload.messages.map(m => {
+      if (!m.images?.length) return { role: m.role, content: m.content };
+      if (!vision) {
+        const names = m.images.map(im => im.filename).join(", ");
+        return { role: m.role, content: `${m.content}\n\n[Attached image(s): ${names} — the current model can't view images.]` };
+      }
+      const blocks: ContentBlock[] = m.content ? [{ type: "text", text: m.content }] : [];
+      for (const im of m.images) {
+        try {
+          const data = readFileSync(join(dataDirPath, im.blobPath)).toString("base64");
+          blocks.push({ type: "image", mediaType: im.mediaType, data });
+        } catch {
+          // Blob missing (swept or lost) — keep the turn, but tell the model
+          // an image was here rather than silently narrowing what it sees.
+          blocks.push({ type: "text", text: `\n[Attached image "${im.filename}" is no longer available.]` });
+        }
+      }
+      return { role: m.role, content: blocks };
+    });
+
+    // Selected PDFs the model reads natively ride the current turn as
+    // document blocks (before the text, per provider guidance). Re-attached
+    // each send while selected — same lifetime as the extracted-text path
+    // they replace. A missing blob degrades to a visible note.
+    if (payload.nativeDocuments.length && agentMessages.length) {
+      const last = agentMessages[agentMessages.length - 1]!;
+      if (last.role === "user") {
+        const docBlocks: ContentBlock[] = [];
+        for (const doc of payload.nativeDocuments) {
+          try {
+            const data = readFileSync(join(dataDirPath, doc.blobPath)).toString("base64");
+            docBlocks.push({ type: "document", mediaType: doc.mime, data, title: doc.title });
+          } catch {
+            docBlocks.push({ type: "text", text: `[Attached document "${doc.title}" is no longer available.]\n` });
+          }
+        }
+        const existing: ContentBlock[] = typeof last.content === "string"
+          ? (last.content ? [{ type: "text", text: last.content }] : [])
+          : last.content;
+        last.content = [...docBlocks, ...existing];
+      }
+    }
+
     try {
-      for await (const event of runAgentCooperative(agent, model, payload.messages, system, signal)) {
+      for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
         if (signal.aborted) {
           // Only notify the renderer if this request was superseded by a
           // newer message — an explicit user Stop already cleans up its own
@@ -424,6 +566,94 @@ function registerHandlers() {
   });
 
   handle("chat:abort", () => { abortController?.abort(); abortController = null; });
+
+  // ── Image attachments ─────────────────────────────────────────────────────────
+
+  // Shared staging core: fit the bytes (downscaling oversized PNG/JPEG), write
+  // them into data/blobs atomically, and return the reference — or a reason.
+  const stageImage = (
+    bytes: Buffer,
+    ext: string,
+    filename: string,
+  ): { ok: true; image: MessageImage } | { ok: false; reason: string } => {
+    let mediaType = imageMime(ext);
+    if (!mediaType) return { ok: false, reason: "Unsupported image type." };
+    const fitted = fitImageBytes(bytes, ext);
+    if (!fitted) {
+      return { ok: false, reason: `Image is too large (max ${IMAGE_MAX_BYTES / 1024 / 1024}MB).` };
+    }
+    if (fitted !== bytes) { bytes = fitted; ext = ".jpg"; mediaType = "image/jpeg"; }
+    const id = randomUUID();
+    const rel = join("blobs", `${id}${ext}`);
+    const abs = join(dataDirPath, rel);
+    writeFileSync(`${abs}.tmp`, bytes);
+    renameSync(`${abs}.tmp`, abs);
+    return { ok: true, image: { blobPath: rel, mediaType, filename } };
+  };
+
+  // Stage images and return references; the refs ride the next chat:send.
+  // Drag-drop passes `paths` directly; without them a native picker opens.
+  // (Documents go through artifact:upload instead — images can't become text
+  // artifacts.) Anything unfittable or unreadable comes back in `skipped`.
+  handle("image:stage", async ({ paths }) => {
+    const staged: MessageImage[] = [];
+    const skipped: Array<{ filename: string; reason: string }> = [];
+    let files = paths ?? [];
+    if (!files.length) {
+      if (!mainWindow) return { staged, skipped };
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: "Attach images",
+        properties: ["openFile", "multiSelections"],
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+      });
+      if (canceled) return { staged, skipped };
+      files = filePaths;
+    }
+    for (const p of files) {
+      const filename = basename(p);
+      try {
+        const result = stageImage(readFileSync(p), extname(p).toLowerCase(), filename);
+        if (result.ok) staged.push(result.image);
+        else skipped.push({ filename, reason: result.reason });
+      } catch {
+        skipped.push({ filename, reason: "Couldn't read the file." });
+      }
+    }
+    return { staged, skipped };
+  });
+
+  // Stage images from raw bytes — pasted bitmaps and drags with no backing
+  // file. The extension comes from the filename when it carries one, else
+  // from the magic bytes (pasted screenshots are typically nameless PNGs).
+  handle("image:stage-data", ({ images }) => {
+    const staged: MessageImage[] = [];
+    const skipped: Array<{ filename: string; reason: string }> = [];
+    for (const { filename, dataBase64 } of images) {
+      try {
+        const bytes = Buffer.from(dataBase64, "base64");
+        const ext = imageMime(extname(filename).toLowerCase()) ? extname(filename).toLowerCase() : sniffImageExt(bytes);
+        if (!ext) { skipped.push({ filename, reason: "Unsupported image type." }); continue; }
+        const result = stageImage(bytes, ext, filename);
+        if (result.ok) staged.push(result.image);
+        else skipped.push({ filename, reason: result.reason });
+      } catch {
+        skipped.push({ filename, reason: "Couldn't read the image data." });
+      }
+    }
+    return { staged, skipped };
+  });
+
+  // Serve a staged/attached image back to the renderer as a data URL. Scoped to
+  // the blobs dir so a crafted blobPath can't read arbitrary files.
+  handle("attachment:data", ({ blobPath }) => {
+    try {
+      const abs = join(dataDirPath, blobPath);
+      // Trailing separator so a sibling like "blobs-x/…" can't pass the check.
+      if (!abs.startsWith(join(dataDirPath, "blobs") + sep)) return null;
+      const mediaType = imageMime(extname(abs).toLowerCase()) ?? "application/octet-stream";
+      return `data:${mediaType};base64,${readFileSync(abs).toString("base64")}`;
+    } catch { return null; }
+  });
 
   // ── Organisations ───────────────────────────────────────────────────────────
 
@@ -637,7 +867,7 @@ function registerHandlers() {
     const branch = store.getBranch(branchId);
     const pack = (m: ReturnType<typeof store.getMessages>[number], inherited: boolean) => ({
       id: m.id, role: m.role, content: m.content, turn: m.turn, timestamp: m.timestamp,
-      model: m.model, toolCalls: m.toolCalls, inherited: inherited || undefined,
+      model: m.model, toolCalls: m.toolCalls, images: m.images, inherited: inherited || undefined,
     });
     const own = store.getMessages(branchId).map(m => pack(m, false));
     if (!branch?.parentId) return own;
@@ -652,6 +882,76 @@ function registerHandlers() {
   handle("artifact:list", ({ projectId }) => store.listArtifacts(projectId));
   handle("artifact:get", ({ id }) => store.getArtifact(id) ?? null);
   handle("artifact:update", ({ id, content, title }) => { store.updateArtifact(id, content, title); });
+
+  // Attach files to a branch: parse each to text, preserve non-text originals
+  // as blobs, persist as artifacts, and auto-select them so the next turn sees
+  // them. Order per file: extract text → (write blob) → insert row → select.
+  handle("artifact:upload", async ({ branchId, paths }) => {
+    const created: Array<{ id: string; title: string; type: string; note?: string }> = [];
+    const skipped: Array<{ filename: string; reason: string }> = [];
+    const branch = store.getBranch(branchId);
+    const chat = branch?.chatId ? store.getChat(branch.chatId) : undefined;
+    if (!branch || !chat) return { created, skipped };
+
+    let files = paths ?? [];
+    if (!files.length) {
+      if (!mainWindow) return { created, skipped };
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: "Attach files to this branch",
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          { name: "Documents", extensions: acceptedExtensions() },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (canceled) return { created, skipped };
+      files = filePaths;
+    }
+
+    const selection = [...branch.selectedArtifacts];
+    let selectionChanged = false;
+    for (const filePath of files) {
+      const filename = basename(filePath);
+      const result = await extractText(filePath);
+      if (!result.ok) { skipped.push({ filename, reason: result.reason }); continue; }
+      try {
+        const id = randomUUID();
+        const bytes = readFileSync(filePath);
+        const sha256 = createHash("sha256").update(bytes).digest("hex");
+        // Same bytes already on this branch: re-select the existing artifact
+        // instead of duplicating it (and its context cost).
+        const existing = store.findUploadedArtifactBySha(branchId, sha256);
+        if (existing) {
+          if (!selection.includes(existing.id)) { selection.push(existing.id); selectionChanged = true; }
+          skipped.push({ filename, reason: "Already attached to this branch." });
+          continue;
+        }
+        let blobPath: string | null = null;
+        // Text uploads need no blob — the extracted text IS the whole original.
+        // For PDF/DOCX the original carries layout the text can't, so keep it:
+        // temp-write then atomic rename, before the row exists.
+        if (!isLossless(result.kind)) {
+          const rel = join("blobs", `${id}${extname(filePath).toLowerCase()}`);
+          const abs = join(dataDirPath, rel);
+          writeFileSync(`${abs}.tmp`, bytes);
+          renameSync(`${abs}.tmp`, abs);
+          blobPath = rel;
+        }
+        store.createUploadedArtifact({
+          id, branchId, projectId: chat.projectId, type: "document",
+          title: filename, content: result.text, originalFilename: filename,
+          mime: result.mime, blobPath, byteSize: bytes.byteLength, sha256,
+        });
+        selection.push(id);
+        selectionChanged = true;
+        created.push({ id, title: filename, type: "document", note: result.note });
+      } catch (err) {
+        skipped.push({ filename, reason: err instanceof Error ? err.message : "Couldn't save the file." });
+      }
+    }
+    if (selectionChanged) store.setSelectedArtifacts(branchId, selection);
+    return { created, skipped };
+  });
 
   // ── Memory ──────────────────────────────────────────────────────────────────
 
@@ -693,6 +993,7 @@ function registerHandlers() {
       updatedAt: a.updatedAt as number,
       tokens: estimateTokens(store.getArtifact(a.id)?.content ?? ""),
       fromThisBranch: a.branchId === branchId,
+      source: (a.source as string) ?? "extracted",
     }));
     // This branch's own artifacts first, then the rest, newest first.
     artifacts.sort((x, y) => Number(y.fromThisBranch) - Number(x.fromThisBranch) || y.updatedAt - x.updatedAt);

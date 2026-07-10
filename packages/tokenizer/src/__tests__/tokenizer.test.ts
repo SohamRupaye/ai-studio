@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getContextLimit, estimateTokens, MODEL_LIMITS } from "../index.js";
+import { getContextLimit, estimateTokens, MODEL_LIMITS, supportsPdfInput, supportsVision } from "../index.js";
 
 describe("getContextLimit", () => {
   it("returns 190000 for claude-sonnet-4 (claude prefix)", () => {
@@ -115,5 +115,36 @@ describe("estimateTokens", () => {
       "const x = 1;\nconst y = 2;\nfunction add(a: number, b: number): number {\n  return a + b;\n}\nexport { add };"
     );
     expect(file).toBeGreaterThan(snippet);
+  });
+});
+
+describe("supportsVision", () => {
+  it("recognises current vision-capable families", () => {
+    for (const m of [
+      "claude-opus-4-8", "claude-3-5-sonnet", "gpt-4o", "gpt-4.1-mini",
+      "gemini-2.0-flash", "pixtral-12b", "qwen2.5-vl-7b", "llama-3.2-11b-vision",
+    ]) {
+      expect(supportsVision(m)).toBe(true);
+    }
+  });
+
+  it("returns false for text-only / unknown models (safe default)", () => {
+    for (const m of ["deepseek-chat", "gpt-3.5-turbo", "mistral-7b", "some-unknown-model", "llama-3.2-3b-instruct"]) {
+      expect(supportsVision(m)).toBe(false);
+    }
+  });
+});
+
+describe("supportsPdfInput", () => {
+  it("recognises families with native PDF input", () => {
+    for (const m of ["claude-opus-4-8", "claude-3-5-sonnet", "claude-fable-5", "gemini-2.0-flash", "anthropic/claude-sonnet-5"]) {
+      expect(supportsPdfInput(m)).toBe(true);
+    }
+  });
+
+  it("returns false for everything else — they get extracted text instead", () => {
+    for (const m of ["gpt-4o", "gpt-5", "mistral-7b", "some-unknown-model"]) {
+      expect(supportsPdfInput(m)).toBe(false);
+    }
   });
 });
