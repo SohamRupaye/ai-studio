@@ -534,18 +534,38 @@ function ProvidersSettings() {
 // Backend handles persistence (config.yaml) and reconnect-on-launch.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const GOOGLE_CLIENT_HINT =
+  "Create an OAuth client at console.cloud.google.com (APIs & Services → Credentials → OAuth client ID, type “Desktop app”) and enable the product's MCP API for the project. The same client works for Gmail, Calendar and Drive.";
+
 const MCP_PRESETS: Array<{
   name: string;
   label: string;
   hint: string;
   type: MCPTransport;
   url: string;
+  /** "oauth-client" = the server's IdP has no dynamic registration; Connect
+   * opens the paste-your-OAuth-client dialog instead of attempting sign-in. */
+  auth?: "oauth-client";
+  /** Where to create that OAuth client (shown in the dialog). */
+  clientHint?: string;
 }> = [
   { name: "notion", label: "Notion", hint: "Pages, databases and wikis.", type: "http", url: "https://mcp.notion.com/mcp" },
   { name: "github", label: "GitHub", hint: "Repos, issues and pull requests.", type: "http", url: "https://api.githubcopilot.com/mcp/" },
   { name: "figma", label: "Figma", hint: "Design files and components.", type: "http", url: "https://mcp.figma.com/mcp" },
   { name: "canva", label: "Canva", hint: "Design creation and editing.", type: "http", url: "https://mcp.canva.com/mcp" },
   { name: "slack", label: "Slack", hint: "Messages, channels and canvases.", type: "http", url: "https://mcp.slack.com/mcp" },
+  { name: "linear", label: "Linear", hint: "Issues, projects and cycles.", type: "http", url: "https://mcp.linear.app/mcp" },
+  { name: "atlassian", label: "Atlassian", hint: "Jira issues and Confluence pages.", type: "http", url: "https://mcp.atlassian.com/v1/mcp" },
+  { name: "asana", label: "Asana", hint: "Tasks, projects and goals.", type: "http", url: "https://mcp.asana.com/mcp" },
+  { name: "sentry", label: "Sentry", hint: "Errors, issues and performance.", type: "http", url: "https://mcp.sentry.dev/mcp" },
+  { name: "vercel", label: "Vercel", hint: "Deployments, projects and logs.", type: "http", url: "https://mcp.vercel.com/" },
+  { name: "stripe", label: "Stripe", hint: "Payments, customers and invoices.", type: "http", url: "https://mcp.stripe.com/" },
+  // Google Workspace: official servers, but accounts.google.com has no
+  // dynamic registration — each install needs its own Google Cloud OAuth
+  // client until AI Studio ships a verified one (tracked in context/debt.md).
+  { name: "gmail", label: "Gmail", hint: "Search, read and draft email.", type: "http", url: "https://gmailmcp.googleapis.com/mcp/v1", auth: "oauth-client", clientHint: GOOGLE_CLIENT_HINT },
+  { name: "calendar", label: "Google Calendar", hint: "Events and scheduling.", type: "http", url: "https://calendarmcp.googleapis.com/mcp/v1", auth: "oauth-client", clientHint: GOOGLE_CLIENT_HINT },
+  { name: "drive", label: "Google Drive", hint: "Files, folders and sharing.", type: "http", url: "https://drivemcp.googleapis.com/mcp/v1", auth: "oauth-client", clientHint: GOOGLE_CLIENT_HINT },
 ];
 
 const MCP_STATUS_BADGE: Record<string, { label: string; variant: "success" | "warning" | "danger" | "info" | "neutral" }> = {
@@ -559,8 +579,10 @@ const MCP_STATUS_BADGE: Record<string, { label: string; variant: "success" | "wa
 function MCPSettings() {
   const { data: servers = [] } = useMCPServers();
   const addServer = useMutation("mcp:add");
+  const authenticate = useMutation("mcp:authenticate");
   const [addingCustom, setAddingCustom] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [clientDialog, setClientDialog] = useState<{ name: string; label: string; hint?: string } | null>(null);
 
   const existingNames = new Set(servers.map((s) => s.config.name.toLowerCase()));
   const presets = MCP_PRESETS.filter((p) => !existingNames.has(p.name));
@@ -568,11 +590,21 @@ function MCPSettings() {
   const connectPreset = async (preset: (typeof MCP_PRESETS)[number]) => {
     setConnecting(preset.name);
     try {
-      const entry = await addServer.mutate({ name: preset.name, type: preset.type, url: preset.url });
+      let entry = await addServer.mutate({ name: preset.name, type: preset.type, url: preset.url });
+      if (entry.status.status === "needs_auth" && preset.auth === "oauth-client") {
+        // No dynamic registration at this server's IdP (Google) — collect the
+        // user's own OAuth client first; the dialog then runs the sign-in.
+        setClientDialog({ name: preset.name, label: preset.label, hint: preset.clientHint });
+        return;
+      }
+      if (entry.status.status === "needs_auth") {
+        // "Most sign you in on first use" — run the OAuth flow right away
+        // instead of parking the server on a Needs-auth badge.
+        toast(`Finish signing in to ${preset.label} in your browser…`);
+        entry = await authenticate.mutate({ name: preset.name });
+      }
       if (entry.status.status === "connected") {
         toast.success(`Connected to ${preset.label} — ${counted(entry.tools.length, "tool")} available`);
-      } else if (entry.status.status === "needs_auth") {
-        toast(`${preset.label} added — it needs authentication to finish connecting.`);
       } else if (entry.status.status === "failed") {
         toast.error(`${preset.label}: ${entry.status.error}`);
       }
@@ -593,9 +625,22 @@ function MCPSettings() {
       {servers.length > 0 && (
         <SettingsSection title="Your servers">
           <div className="mt-4 divide-y divide-line overflow-hidden rounded-lg border border-line">
-            {servers.map((server) => (
-              <MCPServerRow key={server.config.name} server={server} />
-            ))}
+            {servers.map((server) => {
+              const preset = MCP_PRESETS.find((p) => p.name === server.config.name.toLowerCase());
+              return (
+                <MCPServerRow
+                  key={server.config.name}
+                  server={server}
+                  onOauthClient={() =>
+                    setClientDialog({
+                      name: server.config.name,
+                      label: preset?.label ?? server.config.name,
+                      hint: preset?.clientHint,
+                    })
+                  }
+                />
+              );
+            })}
           </div>
         </SettingsSection>
       )}
@@ -641,13 +686,133 @@ function MCPSettings() {
       </SettingsSection>
 
       <AddMCPServerDialog open={addingCustom} onOpenChange={setAddingCustom} />
+      <OAuthClientDialog target={clientDialog} onClose={() => setClientDialog(null)} />
     </>
   );
 }
 
-function MCPServerRow({ server }: { server: MCPServerEntry }) {
+/**
+ * Collects a pre-registered OAuth client (id + optional secret) for a server
+ * whose identity provider has no dynamic registration (Google Workspace…),
+ * then immediately runs the browser sign-in with it.
+ */
+function OAuthClientDialog({
+  target,
+  onClose,
+}: {
+  target: { name: string; label: string; hint?: string } | null;
+  onClose: () => void;
+}) {
+  const setOauthClient = useMutation("mcp:set-oauth-client");
+  const authenticate = useMutation("mcp:authenticate");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (target) {
+      setClientId("");
+      setClientSecret("");
+    }
+  }, [target]);
+
+  const submit = async () => {
+    if (!target || !clientId.trim() || busy) return;
+    setBusy(true);
+    try {
+      await setOauthClient.mutate({
+        name: target.name,
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim() || undefined,
+      });
+      onClose();
+      toast(`Finish signing in to ${target.label} in your browser…`);
+      const entry = await authenticate.mutate({ name: target.name });
+      if (entry.status.status === "connected") {
+        toast.success(`Connected to ${target.label} — ${counted(entry.tools.length, "tool")} available`);
+      } else if (entry.status.status === "failed") {
+        toast.error(`${target.label}: ${entry.status.error}`);
+      } else if (entry.status.status === "needs_auth") {
+        toast.error(`${target.label} didn't accept the sign-in — check the client id and its redirect URI.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Couldn't sign in to ${target.label}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Connect {target?.label} with an OAuth client</DialogTitle>
+          <DialogDescription>
+            {target?.hint ??
+              "This service doesn't let apps sign in automatically — paste an OAuth client you registered with it. Register the redirect URI http://127.0.0.1:19876/callback."}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-4 px-5">
+            <div className="space-y-1.5">
+              <label htmlFor="oauth-client-id" className="text-label-md text-fg">
+                Client ID
+              </label>
+              <Input
+                id="oauth-client-id"
+                autoFocus
+                autoComplete="off"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="e.g. 1234….apps.googleusercontent.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="oauth-client-secret" className="text-label-md text-fg">
+                Client secret <span className="text-fg-subtle">(if your client has one)</span>
+              </label>
+              <Input
+                id="oauth-client-secret"
+                type="password"
+                autoComplete="off"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!clientId.trim() || busy}>
+              {busy ? "Waiting for browser…" : "Save and sign in"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MCPServerRow({
+  server,
+  onOauthClient,
+}: {
+  server: MCPServerEntry;
+  onOauthClient: () => void;
+}) {
   const removeServer = useMutation("mcp:remove");
   const reconnectServer = useMutation("mcp:reconnect");
+  const authenticate = useMutation("mcp:authenticate");
+  const setToken = useMutation("mcp:set-token");
+  const [tokenEditing, setTokenEditing] = useState(false);
+  const [tokenValue, setTokenValue] = useState("");
+  const tokenCancelled = useRef(false);
   const { config, status, tools } = server;
   const badge = MCP_STATUS_BADGE[status.status] ?? MCP_STATUS_BADGE["disabled"]!;
   const connected = status.status === "connected";
@@ -661,6 +826,50 @@ function MCPServerRow({ server }: { server: MCPServerEntry }) {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : failMessage);
     }
+  };
+
+  const runAuth = () =>
+    act(async () => {
+      toast(`Finish signing in to ${label} in your browser…`);
+      const entry = await authenticate.mutate({ name: config.name });
+      if (entry.status.status === "connected") {
+        toast.success(`Connected to ${label} — ${counted(entry.tools.length, "tool")} available`);
+      } else if (entry.status.status === "failed") {
+        toast.error(`${label}: ${entry.status.error}`);
+      }
+    }, `Couldn't sign in to ${label}`);
+
+  const runReconnect = () =>
+    act(async () => {
+      const entry = await reconnectServer.mutate({ name: config.name });
+      if (entry.status.status === "connected") {
+        toast.success(`Reconnected ${label} — ${counted(entry.tools.length, "tool")} available`);
+      } else if (entry.status.status === "needs_auth") {
+        toast(`${label} still needs authentication — use Authenticate.`);
+      } else if (entry.status.status === "failed") {
+        toast.error(`${label}: ${entry.status.error}`);
+      }
+    }, `Couldn't reconnect ${label}`);
+
+  const saveToken = async () => {
+    if (tokenCancelled.current) {
+      tokenCancelled.current = false;
+      return;
+    }
+    const trimmed = tokenValue.trim();
+    setTokenEditing(false);
+    setTokenValue("");
+    if (!trimmed) return;
+    await act(async () => {
+      const entry = await setToken.mutate({ name: config.name, token: trimmed });
+      if (entry.status.status === "connected") {
+        toast.success(`Connected to ${label} — ${counted(entry.tools.length, "tool")} available`);
+      } else if (entry.status.status === "needs_auth") {
+        toast.error(`${label} rejected that token — check its scopes and expiry.`);
+      } else if (entry.status.status === "failed") {
+        toast.error(`${label}: ${entry.status.error}`);
+      }
+    }, `Couldn't connect ${label} with that token`);
   };
 
   return (
@@ -688,36 +897,64 @@ function MCPServerRow({ server }: { server: MCPServerEntry }) {
         </span>
       </span>
       <div className="flex shrink-0 items-center gap-1">
-        {status.status === "needs_auth" && status.url && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => window.open(status.url, "_blank")}
-          >
-            Authenticate
-          </Button>
+        {tokenEditing ? (
+          <Input
+            autoFocus
+            type="password"
+            autoComplete="off"
+            className="w-64"
+            value={tokenValue}
+            onChange={(e) => setTokenValue(e.target.value)}
+            onBlur={saveToken}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                tokenCancelled.current = true;
+                setTokenEditing(false);
+                setTokenValue("");
+              }
+            }}
+            placeholder={`${label} access token`}
+          />
+        ) : (
+          <>
+            {status.status === "needs_auth" && (
+              <Button variant="secondary" size="sm" disabled={authenticate.loading} onClick={runAuth}>
+                {authenticate.loading ? "Waiting for browser…" : "Authenticate"}
+              </Button>
+            )}
+            {Boolean(config.url) && !connected && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    tokenCancelled.current = false;
+                    setTokenValue("");
+                    setTokenEditing(true);
+                  }}
+                >
+                  Use token
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onOauthClient}>
+                  {config.hasOauthClient ? "Replace client" : "OAuth client"}
+                </Button>
+              </>
+            )}
+            <Button variant="ghost" size="sm" disabled={reconnectServer.loading} onClick={runReconnect}>
+              {reconnectServer.loading ? "Reconnecting…" : "Reconnect"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                act(() => removeServer.mutate({ name: config.name }), `Couldn't remove ${label}`)
+              }
+            >
+              Remove
+            </Button>
+          </>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            act(
-              () => reconnectServer.mutate({ name: config.name }),
-              `Couldn't reconnect ${label}`,
-            )
-          }
-        >
-          Reconnect
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            act(() => removeServer.mutate({ name: config.name }), `Couldn't remove ${label}`)
-          }
-        >
-          Remove
-        </Button>
       </div>
     </div>
   );
@@ -731,6 +968,7 @@ function AddMCPServerDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const addServer = useMutation("mcp:add");
+  const authenticate = useMutation("mcp:authenticate");
   const [name, setName] = useState("");
   const [type, setType] = useState<MCPTransport>("http");
   const [url, setUrl] = useState("");
@@ -757,12 +995,16 @@ function AddMCPServerDialog({
         type === "stdio"
           ? { name: name.trim(), type, command: parts[0]!, args: parts.slice(1) }
           : { name: name.trim(), type, url: url.trim() };
-      const entry = await addServer.mutate(config);
+      let entry = await addServer.mutate(config);
+      if (entry.status.status === "needs_auth") {
+        // Close the dialog first — the rest of the flow lives in the browser.
+        onOpenChange(false);
+        toast(`Finish signing in to ${name} in your browser…`);
+        entry = await authenticate.mutate({ name: name.trim() });
+      }
       if (entry.status.status === "failed") {
         toast.error(`${name}: ${entry.status.error}`);
-      } else if (entry.status.status === "needs_auth") {
-        toast(`${name} added — it needs authentication to finish connecting.`);
-      } else {
+      } else if (entry.status.status === "connected") {
         toast.success(`Connected to ${name} — ${counted(entry.tools.length, "tool")} available`);
       }
       onOpenChange(false);

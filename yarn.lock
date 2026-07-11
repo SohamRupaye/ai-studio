@@ -94,6 +94,7 @@ __metadata:
     react-dom: "npm:19.0.0"
     react-hook-form: "npm:^7.80.0"
     react-router-dom: "npm:^7.17.0"
+    simple-icons: "npm:^16.25.0"
     sonner: "npm:^2.0.7"
     tailwind-merge: "npm:^3.6.0"
     tailwindcss: "npm:^4.3.0"
@@ -8884,6 +8885,13 @@ __metadata:
     once: "npm:^1.3.1"
     simple-concat: "npm:^1.0.0"
   checksum: 10c0/b0649a581dbca741babb960423248899203165769747142033479a7dc5e77d7b0fced0253c731cd57cf21e31e4d77c9157c3069f4448d558ebc96cf9e1eebcf0
+  languageName: node
+  linkType: hard
+
+"simple-icons@npm:^16.25.0":
+  version: 16.25.0
+  resolution: "simple-icons@npm:16.25.0"
+  checksum: 10c0/4e48b5923b36c4d5270ab60defe26aca6cf805f72bde5f5ff879e5c42498a2296b39898a3a341ae16df35b9204a484dbfe3c2b5fe8bababeee85a3a426e7bb61
   languageName: node
   linkType: hard
 

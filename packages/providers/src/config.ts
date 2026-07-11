@@ -57,6 +57,21 @@ export interface MCPServerConfigEntry {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  /**
+   * Pre-registered OAuth client for servers that reject dynamic client
+   * registration (GitHub, Slack). When set, sign-in uses this client instead
+   * of registering one — the pattern OAuth-connected apps (Dia, VS Code, the
+   * official Slack MCP plugin) use: the vendor registers an app once and
+   * ships its id. Register the redirect URI as
+   * http://127.0.0.1:19876/callback. The loader spreads yaml entries
+   * verbatim, so this block round-trips config.yaml already.
+   */
+  oauth?: {
+    clientId?: string;
+    clientSecret?: string;
+    scope?: string;
+    callbackPort?: number;
+  };
 }
 
 export interface Config {

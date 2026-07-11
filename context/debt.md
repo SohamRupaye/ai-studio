@@ -14,6 +14,21 @@ Known gaps we chose not to build yet, each with the context to decide later and 
 
 **Pickup trigger:** a user on a non-Claude/Gemini model actually reports a scanned PDF they need read. Until then, the honest placeholder is doing its job.
 
+## Register AI Studio's own OAuth apps for MCP presets — parked 2026-07-11
+
+**Current state:** MCP OAuth works end-to-end, but four preset services don't allow dynamic client registration, so their quick-connect can't sign in with zero setup the way Notion/Linear/Sentry/etc. do. Each install currently needs the user's own credentials:
+- **GitHub / Slack** — no DCR at their IdPs; users connect with a PAT ("Use token") or paste their own OAuth app via the "OAuth client" action.
+- **Figma** — has a registration endpoint but 403s non-allowlisted apps.
+- **Google Workspace (Gmail / Calendar / Drive presets, shipped 2026-07-11)** — users create a Google Cloud OAuth client (Desktop app type) and paste it into the connect dialog; sign-in then runs in the browser. The same client covers all three servers, but has to be pasted per server.
+
+**The fix is administrative, not code:** register an OAuth app for AI Studio with each provider and bake the client ids into `MCP_PRESETS` (the `oauth` block on `MCPServerConfigEntry` and `ensureClient`'s prefer-explicit-client path already support it — that's exactly how Dia/VS Code connect). Per provider:
+- **GitHub**: create an OAuth App (github.com/settings/developers), callback `http://127.0.0.1:19876/callback`. Minutes.
+- **Slack**: create a Slack app with the MCP user scopes; note Slack splits `scope`/`user_scope` params — may need a small flow tweak on first test.
+- **Google**: create the OAuth client, then pass **Google's app verification for the sensitive Gmail/Drive scopes (CASA security assessment — takes weeks, budget for it)**. Until verified, third-party users hit the "unverified app" interstitial with a 100-user cap.
+- **Figma**: apply for their MCP client allowlist (registration is gated).
+
+**Pickup trigger:** before launch / first external users — an unregistered app means every user does provider-console setup the product should have done once. Google's verification lead time (weeks) makes it the one to start first.
+
 ## Lint is not running anywhere — pre-existing, surfaced 2026-07-09
 
 `yarn lint` cannot pass: workspaces have `lint: "eslint src/"` scripts but no `eslint` devDependency and there are **no `eslint.config.*` files in the repo** (ESLint 9 needs flat configs; `tooling/eslint` exports one nothing consumes). The occasional turbo "pass" is a stale cache replay. Fix is ~20 minutes: add `eslint` + `@ai-studio/eslint-config` as devDeps where the script exists, add per-workspace `eslint.config.js` importing the tooling config.

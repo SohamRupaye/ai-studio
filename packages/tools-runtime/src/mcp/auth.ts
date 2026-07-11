@@ -11,12 +11,18 @@ const AUTH_FILE = path.join(homedir(), ".ai-studio", "mcp-auth.json");
 export class MCPAuth {
   private data: Record<string, OAuthEntry> = {};
   private loaded = false;
+  private file: string;
+
+  /** `file` override is for tests — production uses the default location. */
+  constructor(file: string = AUTH_FILE) {
+    this.file = file;
+  }
 
   private async load(): Promise<Record<string, OAuthEntry>> {
     if (this.loaded) return this.data;
     try {
-      await fs.mkdir(path.dirname(AUTH_FILE), { recursive: true });
-      const raw = await fs.readFile(AUTH_FILE, "utf-8");
+      await fs.mkdir(path.dirname(this.file), { recursive: true });
+      const raw = await fs.readFile(this.file, "utf-8");
       this.data = JSON.parse(raw);
     } catch {
       this.data = {};
@@ -26,8 +32,8 @@ export class MCPAuth {
   }
 
   private async save(): Promise<void> {
-    await fs.mkdir(path.dirname(AUTH_FILE), { recursive: true });
-    await fs.writeFile(AUTH_FILE, JSON.stringify(this.data, null, 2), { mode: 0o600 });
+    await fs.mkdir(path.dirname(this.file), { recursive: true });
+    await fs.writeFile(this.file, JSON.stringify(this.data, null, 2), { mode: 0o600 });
   }
 
   async get(name: string): Promise<OAuthEntry | undefined> {

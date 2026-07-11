@@ -12,7 +12,7 @@ import {
 } from "@ai-studio/ai-core";
 import {
   createDefaultRegistry, loadMCPServers, getLSPClient, listSkills,
-  getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer,
+  getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer, authenticateMCPServer,
   kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry,
 } from "@ai-studio/tools-runtime";
 import { MetaGraph } from "@ai-studio/graph-engine";
@@ -144,7 +144,9 @@ function routerFor(orgId: string | undefined): Router {
   return orgRouter;
 }
 
-/** Serialize an MCPManager entry into the shape the frontend expects. */
+/** Serialize an MCPManager entry into the shape the frontend expects.
+ * Headers are deliberately redacted — they can carry access tokens; the
+ * renderer only learns whether one is set. */
 function toMCPServerEntry(entry: { config: any; status: any; tools: any[] }): MCPServerEntry {
   return {
     config: {
@@ -155,7 +157,8 @@ function toMCPServerEntry(entry: { config: any; status: any; tools: any[] }): MC
       args: entry.config.args,
       env: entry.config.env,
       url: entry.config.url,
-      headers: entry.config.headers,
+      hasToken: Boolean(entry.config.headers?.Authorization),
+      hasOauthClient: Boolean(entry.config.oauth?.clientId),
     },
     status: entry.status,
     tools: entry.tools.map((t: any) => ({ name: t.name, description: t.description })),
@@ -296,6 +299,11 @@ async function initRuntime() {
   if (cfg.mcpServers.length) {
     loadMCPServers(cfg.mcpServers, registry).catch(e => console.error("[mcp]", e.message));
   }
+  // Any status change (connected, needs_auth, failed, reconnecting) pushes to
+  // the renderer so the settings page reflects live state without polling.
+  getMCPManager().on("status", () => {
+    mainWindow?.webContents.send("mcp:changed", undefined);
+  });
 
   // Load skills from data dir
   const skillsDir = join(dataDir, "skills");
@@ -1114,6 +1122,48 @@ function registerHandlers() {
 
   handle("mcp:reconnect", async ({ name }) => {
     const entry = await reconnectMCPServer(name, registry);
+    if (!entry) throw new Error(`MCP server "${name}" not found`);
+    return toMCPServerEntry(entry);
+  });
+
+  handle("mcp:set-token", async ({ name, token }) => {
+    // Access-token connect for servers whose OAuth has no dynamic client
+    // registration (GitHub, Slack, Figma). The token lives in config.yaml as
+    // an Authorization header — same trust boundary as the provider API keys.
+    const existing = getMCPManager().getServers().find((s) => s.config.name === name);
+    if (!existing) throw new Error(`MCP server "${name}" not found`);
+    const { Authorization: _replaced, ...keptHeaders } = existing.config.headers ?? {};
+    const config: MCPServerConfigEntry = {
+      ...(existing.config as MCPServerConfigEntry),
+      headers: token.trim() ? { ...keptHeaders, Authorization: `Bearer ${token.trim()}` } : keptHeaders,
+    };
+    const entry = await addMCPServer(config, registry);
+    const cfg = getConfig();
+    saveConfig({ mcpServers: [...cfg.mcpServers.filter((s) => s.name !== name), config] });
+    return toMCPServerEntry(entry);
+  });
+
+  handle("mcp:set-oauth-client", async ({ name, clientId, clientSecret }) => {
+    // Pre-registered OAuth client (Google Cloud console, GitHub OAuth app…):
+    // stored on the server's config.yaml entry; the sign-in flow prefers it
+    // over dynamic registration. Follow with mcp:authenticate.
+    const existing = getMCPManager().getServers().find((s) => s.config.name === name);
+    if (!existing) throw new Error(`MCP server "${name}" not found`);
+    const config: MCPServerConfigEntry = {
+      ...(existing.config as MCPServerConfigEntry),
+      oauth: { ...(existing.config as MCPServerConfigEntry).oauth, clientId: clientId.trim(), clientSecret: clientSecret?.trim() || undefined },
+    };
+    const entry = await addMCPServer(config, registry);
+    const cfg = getConfig();
+    saveConfig({ mcpServers: [...cfg.mcpServers.filter((s) => s.name !== name), config] });
+    return toMCPServerEntry(entry);
+  });
+
+  handle("mcp:authenticate", async ({ name }) => {
+    // Discovery + dynamic registration + PKCE happen in tools-runtime; we
+    // open the system browser and await the loopback callback, then the
+    // helper reconnects and re-registers the server's tools.
+    const entry = await authenticateMCPServer(name, registry, (url) => shell.openExternal(url));
     if (!entry) throw new Error(`MCP server "${name}" not found`);
     return toMCPServerEntry(entry);
   });

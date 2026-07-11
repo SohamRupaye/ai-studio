@@ -48,6 +48,9 @@ export interface OAuthClientInfo {
   clientSecret?: string;
   clientIdIssuedAt?: number;
   clientSecretExpiresAt?: number;
+  /** Redirect URIs this client was registered with — a flow may only reuse
+   * the stored registration when its loopback URI matches one of these. */
+  redirectUris?: string[];
 }
 
 export interface OAuthEntry {

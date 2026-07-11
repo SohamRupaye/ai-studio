@@ -82,7 +82,7 @@ export type {
 export { loadCustomTools, watchToolDirectories } from "./custom_loader";
 
 // Defaults
-export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer } from "./defaults";
+export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer, authenticateMCPServer } from "./defaults";
 
 // Subagent/delegate tools run agents via an injected runner (this package
 // must not depend on ai-core) — ai-core's createRuntime injects it.

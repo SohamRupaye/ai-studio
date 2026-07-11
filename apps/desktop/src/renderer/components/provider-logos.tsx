@@ -35,7 +35,29 @@ import notion from "@lobehub/icons-static-svg/icons/notion.svg?raw";
 import github from "@lobehub/icons-static-svg/icons/github.svg?raw";
 import figma from "@lobehub/icons-static-svg/icons/figma.svg?raw";
 import figmaColor from "@lobehub/icons-static-svg/icons/figma-color.svg?raw";
+import vercel from "@lobehub/icons-static-svg/icons/vercel.svg?raw";
+// MCP service marks missing from lobehub. simple-icons (CC0) ships bare
+// single-path SVGs — `si()` below gives them currentColor and drops the
+// <title> (it renders as a stray native tooltip inside an aria-hidden tile).
+import linearRaw from "simple-icons/icons/linear.svg?raw";
+import atlassianRaw from "simple-icons/icons/atlassian.svg?raw";
+import asanaRaw from "simple-icons/icons/asana.svg?raw";
+import sentryRaw from "simple-icons/icons/sentry.svg?raw";
+import stripeRaw from "simple-icons/icons/stripe.svg?raw";
+import gmailRaw from "simple-icons/icons/gmail.svg?raw";
+import gcalendarRaw from "simple-icons/icons/googlecalendar.svg?raw";
+import gdriveRaw from "simple-icons/icons/googledrive.svg?raw";
+// Slack and Canva were removed from simple-icons (trademark takedowns), so
+// their marks are vendored: Slack is the canonical four-lozenge mark (mono
+// derived from it), Canva from the MIT-licensed CoreUI/devicon sets.
+import slack from "../assets/brand/slack-mono.svg?raw";
+import slackColor from "../assets/brand/slack-color.svg?raw";
+import canva from "../assets/brand/canva-mono.svg?raw";
+import canvaColor from "../assets/brand/canva-color.svg?raw";
 import { cn } from "../lib/utils";
+
+const si = (svg: string) =>
+  svg.replace("<svg ", '<svg fill="currentColor" ').replace(/<title>.*?<\/title>/, "");
 
 // Brands without a color entry (Anthropic, OpenAI, xAI, Notion, GitHub…) are
 // monochrome marks to begin with — mono-only is faithful, not a gap.
@@ -57,11 +79,22 @@ const LOGOS: Record<string, { mono: string; color?: string }> = {
   deepinfra: { mono: deepinfra, color: deepinfraColor },
   alibaba: { mono: alibaba, color: alibabaColor },
   codex: { mono: codex, color: codexColor },
-  // MCP quick-connect services (linear/sentry/stripe aren't in the icon set —
-  // those rows fall back to monogram tiles).
+  // MCP quick-connect services — every preset has a mark; the monogram
+  // fallback now only serves custom servers.
   notion: { mono: notion },
   github: { mono: github },
   figma: { mono: figma, color: figmaColor },
+  vercel: { mono: vercel },
+  linear: { mono: si(linearRaw) },
+  atlassian: { mono: si(atlassianRaw) },
+  asana: { mono: si(asanaRaw) },
+  sentry: { mono: si(sentryRaw) },
+  stripe: { mono: si(stripeRaw) },
+  slack: { mono: slack, color: slackColor },
+  canva: { mono: canva, color: canvaColor },
+  gmail: { mono: si(gmailRaw) },
+  calendar: { mono: si(gcalendarRaw) },
+  drive: { mono: si(gdriveRaw) },
 };
 
 function Svg({ svg, className }: { svg: string; className?: string }) {

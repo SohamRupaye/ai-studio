@@ -204,6 +204,20 @@ export function useChatTitledListener(): void {
 }
 
 /**
+ * Subscribes once (mount in App.tsx) to "mcp:changed" — pushed on every MCP
+ * server status transition (connected/needs_auth/failed/reconnecting) — and
+ * refetches mcp:list so the settings page reflects live state.
+ */
+export function useMCPChangedListener(): void {
+  useEffect(() => {
+    const off = window.ipc.on("mcp:changed", () => {
+      invalidateQueries();
+    });
+    return off;
+  }, []);
+}
+
+/**
  * Whether the window is fullscreen. macOS hides the traffic lights in
  * fullscreen, so chrome that reserves space for them should collapse it.
  */

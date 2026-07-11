@@ -12,6 +12,7 @@ import type {
   MCPResource,
 } from "./types";
 import { MCPAuth } from "./auth";
+import { startAuthFlow, refreshTokens, type AuthFlowHandle } from "./oauth";
 
 const DEFAULT_TIMEOUT = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -58,12 +59,25 @@ export class MCPClient extends EventEmitter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private abortController: AbortController | null = null;
   private sseReader: ReadableStreamDefaultReader | null = null;
-  private auth = new MCPAuth();
+  private auth: MCPAuth;
   private serverCapabilities: Record<string, unknown> = {};
+  /** Streamable HTTP session id, captured from the initialize response. */
+  private sessionId: string | null = null;
+  /** Protocol version negotiated at initialize — echoed on later requests. */
+  private negotiatedVersion: string | null = null;
+  /** WWW-Authenticate challenge from the most recent 401 — feeds discovery. */
+  private lastAuthChallenge: string | undefined;
 
-  constructor(config: MCPServerConfig) {
+  get authChallenge(): string | undefined {
+    return this.lastAuthChallenge;
+  }
+
+  /** `auth` is shared with the owning manager so token writes are visible
+   * everywhere immediately (each MCPAuth caches its file after first load). */
+  constructor(config: MCPServerConfig, auth: MCPAuth = new MCPAuth()) {
     super();
     this.config = config;
+    this.auth = auth;
   }
 
   get name(): string {
@@ -96,16 +110,19 @@ export class MCPClient extends EventEmitter {
           await this.connectStdio();
           break;
         case "http":
-          await this.connectHTTP();
+          // Streamable HTTP has no separate handshake — the initialize POST
+          // below is both the connectivity probe and the auth check.
+          this.sessionId = null;
+          this.negotiatedVersion = null;
           break;
         case "sse":
           await this.connectSSE();
           break;
       }
-      this.reconnectAttempts = 0;
-      this.setStatus({ status: "connected" });
       await this.initialize();
       await this.fetchTools();
+      this.reconnectAttempts = 0;
+      this.setStatus({ status: "connected" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("Unauthorized") || msg.includes("401")) {
@@ -154,6 +171,8 @@ export class MCPClient extends EventEmitter {
       setTimeout(() => this.process?.kill("SIGKILL"), 5000);
       this.process = null;
     }
+    this.sessionId = null;
+    this.negotiatedVersion = null;
     this.setStatus({ status: "disabled" });
   }
 
@@ -197,19 +216,6 @@ export class MCPClient extends EventEmitter {
     });
   }
 
-  private async connectHTTP(): Promise<void> {
-    if (!this.config.url) throw new Error("HTTP transport requires 'url'");
-    // Verify connectivity with a GET to the endpoint
-    const headers = await this.buildHeaders();
-    const resp = await fetch(this.config.url, {
-      method: "GET",
-      headers,
-      signal: AbortSignal.timeout(this.config.timeout ?? DEFAULT_TIMEOUT),
-    });
-    if (resp.status === 401) throw new Error("Unauthorized");
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-  }
-
   private async connectSSE(): Promise<void> {
     if (!this.config.url) throw new Error("SSE transport requires 'url'");
     this.abortController = new AbortController();
@@ -218,7 +224,10 @@ export class MCPClient extends EventEmitter {
       headers: { ...headers, Accept: "text/event-stream" },
       signal: this.abortController.signal,
     });
-    if (resp.status === 401) throw new Error("Unauthorized");
+    if (resp.status === 401) {
+      this.lastAuthChallenge = resp.headers.get("www-authenticate") ?? undefined;
+      throw new Error("Unauthorized");
+    }
     if (!resp.ok) throw new Error(`SSE ${resp.status}: ${resp.statusText}`);
     if (!resp.body) throw new Error("No response body for SSE");
     this.sseReader = resp.body.getReader();
@@ -256,11 +265,12 @@ export class MCPClient extends EventEmitter {
 
   private async initialize(): Promise<void> {
     const result = (await this.request("initialize", {
-      protocolVersion: "2024-11-05",
+      protocolVersion: "2025-03-26",
       capabilities: { tools: { listChanged: true } },
       clientInfo: { name: "ai-studio", version: "1.0.0" },
-    })) as { capabilities?: Record<string, unknown> };
+    })) as { capabilities?: Record<string, unknown>; protocolVersion?: string };
     this.serverCapabilities = result.capabilities ?? {};
+    this.negotiatedVersion = result.protocolVersion ?? null;
     await this.notify("notifications/initialized");
   }
 
@@ -311,33 +321,106 @@ export class MCPClient extends EventEmitter {
   }
 
   private async httpRequest(method: string, params: unknown, timeout: number): Promise<unknown> {
+    const id = ++this.requestId;
+    const body: JsonRpcRequest = { jsonrpc: "2.0", id, method, params: params ?? undefined };
+    const resp = await this.postHttp(body, timeout);
+    return this.readHttpResponse(resp, id);
+  }
+
+  /**
+   * POST a JSON-RPC message per the Streamable HTTP transport: both response
+   * shapes accepted, session id echoed, one silent token refresh on 401.
+   */
+  private async postHttp(body: JsonRpcRequest | JsonRpcNotification, timeout: number, retried = false): Promise<Response> {
     const headers = await this.buildHeaders();
-    const body: JsonRpcRequest = {
-      jsonrpc: "2.0",
-      id: ++this.requestId,
-      method,
-      params: params ?? undefined,
-    };
+    headers["Content-Type"] = "application/json";
+    headers["Accept"] = "application/json, text/event-stream";
+    if (this.sessionId) headers["Mcp-Session-Id"] = this.sessionId;
+    if (this.negotiatedVersion) headers["MCP-Protocol-Version"] = this.negotiatedVersion;
+
     const resp = await fetch(this.config.url!, {
       method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeout),
     });
-    if (resp.status === 401) throw new Error("Unauthorized");
+
+    if (resp.status === 401) {
+      this.lastAuthChallenge = resp.headers.get("www-authenticate") ?? undefined;
+      // Expired access token with a refresh token on file → refresh silently
+      // and retry once before surfacing needs_auth.
+      if (!retried && this.config.url && (await refreshTokens(this.config.name, this.config.url, this.auth, this.config.oauth))) {
+        return this.postHttp(body, timeout, true);
+      }
+      throw new Error("Unauthorized");
+    }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const result = (await resp.json()) as JsonRpcResponse;
+
+    const sid = resp.headers.get("mcp-session-id");
+    if (sid) this.sessionId = sid;
+    return resp;
+  }
+
+  /** Extract the JSON-RPC result for `id` from a JSON or SSE-framed body. */
+  private async readHttpResponse(resp: Response, id: number): Promise<unknown> {
+    const contentType = resp.headers.get("content-type") ?? "";
+
+    if (contentType.includes("text/event-stream")) {
+      // The server streams events; our response is one of the data messages.
+      // Other messages on the stream (notifications, server requests) go
+      // through the normal handler.
+      if (!resp.body) throw new Error("Empty SSE response body");
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let data = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.startsWith("data:")) {
+              data += line.slice(5).trimStart();
+            } else if (line.trim() === "" && data) {
+              // Blank line = event boundary
+              let msg: JsonRpcResponse | JsonRpcNotification | undefined;
+              try { msg = JSON.parse(data); } catch {}
+              data = "";
+              if (!msg) continue;
+              if ("id" in msg && msg.id === id) {
+                const r = msg as JsonRpcResponse;
+                if (r.error) throw new Error(r.error.message);
+                return r.result;
+              }
+              this.handleMessage(msg);
+            }
+          }
+        }
+      } finally {
+        reader.cancel().catch(() => {});
+      }
+      throw new Error("SSE stream ended without a response");
+    }
+
+    // 202/204 or empty body: valid for notifications, an error for requests.
+    const text = await resp.text();
+    if (!text) throw new Error("Empty response for request");
+    const result = JSON.parse(text) as JsonRpcResponse;
     if (result.error) throw new Error(result.error.message);
     return result.result;
   }
 
-  private notify(method: string, params?: unknown): Promise<void> {
+  private async notify(method: string, params?: unknown): Promise<void> {
+    const msg: JsonRpcNotification = { jsonrpc: "2.0", method, params: params ?? undefined };
     if (this.config.type === "stdio") {
-      const msg: JsonRpcNotification = { jsonrpc: "2.0", method, params: params ?? undefined };
       this.process!.stdin!.write(JSON.stringify(msg) + "\n");
-      return Promise.resolve();
+      return;
     }
-    return this.httpRequest(method, params, DEFAULT_TIMEOUT).then(() => {});
+    // Notifications carry no id; servers answer 202 with an empty body.
+    await this.postHttp(msg, DEFAULT_TIMEOUT);
   }
 
   // --- Private: Data Handling ---
@@ -386,7 +469,9 @@ export class MCPClient extends EventEmitter {
 
   private async buildHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = { ...this.config.headers };
-    if (this.config.oauth && this.config.url) {
+    // Tokens attach whenever we have them for this exact server URL — OAuth
+    // needs no opt-in config; remote servers demand it via 401 at runtime.
+    if (this.config.url && !headers["Authorization"]) {
       const entry = await this.auth.getForUrl(this.config.name, this.config.url);
       if (entry?.tokens?.accessToken) {
         headers["Authorization"] = `Bearer ${entry.tokens.accessToken}`;
@@ -407,13 +492,19 @@ export class MCPClient extends EventEmitter {
  */
 export class MCPManager extends EventEmitter {
   private clients = new Map<string, MCPClient>();
-  private auth = new MCPAuth();
+  private auth: MCPAuth;
+  private activeFlows = new Map<string, AuthFlowHandle>();
+
+  constructor(auth: MCPAuth = new MCPAuth()) {
+    super();
+    this.auth = auth;
+  }
 
   /** Connect to all configured MCP servers in parallel */
   async connectAll(configs: MCPServerConfig[]): Promise<void> {
     await Promise.allSettled(
       configs.map(async (config) => {
-        const client = new MCPClient(config);
+        const client = new MCPClient(config, this.auth);
         this.clients.set(config.name, client);
         client.on("status", (e) => this.emit("status", e));
         client.on("tools_changed", (e) => this.emit("tools_changed", e));
@@ -488,7 +579,7 @@ export class MCPManager extends EventEmitter {
   /** Add and connect a single server at runtime. */
   async addServer(config: MCPServerConfig): Promise<{ config: MCPServerConfig; status: MCPStatus; tools: MCPToolDef[] }> {
     await this.removeServer(config.name);
-    const client = new MCPClient(config);
+    const client = new MCPClient(config, this.auth);
     this.clients.set(config.name, client);
     client.on("status", (e) => this.emit("status", e));
     client.on("tools_changed", (e) => this.emit("tools_changed", e));
@@ -501,12 +592,18 @@ export class MCPManager extends EventEmitter {
     return { config, status: client.currentStatus, tools: client.currentTools };
   }
 
-  /** Disconnect and remove a single server. */
-  async removeServer(name: string): Promise<void> {
+  /**
+   * Disconnect and remove a single server. `forgetAuth` also drops stored
+   * OAuth tokens — pass it on explicit user removal, never on the internal
+   * remove that add/reconnect performs (reconnecting must keep tokens).
+   */
+  async removeServer(name: string, opts?: { forgetAuth?: boolean }): Promise<void> {
     const client = this.clients.get(name);
-    if (!client) return;
-    await client.disconnect();
-    this.clients.delete(name);
+    if (client) {
+      await client.disconnect();
+      this.clients.delete(name);
+    }
+    if (opts?.forgetAuth) await this.auth.remove(name);
   }
 
   /** Reconnect a single server using its existing config. */
@@ -522,58 +619,28 @@ export class MCPManager extends EventEmitter {
     return this.clients.get(name);
   }
 
-  /** Start OAuth flow for a server that needs auth */
-  async startAuth(name: string): Promise<string | undefined> {
+  /**
+   * Start the interactive OAuth flow for a server: discovery, dynamic client
+   * registration, PKCE, and a one-shot loopback callback server. Returns the
+   * authorization URL to open plus a `complete` promise that resolves once
+   * tokens are stored. An in-flight flow for the same server is cancelled
+   * first (last click wins).
+   */
+  async startAuth(name: string): Promise<AuthFlowHandle> {
     const client = this.clients.get(name);
-    if (!client) return undefined;
+    if (!client) throw new Error(`MCP server "${name}" not found`);
     const config = (client as any).config as MCPServerConfig;
-    if (!config.oauth || !config.url) return undefined;
+    if (!config.url) throw new Error(`MCP server "${name}" is not a remote server — nothing to authenticate.`);
 
-    // Generate state for CSRF protection
-    const state = crypto.randomUUID();
-    await this.auth.setState(name, state);
-
-    // Build authorization URL (simplified - real impl would use discovery)
-    const url = new URL(config.url);
-    url.pathname = "/oauth/authorize";
-    url.searchParams.set("client_id", config.oauth.clientId ?? "");
-    url.searchParams.set("state", state);
-    url.searchParams.set(
-      "redirect_uri",
-      config.oauth.redirectUri ?? `http://127.0.0.1:${config.oauth.callbackPort ?? 19876}/mcp/oauth/callback`,
-    );
-    if (config.oauth.scope) url.searchParams.set("scope", config.oauth.scope);
-    return url.toString();
-  }
-
-  /** Complete OAuth flow after callback */
-  async finishAuth(name: string, code: string, state: string): Promise<boolean> {
-    const savedState = await this.auth.getState(name);
-    if (savedState !== state) return false;
-    const client = this.clients.get(name);
-    if (!client) return false;
-    const config = (client as any).config as MCPServerConfig;
-    if (!config.url) return false;
-
-    // Exchange code for tokens (simplified)
-    const url = new URL(config.url);
-    url.pathname = "/oauth/token";
-    const resp = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, grant_type: "authorization_code" }),
+    this.activeFlows.get(name)?.cancel();
+    const handle = await startAuthFlow(name, config.url, this.auth, {
+      oauth: config.oauth,
+      wwwAuthenticate: client.authChallenge,
     });
-    if (!resp.ok) return false;
-    const tokens = await resp.json();
-    await this.auth.updateTokens(name, {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
-    }, config.url);
-    await this.auth.clearCodeVerifier(name);
-
-    // Reconnect
-    try { await client.connect(); } catch { return false; }
-    return true;
+    this.activeFlows.set(name, handle);
+    handle.complete.finally(() => {
+      if (this.activeFlows.get(name) === handle) this.activeFlows.delete(name);
+    }).catch(() => {});
+    return handle;
   }
 }

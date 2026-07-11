@@ -161,9 +161,25 @@ export async function addMCPServer(config: MCPServerConfig, registry: ToolRegist
   return entry;
 }
 
-/** Remove a single MCP server at runtime. */
+/** Remove a single MCP server at runtime (user-initiated — drops its stored OAuth tokens too). */
 export async function removeMCPServer(name: string): Promise<void> {
-  await _mcpManager.removeServer(name);
+  await _mcpManager.removeServer(name, { forgetAuth: true });
+}
+
+/**
+ * Run the interactive OAuth flow for a server, then reconnect it and
+ * re-register its tools. `openUrl` is how the caller presents the
+ * authorization URL (the desktop app opens the system browser).
+ */
+export async function authenticateMCPServer(
+  name: string,
+  registry: ToolRegistry,
+  openUrl: (url: string) => void,
+) {
+  const flow = await _mcpManager.startAuth(name);
+  openUrl(flow.url);
+  await flow.complete;
+  return reconnectMCPServer(name, registry);
 }
 
 /** Reconnect a single MCP server and re-register its tools. */

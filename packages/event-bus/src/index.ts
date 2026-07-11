@@ -39,7 +39,11 @@ export type MCPStatus =
   | { status: "reconnecting"; attempt: number };
 
 export interface MCPServerEntry {
-  config: MCPServerConfigInput;
+  /** Headers and OAuth credentials are redacted before crossing to the
+   * renderer — `hasToken` says whether an Authorization header (access-token
+   * connect) is configured, `hasOauthClient` whether a pre-registered OAuth
+   * client id is on file. */
+  config: MCPServerConfigInput & { hasToken?: boolean; hasOauthClient?: boolean };
   status: MCPStatus;
   tools: Array<{ name: string; description?: string }>;
 }
@@ -308,6 +312,20 @@ export interface IpcInvokeMap {
   "mcp:add": [MCPServerConfigInput, MCPServerEntry];
   "mcp:remove": [{ name: string }, void];
   "mcp:reconnect": [{ name: string }, MCPServerEntry];
+  /** Run the OAuth sign-in flow: opens the system browser, waits for the
+   * loopback callback, then reconnects. Resolves with the server's state
+   * after sign-in (long-lived — up to the 5-minute flow timeout). */
+  "mcp:authenticate": [{ name: string }, MCPServerEntry];
+  /** Connect with a pasted access token (PAT) — for servers whose OAuth
+   * doesn't allow dynamic registration (GitHub, Slack, Figma). Stored as an
+   * Authorization header; empty token clears it. Reconnects and returns the
+   * server's new state. */
+  "mcp:set-token": [{ name: string; token: string }, MCPServerEntry];
+  /** Store a pre-registered OAuth client (Google Cloud console, GitHub OAuth
+   * app…) on the server's config — the sign-in flow then uses it instead of
+   * dynamic registration. Follow with mcp:authenticate to run the browser
+   * flow. Secrets never round-trip to the renderer. */
+  "mcp:set-oauth-client": [{ name: string; clientId: string; clientSecret?: string }, MCPServerEntry];
 
   // Skills
   "skills:list": [void, SkillSummary[]];
@@ -351,6 +369,9 @@ export interface IpcEventMap {
   /** macOS hides the traffic lights in fullscreen; the renderer drops the
    * space it reserves for them. */
   "window:fullscreen-changed": boolean;
+  /** Fired whenever any MCP server's status changes (connect, auth, failure),
+   * so the settings page reflects live state without polling. */
+  "mcp:changed": void;
 }
 
 // ── Channel name helpers ──────────────────────────────────────────────────────
