@@ -723,7 +723,7 @@ export class Store {
 
   // ── Messages ───────────────────────────────────────────────────────────────
 
-  addMessage(branchId: string, role: string, content: string, model?: string, toolCalls?: Array<{ name: string; success: boolean }>, images?: MessageImage[]): Message {
+  addMessage(branchId: string, role: string, content: string, model?: string, toolCalls?: Message["toolCalls"], images?: MessageImage[]): Message {
     // Use MAX(turn)+1 to avoid reuse after undo
     const row = this.db.prepare("SELECT MAX(turn) as maxTurn FROM messages WHERE branch_id = ?").get(branchId) as any;
     const turn = (row?.maxTurn ?? -1) + 1;

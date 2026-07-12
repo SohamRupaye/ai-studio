@@ -598,6 +598,38 @@ describe("Messages", () => {
     expect(msgs[0]!.content).toBe("first");
   });
 
+  it("tool_calls round-trip per-agent subagent detail", () => {
+    // The chat page's "what did each agent do" dialog reads this back from
+    // the persisted message — the whole record must survive the JSON column.
+    const toolCalls = [
+      { name: "web_search", success: true },
+      {
+        name: "subagent",
+        success: true,
+        agents: [
+          {
+            agentId: "risk",
+            task: "assess risk",
+            model: "gpt-4",
+            status: "done" as const,
+            steps: [
+              { type: "tool" as const, tool: "web_search", args: '{"query":"risks"}', success: true, resultPreview: "3 results" },
+              { type: "text" as const, text: "The main risks are…" },
+            ],
+            result: "All clear.",
+            durationMs: 4200,
+          },
+          { agentId: "ux", task: "review UX", model: "gpt-4", status: "failed" as const, steps: [], error: "rate limited" },
+        ],
+      },
+    ];
+    store.addMessage(branchId, "assistant", "reply", "gpt-4", toolCalls);
+
+    const msgs = store.getMessages(branchId);
+    expect(msgs[0]!.toolCalls).toEqual(toolCalls);
+    expect(msgs[0]!.toolCalls![0]!.agents).toBeUndefined();
+  });
+
   it("deleteLastMessage removes the last message", () => {
     store.addMessage(branchId, "user", "first");
     store.addMessage(branchId, "assistant", "last");

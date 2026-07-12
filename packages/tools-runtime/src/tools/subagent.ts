@@ -8,18 +8,38 @@
 import type { ToolDefinition } from "../types.js";
 import type { ToolHandler } from "../registry.js";
 
+/** Identifies one delegated agent within one tool invocation, so the runner
+ * can report per-agent lifecycle events (start / text / tool / done / failed). */
+export interface SubagentRunMeta {
+  runId: string;
+  agentId: string;
+  /** Hard cap on the run — the runner aborts and fails the task past this. */
+  timeoutMs?: number;
+}
+
+// Parallel subagents block the turn — keep them tight. Background delegate
+// jobs are the long-running path and get double.
+const SUBAGENT_TIMEOUT_MS = 5 * 60_000;
+const DELEGATE_TIMEOUT_MS = 10 * 60_000;
+
 // Injected task runner — set by ai-core at startup
 type RunTask = (
   task: string,
   model: string,
   systemPrompt: string,
   allowedTools?: string[],
+  meta?: SubagentRunMeta,
 ) => Promise<string>;
 
 let _runTask: RunTask | null = null;
 // Refreshed by setSubagentDependencies on every turn — falls back to the
 // current chat's model, never a hardcoded id.
 let _defaultModel = "";
+
+let _runCounter = 0;
+function nextRunId(): string {
+  return `run-${++_runCounter}-${Date.now().toString(36)}`;
+}
 
 export function setSubagentDependencies(runTask: RunTask, defaultModel: string) {
   _runTask = runTask;
@@ -53,7 +73,7 @@ export const subagentDef: ToolDefinition = {
             id: { type: "string", description: "Short identifier for this task, used to label its result." },
             task: { type: "string", description: "The full task for this subagent, self-contained (it cannot see this conversation)." },
             system_prompt: { type: "string", description: "Optional system prompt for this subagent." },
-            model: { type: "string", description: "Optional model id to run this task on. Omit to use the current chat's model." },
+            model: { type: "string", description: "Optional EXACT model id available in this workspace. OMIT unless the user named a specific model — omitting runs the task on the current chat's model, which is almost always right. Never guess or invent model ids." },
             tools: { type: "array", items: { type: "string" }, description: "Optional allowlist of tool names this subagent may use." },
           },
         },
@@ -77,13 +97,15 @@ export const subagent: ToolHandler = async (args) => {
   if (!tasks?.length) return "Error: no tasks provided.";
 
   const capped = tasks.slice(0, 4);
+  const runId = nextRunId();
   const startTime = Date.now();
   const results = await Promise.allSettled(
-    capped.map(t => _runTask!(
+    capped.map((t, i) => _runTask!(
       t.task,
       t.model || _defaultModel,
       t.system_prompt || "",
       t.tools,
+      { runId, agentId: t.id || `task-${i + 1}`, timeoutMs: SUBAGENT_TIMEOUT_MS },
     ))
   );
 
@@ -113,7 +135,7 @@ export const delegateDef: ToolDefinition = {
     properties: {
       task: { type: "string", description: "The full task, self-contained (the background agent cannot see this conversation)." },
       job_id: { type: "string", description: "Unique id for this job, used to check its result later." },
-      model: { type: "string", description: "Optional model id to run the job on. Omit to use the current chat's model." },
+      model: { type: "string", description: "Optional EXACT model id available in this workspace. OMIT unless the user named a specific model — omitting runs the job on the current chat's model, which is almost always right. Never guess or invent model ids." },
       tools: { type: "array", items: { type: "string" }, description: "Optional allowlist of tool names the job may use." },
     },
     required: ["task", "job_id"],
@@ -140,7 +162,7 @@ export const delegate: ToolHandler = async (args) => {
   const job: DelegateJob = { id: jobId, task, status: "running", startedAt: new Date() };
   backgroundJobs.set(jobId, job);
 
-  _runTask(task, model, "", tools).then(result => {
+  _runTask(task, model, "", tools, { runId: nextRunId(), agentId: jobId, timeoutMs: DELEGATE_TIMEOUT_MS }).then(result => {
     job.status = "done";
     job.result = result;
     job.finishedAt = new Date();

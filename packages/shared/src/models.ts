@@ -6,6 +6,45 @@ export interface MessageImage {
   filename: string;
 }
 
+/** One step of a delegated agent's transcript: a stretch of text the agent
+ * wrote, or a tool call (with an args preview and, once finished, its
+ * outcome). Interleaved in the order they happened. */
+export interface SubagentStep {
+  type: "text" | "tool";
+  /** type "text": what the agent wrote (accumulated deltas, capped). */
+  text?: string;
+  /** type "tool": tool name. */
+  tool?: string;
+  /** type "tool": compact one-line JSON args preview. */
+  args?: string;
+  /** type "tool": set when the call finishes. */
+  success?: boolean;
+  /** type "tool": short preview of the tool's output. */
+  resultPreview?: string;
+}
+
+/** One delegated agent's record inside a subagent/delegate tool call —
+ * persisted with the message so "what did each agent do" survives reopen. */
+export interface SubagentRunRecord {
+  agentId: string;
+  task: string;
+  model: string;
+  status: "running" | "done" | "failed";
+  /** The agent's full transcript: text + tool steps, in order. */
+  steps: SubagentStep[];
+  result?: string;
+  error?: string;
+  /** Wall-clock duration, set when the run finishes. */
+  durationMs?: number;
+}
+
+export interface MessageToolCall {
+  name: string;
+  success: boolean;
+  /** Per-agent detail for subagent/delegate calls. */
+  agents?: SubagentRunRecord[];
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -15,7 +54,7 @@ export interface Message {
   /** Model that generated this message — set on assistant turns. */
   model?: string;
   /** Tool activity of the turn that produced this assistant message. */
-  toolCalls?: Array<{ name: string; success: boolean }>;
+  toolCalls?: MessageToolCall[];
   /** Images the user attached to this turn (user messages only). */
   images?: MessageImage[];
 }

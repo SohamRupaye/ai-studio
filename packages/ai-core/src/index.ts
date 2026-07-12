@@ -3,6 +3,7 @@ export type { AgentResult, AgentStreamEvent, AgentConfig } from "./agent.js";
 export { runWithContext } from "./orchestrator.js";
 export type { OrchestratorConfig, RunOptions } from "./orchestrator.js";
 export { createRuntime } from "./runtime.js";
+export type { SubagentEvent, SubagentEventHandler } from "./runtime.js";
 export { runAgentCooperative } from "./worker.js";
 export { CostTracker } from "./costs.js";
 export { detectImages, encodeImage, buildMultimodalContent, stripImagePaths } from "./images.js";

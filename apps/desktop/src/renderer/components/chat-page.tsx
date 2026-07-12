@@ -22,12 +22,22 @@ import {
   StopIcon,
   TerminalWindowIcon,
   TrashIcon,
+  TreeStructureIcon,
   WarningCircleIcon,
   WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import type { MessageImage } from "@ai-studio/shared";
+import type { MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
+import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
 import { counted } from "../lib/utils";
+import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "./ui/drawer";
 import { invalidateQueries, useBranches, useMessages, useMutation, useUser } from "../hooks/use-ipc-data";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
@@ -64,11 +74,44 @@ import { Spinner } from "./ui/spinner";
 // (branch:pin-add; pins feed the branch's context assembly).
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ToolCallState = { name: string; status: "running" | "done" | "error" };
+/** One delegated agent inside a subagent/delegate call — built live from
+ * `subagent` stream events (via the same shared reducer main persists with),
+ * or read back from the persisted message's tool_calls. runId/startedAt are
+ * only present on live runs. */
+type SubagentRun = SubagentRunRecord & { runId?: string; startedAt?: number };
+
+type ToolCallState = { name: string; status: "running" | "done" | "error"; agents?: SubagentRun[] };
 
 interface StreamState {
   text: string;
   toolCalls: ToolCallState[];
+  /** Flat, arrival-ordered agent runs for this turn — grouped by runId and
+   * matched to subagent/delegate tool calls in order at render time. */
+  subagentRuns: SubagentRun[];
+}
+
+/** Groups live agent runs by runId (first-seen order) and attaches each group
+ * to the turn's subagent/delegate calls in invocation order — the same
+ * matching main uses when it persists the message. */
+function attachLiveAgents(calls: ToolCallState[], runs: SubagentRun[]): ToolCallState[] {
+  if (!runs.length) return calls;
+  const groups: SubagentRun[][] = [];
+  const groupIdx = new Map<string, number>();
+  for (const r of runs) {
+    let i = groupIdx.get(r.runId ?? "");
+    if (i === undefined) {
+      i = groups.length;
+      groupIdx.set(r.runId ?? "", i);
+      groups.push([]);
+    }
+    groups[i]!.push(r);
+  }
+  let gi = 0;
+  return calls.map((c) =>
+    (c.name === "subagent" || c.name === "delegate") && gi < groups.length
+      ? { ...c, agents: groups[gi++] }
+      : c,
+  );
 }
 
 interface ErrorState {
@@ -229,6 +272,9 @@ export function ChatPage() {
   const [pendingUserImages, setPendingUserImages] = useState<MessageImage[]>([]);
   // Image open in the fullscreen viewer, or null.
   const [viewerImage, setViewerImage] = useState<MessageImage | null>(null);
+  // Delegated agent open in the detail dialog — set by clicking an agent row
+  // in a subagent/delegate call's activity.
+  const [agentDetail, setAgentDetail] = useState<SubagentRun | null>(null);
   const lastSentRef = useRef("");
   // Images that rode the last send — Retry must resend them too (the composer
   // chips are cleared optimistically, so this is the only surviving reference
@@ -239,6 +285,9 @@ export function ChatPage() {
   // Buffer them and flush at most once per animation frame; the stream
   // reads smoother precisely because it renders less often.
   const textBufRef = useRef("");
+  // Subagent transcripts stream per-delta too (× up to 4 agents) — they ride
+  // the same frame-batched flush as the main text.
+  const subagentBufRef = useRef<SubagentStreamEvent[]>([]);
   const flushFrameRef = useRef<number | null>(null);
 
   // Main runs one agent turn at a time for the whole window, not one per
@@ -246,21 +295,51 @@ export function ChatPage() {
   // turn still in flight for another branch (superseded, or just left
   // running while the user navigated away) never renders on this page.
   useEffect(() => {
-    const flushText = () => {
+    const flushStream = () => {
       flushFrameRef.current = null;
       const chunk = textBufRef.current;
-      if (!chunk) return;
+      const subEvents = subagentBufRef.current;
+      if (!chunk && !subEvents.length) return;
       textBufRef.current = "";
-      setStreaming((s) => (s ? { ...s, text: s.text + chunk } : s));
+      subagentBufRef.current = [];
+      setStreaming((s) => {
+        if (!s) return s;
+        let next = s;
+        if (chunk) next = { ...next, text: next.text + chunk };
+        if (subEvents.length) {
+          // The reducer mutates — clone the runs it will touch, then fold the
+          // buffered events in (same reducer main persists with).
+          const runs: SubagentRun[] = next.subagentRuns.map((r) => ({
+            ...r,
+            steps: r.steps.map((step) => ({ ...step })),
+          }));
+          for (const ev of subEvents) {
+            let run = runs.find((r) => r.runId === ev.runId && r.agentId === ev.agentId);
+            if (!run) {
+              run = { ...newSubagentRecord(ev.agentId), runId: ev.runId, startedAt: Date.now() };
+              runs.push(run);
+            }
+            applySubagentEvent(run, ev);
+          }
+          next = { ...next, subagentRuns: runs };
+        }
+        return next;
+      });
+    };
+    const scheduleFlush = () => {
+      if (flushFrameRef.current === null) {
+        flushFrameRef.current = requestAnimationFrame(flushStream);
+      }
     };
 
     const off = window.ipc.on("chat:stream", (event) => {
       if (event.branchId !== branchId) return;
       if (event.type === "text") {
         textBufRef.current += event.text;
-        if (flushFrameRef.current === null) {
-          flushFrameRef.current = requestAnimationFrame(flushText);
-        }
+        scheduleFlush();
+      } else if (event.type === "subagent") {
+        subagentBufRef.current.push(event);
+        scheduleFlush();
       } else if (event.type === "tool_start") {
         setStreaming((s) =>
           s ? { ...s, toolCalls: [...s.toolCalls, { name: event.name, status: "running" }] } : s,
@@ -301,6 +380,7 @@ export function ChatPage() {
     return () => {
       off();
       textBufRef.current = "";
+      subagentBufRef.current = [];
       if (flushFrameRef.current !== null) {
         cancelAnimationFrame(flushFrameRef.current);
         flushFrameRef.current = null;
@@ -321,7 +401,7 @@ export function ChatPage() {
     setPendingUser(trimmed);
     setPendingUserImages(imgs);
     if (images === undefined) setPendingImages([]);
-    setStreaming({ text: "", toolCalls: [] });
+    setStreaming({ text: "", toolCalls: [], subagentRuns: [] });
     try {
       await sendMessage.mutate({ branchId, message: trimmed, images: imgs.length ? imgs : undefined });
     } catch (err) {
@@ -622,7 +702,11 @@ export function ChatPage() {
                           calls={m.toolCalls!.map((tc) => ({
                             name: tc.name,
                             status: tc.success ? "done" : "error",
+                            // steps ?? []: rows persisted before the trail
+                            // existed carry no steps — don't crash on them.
+                            agents: tc.agents?.map((a) => ({ ...a, steps: a.steps ?? [] })),
                           }))}
+                          onAgentClick={setAgentDetail}
                         />
                       )}
                       {m.images?.length ? (
@@ -752,7 +836,12 @@ export function ChatPage() {
                 // "pop in" at once instead of streaming.
                 <MessageScrollerItem messageId="__streaming" className="[content-visibility:visible]">
                   <Message role="assistant">
-                    {streaming.toolCalls.length > 0 && <ToolActivity calls={streaming.toolCalls} />}
+                    {streaming.toolCalls.length > 0 && (
+                      <ToolActivity
+                        calls={attachLiveAgents(streaming.toolCalls, streaming.subagentRuns)}
+                        onAgentClick={setAgentDetail}
+                      />
+                    )}
                     {streaming.text ? (
                       <MessageContent>
                         <Markdown text={streaming.text} />
@@ -821,6 +910,19 @@ export function ChatPage() {
 
       <ImageLightbox image={viewerImage} onClose={() => setViewerImage(null)} />
 
+      <SubagentDetailDrawer
+        // While the run is live, render the freshest state from the stream so
+        // the open drawer updates as the agent works.
+        run={
+          (agentDetail?.runId &&
+            streaming?.subagentRuns.find(
+              (r) => r.runId === agentDetail.runId && r.agentId === agentDetail.agentId,
+            )) ||
+          agentDetail
+        }
+        onClose={() => setAgentDetail(null)}
+      />
+
       <NameDialog
         open={branchingFromTurn !== null}
         onOpenChange={(open) => {
@@ -865,12 +967,19 @@ function toolIcon(name: string): React.ComponentProps<typeof MarkerIcon>["childr
   if (/^(bash|terminal_)/.test(name)) return <TerminalWindowIcon />;
   if (/^(remember|recall_memories)/.test(name)) return <BrainIcon />;
   if (/^kb_/.test(name)) return <NotebookIcon />;
-  if (/^(todo_|think|delegate)/.test(name)) return <ListChecksIcon />;
+  if (/^(subagent|delegate)/.test(name)) return <TreeStructureIcon />;
+  if (/^(todo_|think)/.test(name)) return <ListChecksIcon />;
   if (/^git/.test(name)) return <GitBranchIcon />;
   return <WrenchIcon />;
 }
 
-function ToolActivity({ calls }: { calls: ToolCallState[] }) {
+function ToolActivity({
+  calls,
+  onAgentClick,
+}: {
+  calls: ToolCallState[];
+  onAgentClick?: (run: SubagentRun) => void;
+}) {
   const running = calls.some((c) => c.status === "running");
   const failed = calls.filter((c) => c.status === "error").length;
   return (
@@ -883,19 +992,221 @@ function ToolActivity({ calls }: { calls: ToolCallState[] }) {
       <CollapsiblePanel>
         <div className="flex flex-col gap-2 pb-1.5 pl-1.5 pt-2.5">
           {calls.map((call, i) => (
-            <Marker key={i}>
-              <MarkerIcon className={call.status === "error" ? "text-danger-text" : undefined}>
-                {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
-              </MarkerIcon>
-              <MarkerContent className="font-mono text-[12px]">{call.name}</MarkerContent>
-              {call.status === "error" && (
-                <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
-              )}
-            </Marker>
+            <div key={i} className="flex flex-col gap-1.5">
+              <Marker>
+                <MarkerIcon className={call.status === "error" ? "text-danger-text" : undefined}>
+                  {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
+                </MarkerIcon>
+                <MarkerContent className="font-mono text-[12px]">{call.name}</MarkerContent>
+                {call.status === "error" && (
+                  <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
+                )}
+              </Marker>
+              {call.agents?.map((agent) => (
+                <SubagentRow
+                  key={`${agent.runId ?? ""}:${agent.agentId}`}
+                  run={agent}
+                  onClick={onAgentClick}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </CollapsiblePanel>
     </Collapsible>
+  );
+}
+
+/** Live elapsed-time ticker for a running agent. */
+function Elapsed({ since }: { since: number }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{formatDuration(Date.now() - since)}</>;
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+/** One delegated agent under its subagent/delegate call — click opens the
+ * transcript drawer. Shows the current tool + elapsed time while running. */
+function SubagentRow({ run, onClick }: { run: SubagentRun; onClick?: (run: SubagentRun) => void }) {
+  const lastStep = run.steps[run.steps.length - 1];
+  const currentTool =
+    run.status === "running" && lastStep?.type === "tool" && lastStep.success === undefined
+      ? lastStep.tool
+      : undefined;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.(run)}
+      className="pressable group/agent ml-5 flex items-center gap-2 rounded-md border-l border-line py-1 pl-3 pr-2 text-left hover:bg-surface-2"
+    >
+      <span
+        className={
+          run.status === "failed" ? "flex shrink-0 text-danger-text" : "flex shrink-0 text-fg-subtle"
+        }
+      >
+        {run.status === "running" ? (
+          <Spinner size="sm" />
+        ) : run.status === "failed" ? (
+          <WarningCircleIcon size={14} />
+        ) : (
+          <TreeStructureIcon size={14} />
+        )}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted group-hover/agent:text-fg">
+        {run.agentId}
+      </span>
+      {currentTool && (
+        <span className="shrink-0 font-mono text-[11px] text-fg-subtle">{currentTool}</span>
+      )}
+      <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
+        {run.status === "running" && run.startedAt ? (
+          <Elapsed since={run.startedAt} />
+        ) : run.durationMs !== undefined ? (
+          formatDuration(run.durationMs)
+        ) : null}
+      </span>
+      {run.model && (
+        <span className="shrink-0 font-mono text-[11px] text-fg-subtle">{run.model}</span>
+      )}
+    </button>
+  );
+}
+
+/** One transcript step: a stretch of the agent's own text (markdown) or a
+ * tool call with its args and outcome preview. */
+function SubagentStepView({ step, active }: { step: SubagentRun["steps"][number]; active: boolean }) {
+  if (step.type === "text") {
+    return (
+      <div className="text-body-sm">
+        <Markdown text={step.text ?? ""} />
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md border border-line bg-surface-2 px-2.5 py-1.5">
+      <div className="flex items-center gap-2">
+        <span
+          className={
+            step.success === false ? "flex shrink-0 text-danger-text" : "flex shrink-0 text-fg-subtle"
+          }
+        >
+          {active ? <Spinner size="sm" /> : toolIcon(step.tool ?? "")}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted">
+          {step.tool}
+        </span>
+        {step.success === false && (
+          <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
+        )}
+      </div>
+      {step.args && step.args !== "{}" && (
+        <div className="mt-1 truncate font-mono text-[11px] text-fg-subtle">{step.args}</div>
+      )}
+      {step.resultPreview && (
+        <div className="mt-1 line-clamp-2 font-mono text-[11px] text-fg-subtle">
+          → {step.resultPreview}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The full transcript of one delegated agent — everything it writes and
+ * every tool call, streamed live. A NON-MODAL drawer (no backdrop): the point
+ * is watching the agent alongside the chat, not focusing into a modal. */
+function SubagentDetailDrawer({
+  run,
+  onClose,
+}: {
+  run: SubagentRun | null;
+  onClose: () => void;
+}) {
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Follow the transcript while the agent works (the drawer is a live view;
+  // scrolling history mid-run is what the persisted record is for).
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el && run?.status === "running") el.scrollTop = el.scrollHeight;
+  }, [run]);
+
+  return (
+    <Drawer open={run !== null} onOpenChange={(open) => !open && onClose()} modal={false}>
+      {run && (
+        <DrawerContent showBackdrop={false}>
+          <DrawerHeader className="border-b border-line">
+            <DrawerTitle className="flex items-center gap-2.5">
+              {run.status === "running" && <Spinner size="sm" />}
+              <span className="min-w-0 truncate font-mono text-[15px]">{run.agentId}</span>
+              {run.status === "failed" && (
+                <span className="shrink-0 text-body-sm font-normal text-danger-text">failed</span>
+              )}
+            </DrawerTitle>
+            <DrawerDescription className="flex items-center gap-2 font-mono text-[12px]">
+              {run.model && <span>{run.model}</span>}
+              <span>
+                {run.status === "running" && run.startedAt ? (
+                  <Elapsed since={run.startedAt} />
+                ) : run.durationMs !== undefined ? (
+                  formatDuration(run.durationMs)
+                ) : null}
+              </span>
+            </DrawerDescription>
+          </DrawerHeader>
+          <DrawerBody ref={bodyRef} className="flex flex-col gap-3 py-4">
+            {run.task && (
+              <section>
+                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Task</h4>
+                <p className="whitespace-pre-wrap text-body-sm text-fg-muted">{run.task}</p>
+              </section>
+            )}
+            {(run.steps.length > 0 || run.status === "running") && (
+              <section>
+                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">
+                  Transcript
+                </h4>
+                <div className="flex flex-col gap-2">
+                  {run.steps.map((step, i) => (
+                    <SubagentStepView
+                      key={i}
+                      step={step}
+                      active={
+                        run.status === "running" &&
+                        i === run.steps.length - 1 &&
+                        step.type === "tool" &&
+                        step.success === undefined
+                      }
+                    />
+                  ))}
+                  {run.status === "running" && <TypingDots />}
+                </div>
+              </section>
+            )}
+            {run.error && (
+              <section>
+                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Error</h4>
+                <p className="whitespace-pre-wrap text-body-sm text-danger-text">{run.error}</p>
+              </section>
+            )}
+            {/* The transcript already contains everything the agent wrote — a
+                separate Result section only serves records persisted before
+                transcripts existed. */}
+            {run.result && !run.steps.some((s) => s.type === "text") && (
+              <section>
+                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Result</h4>
+                <Markdown text={run.result} />
+              </section>
+            )}
+          </DrawerBody>
+        </DrawerContent>
+      )}
+    </Drawer>
   );
 }
 

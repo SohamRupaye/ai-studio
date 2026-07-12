@@ -20,18 +20,24 @@ const sideClasses = {
 interface DrawerContentProps extends React.ComponentProps<typeof Dialog.Popup> {
   side?: keyof typeof sideClasses;
   showClose?: boolean;
+  /** Omit the dimming backdrop — for non-modal drawers (`<Drawer modal={false}>`)
+   * meant to be watched alongside a live page, not focused into. */
+  showBackdrop?: boolean;
 }
 
 function DrawerContent({
   side = "right",
   showClose = true,
+  showBackdrop = true,
   className,
   children,
   ...props
 }: DrawerContentProps) {
   return (
     <Dialog.Portal>
-      <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 data-[open]:animate-fade-in data-[closed]:animate-fade-out" />
+      {showBackdrop && (
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 data-[open]:animate-fade-in data-[closed]:animate-fade-out" />
+      )}
       <Dialog.Popup
         className={cn(
           "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-1 shadow-xl outline-none",

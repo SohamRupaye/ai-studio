@@ -140,6 +140,20 @@ Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
 
+### 2026-07-12 — Subagent detail: dialog → non-modal drawer with the full live transcript
+
+- **Why (user feedback on the live dialog)**: "Working…" answered nothing — only tool *names* streamed, no text, no args; and a modal blocks the chat you're waiting on. Also a delegate job ran 3+ minutes with no elapsed indication (backend added hard timeouts — see ONBOARDING).
+- **The detail surface is now a Drawer, not a Dialog** — our own rule (Dialog = confirmations/focused forms, Drawer = reference panels) already said so: right side, `modal={false}` and **no backdrop** (`DrawerContent` gained `showBackdrop`), so the chat stays visible and interactive while agents work.
+- **The drawer shows the agent's entire process**: Task, then a live Transcript — the agent's own text rendered as Markdown, interleaved with tool cards (icon + name, args preview in mono, `→ result preview`, danger tint on failure, spinner on the in-flight call), auto-following while running. Built from the same `steps` the message persists, so reopening later shows the identical transcript. A separate Result section renders only for records persisted before transcripts existed.
+- **Elapsed time everywhere**: agent rows and the drawer header tick live (`Elapsed`) while running and show the persisted duration after — a stuck run is now visibly stuck, and timed-out runs say "Timed out after Ns".
+
+### 2026-07-11 (evening) — Subagents become visible: per-agent rows + a detail dialog
+
+- **Why**: a `subagent` call rendered as one opaque tool row — four parallel agents could be working (or failing) behind it with nothing to look at. Backend fix for the failures themselves (invented model ids now fall back to the chat's model) is in ONBOARDING; the UI:
+- **ToolActivity nests per-agent rows under subagent/delegate calls** (fed live by the new `{type: "subagent"}` stream events, and by the persisted `agents` detail on `tool_calls` after reopen — same data both ways). Row anatomy: spinner while running / tree icon when done / warning tinted danger on failure, agent id in mono, the agent's *current tool* while it works, model trailing. Rows are buttons.
+- **Clicking an agent row opens a detail Dialog**: task text, model (mono, in the header), activity trail (tool icons + names in order), then the result as Markdown — or the error in danger text. While the run is live the dialog re-reads stream state on every event, so it updates as the agent works; after the turn it renders identically from the persisted message.
+- `toolIcon`: `subagent`/`delegate` tools now get `TreeStructureIcon` (delegate moved off the checklist icon) — delegation reads as structure, not as a todo.
+
 ### 2026-07-11 (later) — Google Workspace presets + the OAuth-client dialog; every preset gets a real mark
 
 - **Gmail / Google Calendar / Google Drive presets ship** (`gmailmcp`/`calendarmcp`/`drivemcp.googleapis.com/mcp/v1`). Google has no dynamic registration, so these presets carry `auth: "oauth-client"`: Connect adds the server, then opens the **OAuth client dialog** (client id + optional secret, Google-console instructions in the description) instead of attempting a doomed sign-in; "Save and sign in" stores the client (`mcp:set-oauth-client`) and runs the browser flow immediately. The same dialog is reachable from any non-connected remote row via a quiet "OAuth client" action ("Replace client" once one is set — entries carry `hasOauthClient`, credentials never round-trip). Google-host authorize URLs get `access_type=offline` so web-type clients receive refresh tokens. **Registering AI Studio's own apps (so users skip all this) is tracked in `context/debt.md`** — until then each install pastes its own client; one Google client covers all three servers.

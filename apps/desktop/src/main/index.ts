@@ -21,7 +21,8 @@ import { runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
 import { estimateTokens, getContextLimit, supportsPdfInput, supportsVision } from "@ai-studio/tokenizer";
 import type { ContentBlock } from "@ai-studio/providers";
-import type { MessageImage } from "@ai-studio/shared";
+import type { MessageImage, SubagentRunRecord } from "@ai-studio/shared";
+import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
 import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
 
 if (require("electron-squirrel-startup")) app.quit();
@@ -417,7 +418,30 @@ function registerHandlers() {
     const chatRouter = routerFor(
       currentProjectId ? store.getProject(currentProjectId)?.orgId : undefined,
     );
-    createRuntime(chatRouter, registry, model);
+    // Per-agent lifecycle for this turn's subagent/delegate calls: forwarded
+    // to the renderer live and persisted with the assistant message on done.
+    // Runs group by runId in first-seen order, matched to subagent/delegate
+    // tool calls in invocation order at persist time. The trail itself is
+    // built by the same shared reducer the renderer uses (applySubagentEvent)
+    // so the live drawer and the persisted record can't drift.
+    const subagentRunOrder: string[] = [];
+    const subagentRuns = new Map<string, Map<string, SubagentRunRecord>>();
+    const subagentStartedAt = new Map<string, number>();
+    createRuntime(chatRouter, registry, model, (ev) => {
+      let group = subagentRuns.get(ev.runId);
+      if (!group) { group = new Map(); subagentRuns.set(ev.runId, group); subagentRunOrder.push(ev.runId); }
+      let rec = group.get(ev.agentId);
+      if (!rec) { rec = newSubagentRecord(ev.agentId); group.set(ev.agentId, rec); }
+      applySubagentEvent(rec, ev);
+      const key = `${ev.runId}:${ev.agentId}`;
+      if (ev.status === "start" && !subagentStartedAt.has(key)) subagentStartedAt.set(key, Date.now());
+      if (ev.status === "done" || ev.status === "failed") {
+        const started = subagentStartedAt.get(key);
+        if (started) rec.durationMs = Date.now() - started;
+        if (rec.result && rec.result.length > 16_000) rec.result = `${rec.result.slice(0, 16_000)}\n…[truncated]`;
+      }
+      mainWindow?.webContents.send("chat:stream", { type: "subagent", branchId, ...ev });
+    });
 
     // Active persona for this branch (if any) layers its own system prompt
     // ahead of the base instructions and restricts which tools it can see.
@@ -506,13 +530,19 @@ function registerHandlers() {
             break;
           }
           const assistantText = event.result.text;
-          store.addMessage(
-            branchId,
-            "assistant",
-            assistantText,
-            model,
-            event.result.toolCalls.map((tc) => ({ name: tc.name, success: tc.success })),
-          );
+          // Attach each subagent/delegate call's per-agent detail (background
+          // delegate jobs still running persist as "running" — live status
+          // keeps streaming, and delegate_result stays the model-facing check).
+          let runIdx = 0;
+          const persistedToolCalls = event.result.toolCalls.map((tc) => {
+            const base: { name: string; success: boolean; agents?: SubagentRunRecord[] } = { name: tc.name, success: tc.success };
+            if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
+              const group = subagentRuns.get(subagentRunOrder[runIdx++]!);
+              if (group?.size) base.agents = [...group.values()];
+            }
+            return base;
+          });
+          store.addMessage(branchId, "assistant", assistantText, model, persistedToolCalls);
 
           // Cost tracking
           costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });

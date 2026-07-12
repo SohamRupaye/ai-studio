@@ -87,6 +87,7 @@ export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, add
 // Subagent/delegate tools run agents via an injected runner (this package
 // must not depend on ai-core) — ai-core's createRuntime injects it.
 export { setSubagentDependencies } from "./tools/subagent";
+export type { SubagentRunMeta } from "./tools/subagent";
 
 // Skills (convenience re-export)
 export { listSkills } from "./skills/runner";

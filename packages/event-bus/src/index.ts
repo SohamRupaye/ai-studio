@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Space, Chat, MessageImage } from "@ai-studio/shared";
+import type { Branch, Organisation, Project, Space, Chat, MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
@@ -148,6 +148,11 @@ export type AgentStreamEvent =
   | { type: "tool_start"; branchId: string; name: string; args: Record<string, unknown> }
   | { type: "tool_end"; branchId: string; name: string; result: string; success: boolean }
   | { type: "tool_call_streaming"; branchId: string; name: string; bytesReceived: number }
+  // Per-agent lifecycle inside a subagent/delegate tool call — the agent's
+  // full transcript (text deltas, tool calls with args, outcomes) streams so
+  // the UI can show exactly what each delegated agent is doing. "start" may
+  // fire twice for one agent (model fallback re-announces the actual model).
+  | ({ type: "subagent"; branchId: string } & SubagentStreamEvent)
   | { type: "done"; branchId: string; text: string; iterations: number; cost?: string }
   | { type: "error"; branchId: string; message: string; turn?: number; rateLimited?: boolean; retryAfterSeconds?: number };
 
@@ -239,7 +244,7 @@ export interface IpcInvokeMap {
 
   // Messages
   /** A branch's transcript: inherited ancestry (same walk prompt assembly uses) followed by its own messages. */
-  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean }>; images?: MessageImage[]; inherited?: boolean }>];
+  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean; agents?: SubagentRunRecord[] }>; images?: MessageImage[]; inherited?: boolean }>];
   "message:undo": [{ branchId: string }, number];
   "message:edit": [{ branchId: string; turn: number }, void];
   "message:delete": [{ branchId: string; turn: number }, number];
