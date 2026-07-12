@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
-import { basename, extname, join, sep } from "node:path";
+import { basename, dirname, extname, join, sep } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { acceptedExtensions, extractText, isLossless } from "./ingestion.js";
@@ -11,19 +11,20 @@ import {
   extractAndPersistArtifacts, runAgentCooperative, PermissionStore, PersonaRegistry, SnapshotManager,
 } from "@ai-studio/ai-core";
 import {
-  createDefaultRegistry, loadMCPServers, getLSPClient, listSkills,
+  createDefaultRegistry, loadMCPServers, getLSPClient, SkillsService,
   getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer, authenticateMCPServer,
   kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry,
 } from "@ai-studio/tools-runtime";
+import type { SkillInfo } from "@ai-studio/tools-runtime";
 import { MetaGraph } from "@ai-studio/graph-engine";
 import { buildPayload, compareBranches, getAncestryMessages } from "@ai-studio/prompt-engine";
 import { runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
 import type { ToolRegistry } from "@ai-studio/tools-runtime";
 import { estimateTokens, getContextLimit, supportsPdfInput, supportsVision } from "@ai-studio/tokenizer";
 import type { ContentBlock } from "@ai-studio/providers";
-import type { MessageImage, SubagentRunRecord } from "@ai-studio/shared";
+import type { MessageImage, MessageToolCall, SubagentRunRecord } from "@ai-studio/shared";
 import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
-import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry } from "@ai-studio/event-bus";
+import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry, SkillImportOutcome } from "@ai-studio/event-bus";
 
 if (require("electron-squirrel-startup")) app.quit();
 
@@ -39,6 +40,7 @@ let costTracker: CostTracker;
 let permissions: PermissionStore;
 let personas: PersonaRegistry;
 let snapshots: SnapshotManager;
+let skills: SkillsService;
 let dataDirPath = "";
 /** AbortController tagged with why it was aborted, so a superseded request
  * can tell the renderer (an explicit user Stop already handles its own UI). */
@@ -306,12 +308,43 @@ async function initRuntime() {
     mainWindow?.webContents.send("mcp:changed", undefined);
   });
 
-  // Load skills from data dir
-  const skillsDir = join(dataDir, "skills");
-  if (existsSync(skillsDir)) {
-    const skills = listSkills(skillsDir);
-    console.log(`[skills] Loaded ${skills.length} skills`);
-  }
+  // Skills: managed SKILL.md packages in <dataDir>/skills. The system prompt
+  // advertises enabled skills (name + description only); the `skill` tool
+  // loads a body on demand — progressive disclosure, bodies are never all
+  // preloaded. External edits to the dir hot-reload and notify the renderer.
+  skills = new SkillsService(join(dataDir, "skills"));
+  await skills.load();
+  skills.startWatching(() => mainWindow?.webContents.send("skills:changed", undefined))
+    .catch((e) => console.error("[skills]", e?.message ?? e));
+  registry.register(
+    {
+      name: "skill",
+      description:
+        "Load a skill — a reusable package of instructions for a specialized task. The <available_skills> block in the system prompt lists the installed skills and what each is for. When a task matches a skill's description, call this with the exact skill name BEFORE attempting the task, then follow the returned instructions for the rest of the turn.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Exact skill name as listed in <available_skills>." },
+        },
+        required: ["name"],
+      },
+    },
+    async (args: Record<string, unknown>) => {
+      const name = String(args["name"] ?? "").trim();
+      const found = skills.get(name);
+      // userOnly skills (disable-model-invocation) exist only behind the
+      // user's slash command — to the model they don't exist at all.
+      if (!found || found.userOnly || getConfig().disabledSkills.includes(name)) {
+        const available = skills
+          .all({ deny: getConfig().disabledSkills })
+          .filter((s) => !s.userOnly)
+          .map((s) => s.name)
+          .join(", ") || "none";
+        return `Unknown skill "${name}". Available skills: ${available}.`;
+      }
+      return `# Skill: ${found.name}\n\n${found.content}\n\n(Supporting files for this skill live in ${dirname(found.location)} — resolve relative paths in the instructions against that directory.)`;
+    },
+  );
 
   // Init LSP
   getLSPClient(app.getPath("userData"));
@@ -369,6 +402,29 @@ function registerHandlers() {
     }
     const cfg = getConfig();
     const model = branch.model || cfg.defaultModel;
+
+    // Slash-invoked skill: "/name rest of message". Only a leading token that
+    // matches an INSTALLED skill counts as an invocation — anything else
+    // ("/etc/hosts is broken") passes through as a normal message. Both the
+    // composer's autocomplete and a hand-typed command converge here.
+    let invokedSkill: SkillInfo | undefined;
+    const slash = message.match(/^\/([A-Za-z0-9][\w-]*)/);
+    if (slash) {
+      const candidate = skills.get(slash[1]!);
+      if (candidate) {
+        if (cfg.disabledSkills.includes(candidate.name)) {
+          // Nothing persisted yet, so turn -1 (same convention as the vision gate).
+          mainWindow.webContents.send("chat:stream", {
+            type: "error",
+            branchId,
+            message: `The skill "/${candidate.name}" is disabled. Enable it in Settings → Skills, then resend.`,
+            turn: -1,
+          });
+          return;
+        }
+        invokedSkill = candidate;
+      }
+    }
 
     // Capability gate (honest block): don't silently drop an attached image on
     // a text-only model. Refuse before persisting so the user can switch model
@@ -452,9 +508,15 @@ function registerHandlers() {
     // the app boilerplate and the per-conversation context.
     const projectPrompt = (currentProjectId ? store.getProject(currentProjectId)?.systemPrompt : undefined)?.trim();
     const baseSystem = buildBaseSystem(projectPrompt, payload.systemContext);
-    const system = persona && persona.name !== "default"
+    let system = persona && persona.name !== "default"
       ? `${persona.systemPrompt}\n\n${baseSystem}`
       : baseSystem;
+    // A slash-invoked skill binds this turn: its full body rides the system
+    // prompt (the persisted user message keeps the raw "/name …" text, so the
+    // transcript shows what was typed and forks inherit the invocation).
+    if (invokedSkill) {
+      system += `\n\n<invoked_skill name="${invokedSkill.name}">\nThe user invoked this skill for this request — its instructions are binding for this turn.\n${invokedSkill.content}\n(Supporting files for this skill live in ${dirname(invokedSkill.location)} — resolve relative paths against that directory.)\n</invoked_skill>`;
+    }
     // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
     const agent = new Agent(chatRouter, registry, { sessionId: branchId });
 
@@ -535,7 +597,15 @@ function registerHandlers() {
           // keeps streaming, and delegate_result stays the model-facing check).
           let runIdx = 0;
           const persistedToolCalls = event.result.toolCalls.map((tc) => {
-            const base: { name: string; success: boolean; agents?: SubagentRunRecord[] } = { name: tc.name, success: tc.success };
+            // Previews persist with the call so the UI can answer "what
+            // command ran" and prompt assembly can remind the model of its
+            // own actions on later turns (see withToolTrail in prompt-engine).
+            const base: MessageToolCall = {
+              name: tc.name,
+              success: tc.success,
+              argsPreview: toolCallPreview(tc.args, 300),
+              resultPreview: toolCallPreview(tc.result, 200),
+            };
             if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
               const group = subagentRuns.get(subagentRunOrder[runIdx++]!);
               if (group?.size) base.agents = [...group.values()];
@@ -1201,8 +1271,88 @@ function registerHandlers() {
   // ── Skills ──────────────────────────────────────────────────────────────────
 
   handle("skills:list", () => {
-    const skillsDir = join(dataDirPath, "skills");
-    return listSkills(skillsDir).map((s) => ({ name: s.name, description: s.description, tools: s.tools }));
+    const disabled = new Set(getConfig().disabledSkills);
+    return skills.all().map((s) => ({
+      name: s.name,
+      description: s.description,
+      enabled: !disabled.has(s.name),
+      path: s.location,
+      userOnly: s.userOnly,
+    }));
+  });
+
+  handle("skills:read", ({ name }) => {
+    const s = skills.get(name);
+    return s ? { name: s.name, description: s.description, content: s.content } : null;
+  });
+
+  handle("skills:set-enabled", ({ name, enabled }) => {
+    const disabled = new Set(getConfig().disabledSkills);
+    if (enabled) disabled.delete(name);
+    else disabled.add(name);
+    saveConfig({ disabledSkills: [...disabled].sort() });
+  });
+
+  handle("skills:remove", async ({ name }) => {
+    const removed = await skills.remove(name);
+    if (removed) {
+      // Drop the stale disabled entry so a future reinstall starts enabled,
+      // like any newly installed skill.
+      const disabled = getConfig().disabledSkills;
+      if (disabled.includes(name)) saveConfig({ disabledSkills: disabled.filter((n) => n !== name) });
+      mainWindow?.webContents.send("skills:changed", undefined);
+    }
+    return removed;
+  });
+
+  handle("skills:import", async () => {
+    const outcome: SkillImportOutcome = { imported: [], skipped: [] };
+    if (!mainWindow) return outcome;
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Import skills",
+      message: "Pick skill folders (containing a SKILL.md) or .md skill files",
+      properties: ["openFile", "openDirectory", "multiSelections"],
+      filters: [{ name: "Skills", extensions: ["md"] }],
+    });
+    if (canceled) return outcome;
+    for (const p of filePaths) {
+      try {
+        outcome.imported.push(await skills.importFromPath(p));
+      } catch (err) {
+        outcome.skipped.push({ source: basename(p), reason: err instanceof Error ? err.message : "Import failed." });
+      }
+    }
+    if (outcome.imported.length) mainWindow?.webContents.send("skills:changed", undefined);
+    return outcome;
+  });
+
+  handle("skills:discover", async ({ url }) => {
+    const { skills: found, skipped } = await skills.discoverFromUrl(url);
+    return {
+      skills: found.map((s) => ({
+        name: s.name,
+        description: s.description,
+        source: s.source,
+        installed: Boolean(skills.get(s.name)),
+      })),
+      skipped,
+    };
+  });
+
+  handle("skills:pull", async ({ url, skills: pick }) => {
+    const outcome = await skills.importFromUrl(url, pick);
+    if (outcome.imported.length) mainWindow?.webContents.send("skills:changed", undefined);
+    return outcome;
+  });
+
+  handle("skills:reveal", ({ name }) => {
+    const s = skills.get(name);
+    if (s) shell.showItemInFolder(s.location);
+  });
+
+  handle("skills:reload", async () => {
+    await skills.load();
+    return skills.all().length;
   });
 
   // ── Permissions ─────────────────────────────────────────────────────────────
@@ -1296,6 +1446,17 @@ function buildBaseSystem(projectPrompt?: string, systemContext?: string): string
 - Your replies render as full markdown: use tables for comparisons and structured data, fenced code blocks with a language tag for code, and headings only in long multi-section answers.
 - Match the user's language and technical depth.`,
   );
+
+  // Enabled skills are advertised by name + description only; the `skill`
+  // tool fetches a body on demand. Skills without a description aren't
+  // advertised (nothing to match a task against), and slash-only skills
+  // (disable-model-invocation) never are — format() applies both filters.
+  const enabledSkills = skills.all({ deny: getConfig().disabledSkills }).filter((s) => s.description && !s.userOnly);
+  if (enabledSkills.length) {
+    parts.push(
+      `SKILLS — reusable instruction packages. When a task matches a skill's description below, call the \`skill\` tool with its name FIRST and follow the returned instructions. The user can also invoke one directly by starting a message with /<name>.\n${skills.format({ deny: getConfig().disabledSkills }, true)}`,
+    );
+  }
 
   if (projectPrompt) parts.push(`PROJECT INSTRUCTIONS (set by the user for this project — follow them):\n${projectPrompt}`);
   if (systemContext) parts.push(systemContext);
@@ -1401,6 +1562,21 @@ function extractMemoryFact(message: string): string | null {
   // Guard against empty or non-substantive extractions.
   if (fact.length < 3) return null;
   return fact;
+}
+
+// ── Tool-call previews ────────────────────────────────────────────────────────
+
+/**
+ * One-line preview of a tool call's args or result for persistence — enough
+ * to answer "what did that call do", small enough to ride the hot window on
+ * every later turn. Undefined for empty payloads so the JSON stays lean.
+ */
+function toolCallPreview(value: unknown, cap: number): string | undefined {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  if (!text || text === "{}") return undefined;
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  return flat.length > cap ? `${flat.slice(0, cap)}…` : flat;
 }
 
 // ── Cost helper ───────────────────────────────────────────────────────────────

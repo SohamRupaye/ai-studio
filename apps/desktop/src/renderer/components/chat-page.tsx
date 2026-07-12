@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { toast } from "sonner";
 import {
@@ -29,7 +29,7 @@ import {
 } from "@phosphor-icons/react";
 import type { MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
 import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
-import { counted } from "../lib/utils";
+import { cn, counted } from "../lib/utils";
 import {
   Drawer,
   DrawerBody,
@@ -38,7 +38,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "./ui/drawer";
-import { invalidateQueries, useBranches, useMessages, useMutation, useUser } from "../hooks/use-ipc-data";
+import { invalidateQueries, useBranches, useMessages, useMutation, useSkills, useUser } from "../hooks/use-ipc-data";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
 import { Composer, ComposerButton } from "./ui/composer";
@@ -80,7 +80,26 @@ import { Spinner } from "./ui/spinner";
  * only present on live runs. */
 type SubagentRun = SubagentRunRecord & { runId?: string; startedAt?: number };
 
-type ToolCallState = { name: string; status: "running" | "done" | "error"; agents?: SubagentRun[] };
+type ToolCallState = {
+  name: string;
+  status: "running" | "done" | "error";
+  /** Compact args (live: from tool_start; persisted: stored preview) — the
+   * row answers "what did that call actually do". */
+  argsPreview?: string;
+  agents?: SubagentRun[];
+};
+
+/** One-line args preview for a LIVE tool_start event (persisted rows carry
+ * the preview main stored). */
+function liveArgsPreview(args: Record<string, unknown>): string | undefined {
+  try {
+    const text = JSON.stringify(args);
+    if (!text || text === "{}") return undefined;
+    return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+  } catch {
+    return undefined;
+  }
+}
 
 interface StreamState {
   text: string;
@@ -169,6 +188,23 @@ function StagedImage({ blobPath, filename }: { blobPath: string; filename: strin
   );
 }
 
+/** A user message's text, with a leading "/skill" invocation rendered as a
+ * chip when the name matches an installed skill (the message text itself IS
+ * the command — no separate metadata to drift from it). */
+function UserMessageBody({ text, skillNames }: { text: string; skillNames: ReadonlySet<string> }) {
+  const match = /^\/([\w-]+)[ \t]*([\s\S]*)$/.exec(text);
+  if (!match || !skillNames.has(match[1]!)) return <Markdown text={text} />;
+  return (
+    <div>
+      <span className="mb-1 inline-flex items-center gap-1 rounded-full border border-line bg-surface-1 px-2.5 py-0.5 font-mono text-[12px] text-fg">
+        <LightningIcon size={12} weight="fill" />
+        {match[1]}
+      </span>
+      {match[2] ? <Markdown text={match[2]} /> : null}
+    </div>
+  );
+}
+
 /** A turn's images, rendered ABOVE the bubble (never inside it — an image
  * inside MessageContent stretches the bubble around long text). Click opens
  * the fullscreen viewer. Follows the Message's own role alignment. */
@@ -254,6 +290,17 @@ export function ChatPage() {
 
   const [draft, setDraft] = useState("");
   const [editingTurn, setEditingTurn] = useState<number | null>(null);
+  // Slash-command skill picker: opens while the draft is a bare "/token"
+  // (autocomplete) or from the attach menu (browse mode, all enabled skills).
+  const { data: skillList } = useSkills();
+  const enabledSkills = useMemo(() => (skillList ?? []).filter((s) => s.enabled), [skillList]);
+  // Installed names (disabled included) — past transcripts keep their chips
+  // even after a skill is disabled.
+  const skillNames = useMemo(() => new Set((skillList ?? []).map((s) => s.name)), [skillList]);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Turn to fork at — set by an assistant row's "Branch from here", drives
   // the name dialog.
   const [branchingFromTurn, setBranchingFromTurn] = useState<number | null>(null);
@@ -342,7 +389,15 @@ export function ChatPage() {
         scheduleFlush();
       } else if (event.type === "tool_start") {
         setStreaming((s) =>
-          s ? { ...s, toolCalls: [...s.toolCalls, { name: event.name, status: "running" }] } : s,
+          s
+            ? {
+                ...s,
+                toolCalls: [
+                  ...s.toolCalls,
+                  { name: event.name, status: "running", argsPreview: liveArgsPreview(event.args) },
+                ],
+              }
+            : s,
         );
       } else if (event.type === "tool_end") {
         setStreaming((s) => {
@@ -416,6 +471,8 @@ export function ChatPage() {
 
   const submitDraft = (value: string) => {
     setDraft("");
+    setSkillPickerOpen(false);
+    setSlashDismissed(false);
     if (editingTurn !== null) {
       const turn = editingTurn;
       setEditingTurn(null);
@@ -521,6 +578,21 @@ export function ChatPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // "/tok" with no space yet — the token being autocompleted. A space ends
+  // autocomplete (the command is already complete ahead of it).
+  const slashToken = /^\/([\w-]*)$/.exec(draft)?.[1];
+  const slashTyping = slashToken !== undefined && !slashDismissed;
+  const skillOptions = useMemo(() => {
+    if (skillPickerOpen) return enabledSkills;
+    if (slashToken === undefined) return [];
+    const q = slashToken.toLowerCase();
+    return enabledSkills.filter((s) => s.name.toLowerCase().startsWith(q));
+  }, [skillPickerOpen, slashToken, enabledSkills]);
+  const slashOpen = (skillPickerOpen || slashTyping) && !sending;
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [slashToken, skillPickerOpen]);
+
   if (branches && !branch) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -603,6 +675,79 @@ export function ChatPage() {
     if (docPaths.length) void uploadFiles(docPaths);
   };
 
+  const applySkill = (name: string) => {
+    // Typed mode replaces the /token; browse mode prefixes the current draft.
+    setDraft((d) => (/^\/[\w-]*$/.test(d) ? `/${name} ` : `/${name} ${d}`));
+    setSkillPickerOpen(false);
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
+
+  const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!slashOpen) return;
+    if (skillOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIndex((i) => (i + 1) % skillOptions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIndex((i) => (i - 1 + skillOptions.length) % skillOptions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        applySkill(skillOptions[Math.min(slashIndex, skillOptions.length - 1)]!.name);
+        return;
+      }
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setSkillPickerOpen(false);
+      setSlashDismissed(true);
+    }
+  };
+
+  // Hidden while a bare "/token" matches nothing — that draft is (probably)
+  // just text, and Enter should send it as-is.
+  const slashPopup = slashOpen && (skillOptions.length > 0 || skillPickerOpen) && (
+    <div className="absolute bottom-full left-0 right-0 z-40 mb-2 max-h-64 overflow-y-auto rounded-lg border border-line bg-surface-2 p-1.5 shadow-float">
+      <p className="px-2.5 pb-1 pt-1 text-label-sm text-fg-subtle">Skills</p>
+      {skillOptions.length === 0 ? (
+        <p className="px-2.5 pb-1.5 text-body-sm text-fg-subtle">
+          No skills installed yet — add them in{" "}
+          <Link to="/settings/skills" className="text-fg underline underline-offset-2">
+            Settings → Skills
+          </Link>
+          .
+        </p>
+      ) : (
+        skillOptions.map((s, i) => (
+          <button
+            type="button"
+            key={s.name}
+            // Keep the textarea focused so keyboard nav survives a hover-click.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applySkill(s.name)}
+            onMouseEnter={() => setSlashIndex(i)}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left",
+              i === slashIndex && "bg-surface-3",
+            )}
+          >
+            <LightningIcon size={14} className="shrink-0 text-fg-muted" />
+            <span className="shrink-0 font-mono text-label-md text-fg">/{s.name}</span>
+            {s.description && (
+              <span className="min-w-0 flex-1 truncate text-body-sm text-fg-subtle">
+                {s.description}
+              </span>
+            )}
+          </button>
+        ))
+      )}
+    </div>
+  );
+
   const imageChips = pendingImages.length > 0 && (
     <div className="flex w-full flex-wrap gap-3 rounded-[20px] border border-line bg-surface-1 p-3 shadow-float">
       {pendingImages.map((img, i) => (
@@ -622,15 +767,23 @@ export function ChatPage() {
   );
 
   const composer = (
-    <div className="flex w-full flex-col gap-2">
+    <div className="relative flex w-full flex-col gap-2">
+      {slashPopup}
       {imageChips}
     <Composer
       className="w-full"
       value={draft}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        // Typing again revives a dismissed autocomplete and ends browse mode.
+        setSlashDismissed(false);
+        setSkillPickerOpen(false);
+      }}
+      onKeyDown={handleComposerKeyDown}
       onSubmit={submitDraft}
       onPaste={handlePaste}
       disabled={sending}
+      textareaRef={composerInputRef}
       placeholder={editingTurn !== null ? "Edit message…" : "Ask anything…"}
       leading={
         <Menu>
@@ -648,7 +801,12 @@ export function ChatPage() {
               <ImagesIcon /> Add photos
             </MenuItem>
             <MenuSeparator />
-            <MenuItem>
+            <MenuItem
+              onClick={() => {
+                setSkillPickerOpen(true);
+                requestAnimationFrame(() => composerInputRef.current?.focus());
+              }}
+            >
               <LightningIcon /> Skills
             </MenuItem>
             <MenuItem>
@@ -702,6 +860,7 @@ export function ChatPage() {
                           calls={m.toolCalls!.map((tc) => ({
                             name: tc.name,
                             status: tc.success ? "done" : "error",
+                            argsPreview: tc.argsPreview,
                             // steps ?? []: rows persisted before the trail
                             // existed carry no steps — don't crash on them.
                             agents: tc.agents?.map((a) => ({ ...a, steps: a.steps ?? [] })),
@@ -714,7 +873,11 @@ export function ChatPage() {
                       ) : null}
                       {m.content || !m.images?.length ? (
                         <MessageContent>
-                          <Markdown text={m.content} />
+                          {m.role === "user" ? (
+                            <UserMessageBody text={m.content} skillNames={skillNames} />
+                          ) : (
+                            <Markdown text={m.content} />
+                          )}
                         </MessageContent>
                       ) : null}
                       <MessageActions>
@@ -820,7 +983,7 @@ export function ChatPage() {
                     )}
                     {pendingUser ? (
                       <MessageContent>
-                        <Markdown text={pendingUser} />
+                        <UserMessageBody text={pendingUser} skillNames={skillNames} />
                       </MessageContent>
                     ) : null}
                   </Message>
@@ -997,7 +1160,14 @@ function ToolActivity({
                 <MarkerIcon className={call.status === "error" ? "text-danger-text" : undefined}>
                   {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
                 </MarkerIcon>
-                <MarkerContent className="font-mono text-[12px]">{call.name}</MarkerContent>
+                <MarkerContent className="flex min-w-0 items-baseline gap-2 font-mono text-[12px]">
+                  <span className="shrink-0">{call.name}</span>
+                  {call.argsPreview && (
+                    <span className="min-w-0 truncate text-[11px] text-fg-subtle">
+                      {call.argsPreview}
+                    </span>
+                  )}
+                </MarkerContent>
                 {call.status === "error" && (
                   <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
                 )}

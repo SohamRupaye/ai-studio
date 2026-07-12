@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useTheme } from "./hooks/use-theme";
-import { useChatTitledListener, useMCPChangedListener, useModelsRefreshListener } from "./hooks/use-ipc-data";
+import { useChatTitledListener, useMCPChangedListener, useModelsRefreshListener, useSkillsChangedListener } from "./hooks/use-ipc-data";
 import { AuthProvider } from "./components/auth-provider";
 import { WorkspaceProvider } from "./components/workspace-provider";
 import { UiPrefsProvider } from "./components/ui-prefs";
@@ -32,6 +32,7 @@ export default function App() {
   useModelsRefreshListener();
   useChatTitledListener();
   useMCPChangedListener();
+  useSkillsChangedListener();
 
   const applied =
     theme === "system"
@@ -77,6 +78,7 @@ export default function App() {
               <Route path="/settings/providers" element={<SettingsPage />} />
               <Route path="/settings/providers/:provider" element={<SettingsPage />} />
               <Route path="/settings/mcp" element={<SettingsPage />} />
+              <Route path="/settings/skills" element={<SettingsPage />} />
               <Route path="/settings/organization/:orgId" element={<SettingsPage />} />
               <Route path="/settings/project/:projectId" element={<SettingsPage />} />
               <Route path="/settings/project" element={<ProjectSettingsRedirect />} />

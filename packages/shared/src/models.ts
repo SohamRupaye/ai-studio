@@ -41,6 +41,12 @@ export interface SubagentRunRecord {
 export interface MessageToolCall {
   name: string;
   success: boolean;
+  /** Compact one-line JSON of the call's arguments (capped at persist time) —
+   * lets the UI answer "what command ran" and rides the hot window so the
+   * model remembers its own actions on later turns. */
+  argsPreview?: string;
+  /** Short preview of the tool's output (capped at persist time). */
+  resultPreview?: string;
   /** Per-agent detail for subagent/delegate calls. */
   agents?: SubagentRunRecord[];
 }

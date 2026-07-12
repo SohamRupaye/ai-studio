@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Space, Chat, MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
+import type { Branch, Organisation, Project, Space, Chat, MessageImage, MessageToolCall, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
@@ -50,10 +50,21 @@ export interface MCPServerEntry {
 
 // ── Skills ─────────────────────────────────────────────────────────────────────
 
-export interface SkillSummary {
+export interface SkillEntry {
   name: string;
-  description: string;
-  tools: string[];
+  description?: string;
+  /** False when the skill is on config.yaml's disabled_skills list. */
+  enabled: boolean;
+  /** Absolute path of the SKILL.md, for reveal-in-Finder. */
+  path: string;
+  /** Slash-only (frontmatter disable-model-invocation) — the model never
+   * sees it; only /name invokes it. */
+  userOnly?: boolean;
+}
+
+export interface SkillImportOutcome {
+  imported: string[];
+  skipped: Array<{ source: string; reason: string }>;
 }
 
 // ── Permissions ─────────────────────────────────────────────────────────────────
@@ -244,7 +255,7 @@ export interface IpcInvokeMap {
 
   // Messages
   /** A branch's transcript: inherited ancestry (same walk prompt assembly uses) followed by its own messages. */
-  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: Array<{ name: string; success: boolean; agents?: SubagentRunRecord[] }>; images?: MessageImage[]; inherited?: boolean }>];
+  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: MessageToolCall[]; images?: MessageImage[]; inherited?: boolean }>];
   "message:undo": [{ branchId: string }, number];
   "message:edit": [{ branchId: string; turn: number }, void];
   "message:delete": [{ branchId: string; turn: number }, number];
@@ -333,7 +344,34 @@ export interface IpcInvokeMap {
   "mcp:set-oauth-client": [{ name: string; clientId: string; clientSecret?: string }, MCPServerEntry];
 
   // Skills
-  "skills:list": [void, SkillSummary[]];
+  "skills:list": [void, SkillEntry[]];
+  /** Full markdown body of one skill (frontmatter stripped); null if unknown. */
+  "skills:read": [{ name: string }, { name: string; description?: string; content: string } | null];
+  "skills:set-enabled": [{ name: string; enabled: boolean }, void];
+  /** Delete the skill's directory from disk. */
+  "skills:remove": [{ name: string }, boolean];
+  /** Native picker (folders with a SKILL.md, or .md files) → install into the
+   * skills dir. Empty arrays if cancelled. */
+  "skills:import": [void, SkillImportOutcome];
+  /** Find installable skills at a URL without installing — a GitHub repo
+   * (every SKILL.md folder in it), a raw SKILL.md, or a catalogue index.json.
+   * Drives the pick-list in the Add-from-URL dialog. Throws with a
+   * user-facing message when the URL is unusable. */
+  "skills:discover": [
+    { url: string },
+    {
+      skills: Array<{ name: string; description?: string; source: string; installed: boolean }>;
+      skipped: Array<{ source: string; reason: string }>;
+    },
+  ];
+  /** Install from a URL — everything discovered there, or only the named
+   * skills (the pick-list selection). */
+  "skills:pull": [{ url: string; skills?: string[] }, SkillImportOutcome];
+  /** Show the skill's SKILL.md in the system file manager. */
+  "skills:reveal": [{ name: string }, void];
+  /** Rescan the skills directory on demand (external edits normally arrive
+   * via the watcher; this is the manual fallback). Returns the skill count. */
+  "skills:reload": [void, number];
 
   // Permissions
   "permissions:list": [void, PermissionRuleInfo[]];
@@ -377,6 +415,9 @@ export interface IpcEventMap {
   /** Fired whenever any MCP server's status changes (connect, auth, failure),
    * so the settings page reflects live state without polling. */
   "mcp:changed": void;
+  /** Fired when the installed skills change (import, remove, external edit),
+   * so skill lists refetch without polling. */
+  "skills:changed": void;
 }
 
 // ── Channel name helpers ──────────────────────────────────────────────────────

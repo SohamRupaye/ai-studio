@@ -218,6 +218,20 @@ export function useMCPChangedListener(): void {
 }
 
 /**
+ * Subscribes once (mount in App.tsx) to "skills:changed" — pushed when the
+ * installed skills change (import, remove, an external edit to the skills
+ * dir) — and refetches skills:list wherever it's mounted.
+ */
+export function useSkillsChangedListener(): void {
+  useEffect(() => {
+    const off = window.ipc.on("skills:changed", () => {
+      invalidateQueries();
+    });
+    return off;
+  }, []);
+}
+
+/**
  * Whether the window is fullscreen. macOS hides the traffic lights in
  * fullscreen, so chrome that reserves space for them should collapse it.
  */

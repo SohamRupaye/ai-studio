@@ -80,6 +80,46 @@ describe("buildPayload — selected artifacts", () => {
     expect(payload.artifactTokens).toBe(0);
   });
 
+  it("reattaches persisted tool calls to assistant hot messages so the model remembers its own actions", async () => {
+    const branch = store.createBranch("main", "m");
+    store.addMessage(branch.id, "user", "/debate sqlite vs postgres");
+    store.addMessage(branch.id, "assistant", "Debate summary.", "m", [
+      { name: "bash", success: true, argsPreview: '{"command":"claude -p …"}', resultPreview: "SQLite wins" },
+      { name: "web_search", success: false },
+    ]);
+    store.addMessage(branch.id, "user", "what commands did you run?");
+
+    const payload = await buildPayload(store, store.getBranch(branch.id)!);
+
+    const assistant = payload.messages.find((m) => m.role === "assistant")!;
+    expect(assistant.content).toContain("Debate summary.");
+    expect(assistant.content).toContain("Tool calls you made during this turn");
+    expect(assistant.content).toContain('bash({"command":"claude -p …"}) ✓ → SQLite wins');
+    expect(assistant.content).toContain("web_search ✗ failed");
+    // User messages and the stored row itself stay untouched.
+    expect(payload.messages[0]!.content).toBe("/debate sqlite vs postgres");
+    expect(store.getMessages(branch.id)[1]!.content).toBe("Debate summary.");
+  });
+
+  it("caps the tool trail and notes the overflow", async () => {
+    const branch = store.createBranch("main", "m");
+    store.addMessage(branch.id, "user", "go");
+    store.addMessage(
+      branch.id,
+      "assistant",
+      "Done.",
+      "m",
+      Array.from({ length: 15 }, (_, i) => ({ name: `tool${i}`, success: true })),
+    );
+
+    const payload = await buildPayload(store, store.getBranch(branch.id)!);
+
+    const assistant = payload.messages.find((m) => m.role === "assistant")!;
+    expect(assistant.content).toContain("tool11");
+    expect(assistant.content).not.toContain("tool12");
+    expect(assistant.content).toContain("…and 3 more calls");
+  });
+
   it("truncates an oversized artifact with a visible marker instead of blowing the budget", async () => {
     const branch = store.createBranch("main", "m");
     // Far beyond the 8k-token per-artifact cap.

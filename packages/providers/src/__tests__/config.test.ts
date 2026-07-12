@@ -82,6 +82,27 @@ describe("loadConfig", () => {
   });
 });
 
+describe("disabled_skills", () => {
+  it("defaults to an empty list and ignores malformed values", async () => {
+    const { loadConfig } = await import("../config.js");
+    expect(loadConfig(join(tmpDir, "nonexistent.yaml")).disabledSkills).toEqual([]);
+    const cfgPath = join(tmpDir, "config.yaml");
+    writeFileSync(cfgPath, `default_model: m\ndisabled_skills:\n  - real-skill\n  - 42\n`);
+    expect(loadConfig(cfgPath).disabledSkills).toEqual(["real-skill"]);
+  });
+
+  it("saveConfig round-trips the list and clears it when empty", async () => {
+    const { loadConfig, saveConfig } = await import("../config.js");
+    const cfgPath = join(tmpDir, "config.yaml");
+    writeFileSync(cfgPath, `default_model: m\n`);
+    loadConfig(cfgPath);
+    expect(saveConfig({ disabledSkills: ["a", "b"] }).disabledSkills).toEqual(["a", "b"]);
+    // Unrelated patches leave the list alone.
+    expect(saveConfig({ defaultModel: "other" }).disabledSkills).toEqual(["a", "b"]);
+    expect(saveConfig({ disabledSkills: [] }).disabledSkills).toEqual([]);
+  });
+});
+
 describe("getConfig", () => {
   it("returns a config object with required shape", async () => {
     const { getConfig, loadConfig } = await import("../config.js");

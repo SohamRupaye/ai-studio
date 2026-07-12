@@ -11,6 +11,8 @@ interface ComposerProps
   leading?: React.ReactNode;
   actions?: React.ReactNode;
   submitDisabled?: boolean;
+  /** Escape hatch to the inner textarea (e.g. refocus after a picker inserts text). */
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
 }
 
 // The pill composer — the hero of the chat screen. Floats above the canvas
@@ -28,9 +30,11 @@ function Composer({
   onKeyDown,
   disabled,
   placeholder = "Ask anything…",
+  textareaRef: externalTextareaRef,
   ...props
 }: ComposerProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  React.useImperativeHandle(externalTextareaRef, () => textareaRef.current!, []);
   const [innerValue, setInnerValue] = React.useState(defaultValue?.toString() ?? "");
   const isControlled = valueProp !== undefined;
   const value = isControlled ? String(valueProp) : innerValue;

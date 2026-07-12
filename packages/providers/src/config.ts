@@ -87,6 +87,12 @@ export interface Config {
    * released models show up automatically.
    */
   disabledModels: Record<string, string[]>;
+  /**
+   * Skills hidden from the model and slash commands (by skill name).
+   * Disabled-list semantics like disabledModels: a newly installed skill is
+   * enabled automatically.
+   */
+  disabledSkills: string[];
   context: { hotWindow: number; hotTokenBudget: number; summaryEvery: number };
   classifier: { enabled: boolean };
   mcpServers: MCPServerConfigEntry[];
@@ -155,6 +161,9 @@ export function loadConfig(configPath?: string): Config {
             ][],
           )
         : {},
+    disabledSkills: Array.isArray(raw.disabled_skills)
+      ? raw.disabled_skills.filter((s: unknown): s is string => typeof s === "string")
+      : [],
     context: {
       hotWindow: Number(raw.context?.hot_window) || 10,
       hotTokenBudget: Number(raw.context?.hot_token_budget) || 8000,
@@ -195,6 +204,8 @@ export function saveConfig(patch: {
   mcpServers?: MCPServerConfigEntry[];
   /** Per-provider replacement of the hidden-model list; empty array clears it. */
   disabledModels?: Record<string, string[]>;
+  /** Whole-list replacement of the disabled-skill names; empty array clears it. */
+  disabledSkills?: string[];
 }): Config {
   const path = _configPath || join(process.cwd(), "config.yaml");
   _configPath = path;
@@ -227,6 +238,11 @@ export function saveConfig(patch: {
       else delete raw.disabled_models[provider];
     }
     if (!Object.keys(raw.disabled_models).length) delete raw.disabled_models;
+  }
+
+  if (patch.disabledSkills) {
+    if (patch.disabledSkills.length) raw.disabled_skills = patch.disabledSkills;
+    else delete raw.disabled_skills;
   }
 
   if (patch.apiKeys) {

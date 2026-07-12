@@ -106,6 +106,26 @@ export async function inlineAncestrySummary(
   return result;
 }
 
+/**
+ * Reattach a turn's tool activity to the assistant text the model sees in the
+ * hot window. The transcript stores tool calls OUTSIDE message content (the
+ * UI renders them separately), so without this the model has no memory of its
+ * own actions on later turns — "what commands did you run?" got "I didn't run
+ * any". Previews are capped at persist time; the line count is capped here.
+ */
+const TOOL_TRAIL_MAX_CALLS = 12;
+function withToolTrail(m: Message): string {
+  if (m.role !== "assistant" || !m.toolCalls?.length) return m.content;
+  const shown = m.toolCalls.slice(0, TOOL_TRAIL_MAX_CALLS);
+  const lines = shown.map((tc) => {
+    const args = tc.argsPreview ? `(${tc.argsPreview})` : "";
+    const out = tc.resultPreview ? ` → ${tc.resultPreview}` : "";
+    return `- ${tc.name}${args} ${tc.success ? "✓" : "✗ failed"}${out}`;
+  });
+  const more = m.toolCalls.length > shown.length ? `\n- …and ${m.toolCalls.length - shown.length} more calls` : "";
+  return `${m.content}\n\n[Tool calls you made during this turn (abbreviated):\n${lines.join("\n")}${more}]`;
+}
+
 export async function buildPayload(
   store: Store,
   branch: Branch,
@@ -229,7 +249,7 @@ export async function buildPayload(
   // but Codex's bare `input` field rejects outright with a 400.
   const startTurn = summaries.length ? Math.max(...summaries.map(s => s.toTurn)) + 1 : 0;
   const hot = messages.filter(m => m.turn >= startTurn);
-  const apiMessages = hot.map(m => ({ role: m.role, content: m.content, images: m.images }));
+  const apiMessages = hot.map(m => ({ role: m.role, content: withToolTrail(m), images: m.images }));
 
   let systemContext = "";
   if (systemContextBlocks.length) {

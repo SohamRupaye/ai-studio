@@ -57,8 +57,8 @@ export type {
 } from "./agent-session";
 
 // Skills
-export { SkillsService } from "./skills";
-export type { SkillInfo, SkillPermission, SkillsConfig } from "./skills";
+export { SkillsService, parseSkillFile } from "./skills";
+export type { SkillInfo, SkillPermission, SkillImportResult, SkillDiscovery, DiscoveredSkill, SkillsServiceOptions } from "./skills";
 
 // Registry
 export { ToolRegistry, ValidationError } from "./registry";
@@ -88,10 +88,6 @@ export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, add
 // must not depend on ai-core) — ai-core's createRuntime injects it.
 export { setSubagentDependencies } from "./tools/subagent";
 export type { SubagentRunMeta } from "./tools/subagent";
-
-// Skills (convenience re-export)
-export { listSkills } from "./skills/runner";
-export type { Skill } from "./skills/runner";
 
 // Knowledge base (IPC-friendly wrappers)
 export { kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry } from "./tools/knowledge_base";
