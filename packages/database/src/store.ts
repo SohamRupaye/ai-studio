@@ -199,6 +199,11 @@ export class Store {
     if (!msgCols.find((c: any) => c.name === "images")) {
       this.db.exec("ALTER TABLE messages ADD COLUMN images TEXT");
     }
+    // The model's reasoning for an assistant turn (plain text, capped at
+    // persist time) — user-facing visibility, never re-sent to the model.
+    if (!msgCols.find((c: any) => c.name === "thinking")) {
+      this.db.exec("ALTER TABLE messages ADD COLUMN thinking TEXT");
+    }
     // Upload support: uploaded artifacts carry file provenance alongside their
     // extracted text. Pre-upload rows are all agent-extracted (source defaults
     // to 'extracted'); the rest stay NULL for them. Migrated columns, so no
@@ -723,7 +728,7 @@ export class Store {
 
   // ── Messages ───────────────────────────────────────────────────────────────
 
-  addMessage(branchId: string, role: string, content: string, model?: string, toolCalls?: Message["toolCalls"], images?: MessageImage[]): Message {
+  addMessage(branchId: string, role: string, content: string, model?: string, toolCalls?: Message["toolCalls"], images?: MessageImage[], thinking?: string): Message {
     // Use MAX(turn)+1 to avoid reuse after undo
     const row = this.db.prepare("SELECT MAX(turn) as maxTurn FROM messages WHERE branch_id = ?").get(branchId) as any;
     const turn = (row?.maxTurn ?? -1) + 1;
@@ -735,10 +740,11 @@ export class Store {
       timestamp: Date.now(),
       toolCalls,
       images: images?.length ? images : undefined,
+      thinking: thinking || undefined,
     };
     this.db.prepare(
-      `INSERT INTO messages (id, branch_id, role, content, model, turn, timestamp, tool_calls, images) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(msg.id, branchId, msg.role, msg.content, model ?? null, msg.turn, msg.timestamp, toolCalls?.length ? JSON.stringify(toolCalls) : null, images?.length ? JSON.stringify(images) : null);
+      `INSERT INTO messages (id, branch_id, role, content, model, turn, timestamp, tool_calls, images, thinking) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(msg.id, branchId, msg.role, msg.content, model ?? null, msg.turn, msg.timestamp, toolCalls?.length ? JSON.stringify(toolCalls) : null, images?.length ? JSON.stringify(images) : null, thinking || null);
     return msg;
   }
 
@@ -753,7 +759,7 @@ export class Store {
       if (r.images) {
         try { images = JSON.parse(r.images); } catch { /* corrupt row — show the message without its images */ }
       }
-      return { id: r.id, role: r.role, content: r.content, turn: r.turn, timestamp: r.timestamp, model: r.model ?? undefined, toolCalls, images };
+      return { id: r.id, role: r.role, content: r.content, turn: r.turn, timestamp: r.timestamp, model: r.model ?? undefined, toolCalls, images, thinking: r.thinking ?? undefined };
     });
   }
 

@@ -128,6 +128,10 @@ export class OpenRouterProvider implements Provider {
           const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
           if (delta.content) yield { type: "text", text: delta.content };
+          // OpenRouter reasoning models stream `reasoning` (some upstreams
+          // proxy DeepSeek's `reasoning_content`).
+          const thinking = delta.reasoning ?? delta.reasoning_content;
+          if (typeof thinking === "string" && thinking) yield { type: "thinking", text: thinking };
           if (delta.tool_calls) {
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0;

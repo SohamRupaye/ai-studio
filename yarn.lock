@@ -169,6 +169,7 @@ __metadata:
   resolution: "@ai-studio/shared@workspace:packages/shared"
   dependencies:
     typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
   languageName: unknown
   linkType: soft
 

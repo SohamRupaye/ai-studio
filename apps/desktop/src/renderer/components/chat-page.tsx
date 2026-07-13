@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowsClockwiseIcon,
   BrainIcon,
+  CaretRightIcon,
   CheckIcon,
   CopyIcon,
   CubeIcon,
@@ -28,7 +29,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import type { MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
-import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
+import { applySubagentEvent, newSubagentRecord, toolCallSummary, toolCallArgsDetail, toolCallResultDetail } from "@ai-studio/shared";
 import { cn, counted } from "../lib/utils";
 import {
   Drawer,
@@ -39,6 +40,7 @@ import {
   DrawerTitle,
 } from "./ui/drawer";
 import { invalidateQueries, useBranches, useMessages, useMutation, useSkills, useUser } from "../hooks/use-ipc-data";
+import { useUiPrefs } from "./ui-prefs";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
 import { Composer, ComposerButton } from "./ui/composer";
@@ -83,26 +85,21 @@ type SubagentRun = SubagentRunRecord & { runId?: string; startedAt?: number };
 type ToolCallState = {
   name: string;
   status: "running" | "done" | "error";
-  /** Compact args (live: from tool_start; persisted: stored preview) — the
-   * row answers "what did that call actually do". */
-  argsPreview?: string;
+  /** Human-salient one-liner (the bash command, the URL, the query) — the
+   * row answers "what did that call actually do". Live rows compute it with
+   * the same shared toolCallSummary main persists with; rows persisted
+   * before summaries existed fall back to the stored argsPreview. */
+  summary?: string;
+  /** Full (capped) args/result for the expandable detail panel. */
+  args?: string;
+  result?: string;
   agents?: SubagentRun[];
 };
 
-/** One-line args preview for a LIVE tool_start event (persisted rows carry
- * the preview main stored). */
-function liveArgsPreview(args: Record<string, unknown>): string | undefined {
-  try {
-    const text = JSON.stringify(args);
-    if (!text || text === "{}") return undefined;
-    return text.length > 200 ? `${text.slice(0, 200)}…` : text;
-  } catch {
-    return undefined;
-  }
-}
-
 interface StreamState {
   text: string;
+  /** Model reasoning streamed so far this turn (thinking-capable providers). */
+  thinking: string;
   toolCalls: ToolCallState[];
   /** Flat, arrival-ordered agent runs for this turn — grouped by runId and
    * matched to subagent/delegate tool calls in order at render time. */
@@ -332,6 +329,8 @@ export function ChatPage() {
   // Buffer them and flush at most once per animation frame; the stream
   // reads smoother precisely because it renders less often.
   const textBufRef = useRef("");
+  // Thinking deltas are per-token like text — same frame-batched flush.
+  const thinkingBufRef = useRef("");
   // Subagent transcripts stream per-delta too (× up to 4 agents) — they ride
   // the same frame-batched flush as the main text.
   const subagentBufRef = useRef<SubagentStreamEvent[]>([]);
@@ -345,14 +344,17 @@ export function ChatPage() {
     const flushStream = () => {
       flushFrameRef.current = null;
       const chunk = textBufRef.current;
+      const thinkingChunk = thinkingBufRef.current;
       const subEvents = subagentBufRef.current;
-      if (!chunk && !subEvents.length) return;
+      if (!chunk && !thinkingChunk && !subEvents.length) return;
       textBufRef.current = "";
+      thinkingBufRef.current = "";
       subagentBufRef.current = [];
       setStreaming((s) => {
         if (!s) return s;
         let next = s;
         if (chunk) next = { ...next, text: next.text + chunk };
+        if (thinkingChunk) next = { ...next, thinking: next.thinking + thinkingChunk };
         if (subEvents.length) {
           // The reducer mutates — clone the runs it will touch, then fold the
           // buffered events in (same reducer main persists with).
@@ -384,6 +386,9 @@ export function ChatPage() {
       if (event.type === "text") {
         textBufRef.current += event.text;
         scheduleFlush();
+      } else if (event.type === "thinking") {
+        thinkingBufRef.current += event.text;
+        scheduleFlush();
       } else if (event.type === "subagent") {
         subagentBufRef.current.push(event);
         scheduleFlush();
@@ -394,7 +399,12 @@ export function ChatPage() {
                 ...s,
                 toolCalls: [
                   ...s.toolCalls,
-                  { name: event.name, status: "running", argsPreview: liveArgsPreview(event.args) },
+                  {
+                    name: event.name,
+                    status: "running",
+                    summary: toolCallSummary(event.name, event.args),
+                    args: toolCallArgsDetail(event.name, event.args),
+                  },
                 ],
               }
             : s,
@@ -405,7 +415,11 @@ export function ChatPage() {
           const toolCalls = [...s.toolCalls];
           for (let i = toolCalls.length - 1; i >= 0; i--) {
             if (toolCalls[i]!.name === event.name && toolCalls[i]!.status === "running") {
-              toolCalls[i] = { name: event.name, status: event.success ? "done" : "error" };
+              toolCalls[i] = {
+                ...toolCalls[i]!,
+                status: event.success ? "done" : "error",
+                result: toolCallResultDetail(event.result),
+              };
               break;
             }
           }
@@ -414,6 +428,7 @@ export function ChatPage() {
       } else if (event.type === "done") {
         // done carries the authoritative full text — drop anything buffered.
         textBufRef.current = "";
+        thinkingBufRef.current = "";
         if (flushFrameRef.current !== null) {
           cancelAnimationFrame(flushFrameRef.current);
           flushFrameRef.current = null;
@@ -435,6 +450,7 @@ export function ChatPage() {
     return () => {
       off();
       textBufRef.current = "";
+      thinkingBufRef.current = "";
       subagentBufRef.current = [];
       if (flushFrameRef.current !== null) {
         cancelAnimationFrame(flushFrameRef.current);
@@ -456,7 +472,7 @@ export function ChatPage() {
     setPendingUser(trimmed);
     setPendingUserImages(imgs);
     if (images === undefined) setPendingImages([]);
-    setStreaming({ text: "", toolCalls: [], subagentRuns: [] });
+    setStreaming({ text: "", thinking: "", toolCalls: [], subagentRuns: [] });
     try {
       await sendMessage.mutate({ branchId, message: trimmed, images: imgs.length ? imgs : undefined });
     } catch (err) {
@@ -855,12 +871,17 @@ export function ChatPage() {
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id}>
                     <Message role={m.role as "user" | "assistant"}>
+                      {m.role === "assistant" && m.thinking && <ThinkingBlock text={m.thinking} />}
                       {m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0 && (
                         <ToolActivity
                           calls={m.toolCalls!.map((tc) => ({
                             name: tc.name,
                             status: tc.success ? "done" : "error",
-                            argsPreview: tc.argsPreview,
+                            // Rows persisted before summaries existed fall
+                            // back to the stored trail preview.
+                            summary: tc.summary ?? tc.argsPreview,
+                            args: tc.args,
+                            result: tc.result ?? tc.resultPreview,
                             // steps ?? []: rows persisted before the trail
                             // existed carry no steps — don't crash on them.
                             agents: tc.agents?.map((a) => ({ ...a, steps: a.steps ?? [] })),
@@ -999,6 +1020,14 @@ export function ChatPage() {
                 // "pop in" at once instead of streaming.
                 <MessageScrollerItem messageId="__streaming" className="[content-visibility:visible]">
                   <Message role="assistant">
+                    {streaming.thinking && (
+                      <ThinkingBlock
+                        text={streaming.thinking}
+                        // Follow the reasoning live until the answer starts,
+                        // then get out of its way.
+                        live={!streaming.text}
+                      />
+                    )}
                     {streaming.toolCalls.length > 0 && (
                       <ToolActivity
                         calls={attachLiveAgents(streaming.toolCalls, streaming.subagentRuns)}
@@ -1009,7 +1038,7 @@ export function ChatPage() {
                       <MessageContent>
                         <Markdown text={streaming.text} />
                       </MessageContent>
-                    ) : streaming.toolCalls.length === 0 ? (
+                    ) : streaming.toolCalls.length === 0 && !streaming.thinking ? (
                       <TypingDots />
                     ) : null}
                   </Message>
@@ -1153,25 +1182,10 @@ function ToolActivity({
         {failed > 0 && <span className="text-danger-text">· {failed} failed</span>}
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <div className="flex flex-col gap-2 pb-1.5 pl-1.5 pt-2.5">
+        <div className="flex flex-col gap-1 pb-1.5 pl-1.5 pt-2.5">
           {calls.map((call, i) => (
-            <div key={i} className="flex flex-col gap-1.5">
-              <Marker>
-                <MarkerIcon className={call.status === "error" ? "text-danger-text" : undefined}>
-                  {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
-                </MarkerIcon>
-                <MarkerContent className="flex min-w-0 items-baseline gap-2 font-mono text-[12px]">
-                  <span className="shrink-0">{call.name}</span>
-                  {call.argsPreview && (
-                    <span className="min-w-0 truncate text-[11px] text-fg-subtle">
-                      {call.argsPreview}
-                    </span>
-                  )}
-                </MarkerContent>
-                {call.status === "error" && (
-                  <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
-                )}
-              </Marker>
+            <div key={i} className="flex flex-col gap-1">
+              <ToolCallRow call={call} />
               {call.agents?.map((agent) => (
                 <SubagentRow
                   key={`${agent.runId ?? ""}:${agent.agentId}`}
@@ -1181,6 +1195,110 @@ function ToolActivity({
               ))}
             </div>
           ))}
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}
+
+/** One tool call: the row leads with the salient argument (the command, the
+ * URL, the query); clicking expands the call's full input and result. The
+ * Settings → General "Tool call details" toggle turns the expansion off —
+ * rows still say what ran either way. */
+function ToolCallRow({ call }: { call: ToolCallState }) {
+  const { toolCallDetail } = useUiPrefs();
+  const [open, setOpen] = useState(false);
+  const result = call.result;
+  const hasDetail = toolCallDetail && Boolean(call.args || result);
+  return (
+    <div className="flex min-w-0 flex-col">
+      <button
+        type="button"
+        disabled={!hasDetail}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "group/call flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left",
+          hasDetail && "pressable hover:bg-surface-2",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center text-fg-subtle [&>svg]:size-3.5",
+            call.status === "error" && "text-danger-text",
+          )}
+        >
+          {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
+        </span>
+        <span className="flex min-w-0 flex-1 items-baseline gap-2 font-mono text-[12px] text-fg-muted">
+          <span className="shrink-0">{call.name}</span>
+          {call.summary && (
+            <span className="min-w-0 truncate text-[11px] text-fg-subtle">{call.summary}</span>
+          )}
+        </span>
+        {call.status === "error" && (
+          <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
+        )}
+        {hasDetail && (
+          <CaretRightIcon
+            size={11}
+            weight="bold"
+            className={cn(
+              "shrink-0 text-fg-subtle opacity-0 transition-transform duration-200 ease-(--ease-standard) group-hover/call:opacity-100",
+              open && "rotate-90 opacity-100",
+            )}
+          />
+        )}
+      </button>
+      {open && hasDetail && (
+        <div className="ml-6 mt-1 flex min-w-0 flex-col gap-1.5 pb-1">
+          {call.args && <ToolDetailBlock label="Input" text={call.args} />}
+          {result && (
+            <ToolDetailBlock
+              label={call.status === "error" ? "Error" : "Result"}
+              text={result}
+              danger={call.status === "error"}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolDetailBlock({ label, text, danger }: { label: string; text: string; danger?: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className={cn("text-label-sm text-fg-subtle", danger && "text-danger-text")}>{label}</span>
+      <pre
+        className={cn(
+          "max-h-56 min-w-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-line bg-surface-1 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-fg-muted",
+          danger && "border-danger-soft text-danger-text",
+        )}
+      >
+        {text}
+      </pre>
+    </div>
+  );
+}
+
+/** The model's reasoning for a turn. Live (while no reply text yet) it stays
+ * open and follows the stream; once the answer starts — and on persisted
+ * messages — it rests collapsed. A user toggle always wins. */
+function ThinkingBlock({ text, live }: { text: string; live?: boolean }) {
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  return (
+    <Collapsible
+      open={userOpen ?? live ?? false}
+      onOpenChange={(o) => setUserOpen(o)}
+      className="mb-1.5"
+    >
+      <CollapsibleTrigger className="py-1">
+        {live ? <Spinner size="sm" /> : <BrainIcon size={12} />}
+        {live ? "Thinking…" : "Thinking"}
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="border-l border-line py-1.5 pl-4 pr-1 pt-2 text-body-sm text-fg-muted [&_*]:text-body-sm">
+          <Markdown text={text.trim()} />
         </div>
       </CollapsiblePanel>
     </Collapsible>

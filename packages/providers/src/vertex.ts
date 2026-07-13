@@ -68,7 +68,10 @@ export class VertexAIProvider implements Provider {
         try {
           const data = JSON.parse(line.slice(6));
           for (const part of data.candidates?.[0]?.content?.parts ?? []) {
-            if (part.text) yield { type: "text", text: part.text };
+            if (part.text) {
+              if (part.thought === true) yield { type: "thinking", text: part.text };
+              else yield { type: "text", text: part.text };
+            }
             if (part.functionCall) yield { type: "tool_call", id: crypto.randomUUID(), name: part.functionCall.name, arguments: part.functionCall.args };
           }
           if (data.usageMetadata) yield { type: "usage", usage: data.usageMetadata };

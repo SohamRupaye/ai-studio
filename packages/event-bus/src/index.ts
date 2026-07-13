@@ -156,6 +156,9 @@ export interface SelectableArtifact {
 // event must self-identify rather than relying on "whichever page is open".
 export type AgentStreamEvent =
   | { type: "text"; branchId: string; text: string }
+  // Model reasoning deltas (providers that stream thinking) — rendered live
+  // in the turn's Thinking block, persisted on the assistant message.
+  | { type: "thinking"; branchId: string; text: string }
   | { type: "tool_start"; branchId: string; name: string; args: Record<string, unknown> }
   | { type: "tool_end"; branchId: string; name: string; result: string; success: boolean }
   | { type: "tool_call_streaming"; branchId: string; name: string; bytesReceived: number }
@@ -255,7 +258,7 @@ export interface IpcInvokeMap {
 
   // Messages
   /** A branch's transcript: inherited ancestry (same walk prompt assembly uses) followed by its own messages. */
-  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: MessageToolCall[]; images?: MessageImage[]; inherited?: boolean }>];
+  "message:list": [{ branchId: string }, Array<{ id: string; role: string; content: string; turn: number; timestamp: number; model?: string; toolCalls?: MessageToolCall[]; images?: MessageImage[]; thinking?: string; inherited?: boolean }>];
   "message:undo": [{ branchId: string }, number];
   "message:edit": [{ branchId: string; turn: number }, void];
   "message:delete": [{ branchId: string; turn: number }, number];

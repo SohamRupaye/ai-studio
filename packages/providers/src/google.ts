@@ -73,7 +73,12 @@ export class GoogleProvider implements Provider {
         try { data = JSON.parse(line.slice(6)); } catch { continue; }
         const parts = data.candidates?.[0]?.content?.parts || [];
         for (const part of parts) {
-          if (part.text) yield { type: "text", text: part.text };
+          // Thought-summary parts (thinking models with includeThoughts) are
+          // flagged `thought: true` — same text field, different channel.
+          if (part.text) {
+            if (part.thought === true) yield { type: "thinking", text: part.text };
+            else yield { type: "text", text: part.text };
+          }
           if (part.functionCall) {
             yield { type: "tool_call", id: crypto.randomUUID().slice(0, 8), name: part.functionCall.name, arguments: part.functionCall.args };
           }

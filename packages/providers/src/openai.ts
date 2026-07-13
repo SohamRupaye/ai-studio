@@ -80,6 +80,10 @@ export class OpenAIProvider implements Provider {
         if (!delta) continue;
 
         if (delta.content) yield { type: "text", text: delta.content };
+        {
+          const thinking = delta.reasoning_content ?? delta.reasoning;
+          if (typeof thinking === "string" && thinking) yield { type: "thinking", text: thinking };
+        }
         if (delta.tool_calls) {
           for (const tc of delta.tool_calls) {
             if (!toolAccum.has(tc.index)) toolAccum.set(tc.index, { id: tc.id || "", name: "", args: "" });

@@ -140,6 +140,15 @@ Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
 
+### 2026-07-13 (later) — Tool calls open up: salient rows, expandable detail, live Thinking
+
+- **Why (user, with screenshots)**: rows still read as a black box — `web_fetch` without the URL, `bash` × 8 without the commands, and model reasoning invisible entirely. The raw-JSON `argsPreview` from the morning was a stopgap, not an answer.
+- **Rows lead with the salient argument, not JSON**: `bash npm test`, `web_fetch https://…`, `web_search rust async runtime` — via the shared `toolCallSummary` (same function main persists, so live and reopened rows are identical; backend in ONBOARDING). Mono 11px `fg-subtle`, truncating, exactly where the JSON preview used to sit.
+- **Rows are buttons → inline detail panel** (`ToolCallRow`): clicking expands Input (pretty JSON, or the bare command/reasoning for single-string-arg tools) and Result blocks — mono 11px `pre-wrap` in `surface-1` bordered blocks, `max-h-56` scroll, danger-tinted when the call failed, `… [truncated]` markers when capped. A trailing caret appears on hover (always visible when open) as the affordance; rows without stored detail (pre-existing messages) stay plain rows. Detail expansion is inline, not a Drawer — a tool call is a glance ("what did that run"), not a reading surface like the subagent transcript.
+- **Thinking block** (`ThinkingBlock`): model reasoning streams live above the tool list — spinner + "Thinking…" while the model reasons, auto-open until the answer text starts, then it collapses out of the way (a user toggle always wins). Persisted messages render the same block collapsed with a Brain icon. Body is muted `body-sm` Markdown behind a hairline left border — reasoning reads as an aside, not a second reply. TypingDots now waits for text *and* thinking to be absent.
+- Streaming: thinking deltas ride the same rAF frame-batch as text; `tool_end` now preserves the row's summary/args (it used to rebuild the entry and drop the preview) and attaches the result.
+- **Same-day iteration (user: "we don't need this much detail all the time")**: Settings → General gained a **Chat section with a "Tool call details" Switch** — off hides the input/output expansion (no caret, rows not clickable); the salient one-liner stays either way, since "which URL did it fetch" was the original ask. Renderer-only pref (`toolCallDetail` in `UiPrefsProvider`, `ai-studio:tool-call-detail` in localStorage, on by default) — deliberately NOT config.yaml: it's per-device presentation, like sidebar state, not model behavior.
+
 ### 2026-07-13 — Tool rows say what they did
 
 - **Why**: eight identical `bash` rows answered nothing — and the model itself, asked "what commands did you run?", denied running any (its past tool calls never re-entered context; backend fix in ONBOARDING). The UI half:

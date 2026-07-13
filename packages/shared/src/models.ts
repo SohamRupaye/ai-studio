@@ -47,6 +47,14 @@ export interface MessageToolCall {
   argsPreview?: string;
   /** Short preview of the tool's output (capped at persist time). */
   resultPreview?: string;
+  /** Human-salient one-liner (the bash command, the fetched URL, the search
+   * query) — what the row leads with. See toolCallSummary in tool-call.ts. */
+  summary?: string;
+  /** Full arguments for the expandable detail panel (pretty JSON or the bare
+   * string for single-string-arg tools; capped with a visible marker). */
+  args?: string;
+  /** Full tool output for the detail panel (capped with a visible marker). */
+  result?: string;
   /** Per-agent detail for subagent/delegate calls. */
   agents?: SubagentRunRecord[];
 }
@@ -61,6 +69,10 @@ export interface Message {
   model?: string;
   /** Tool activity of the turn that produced this assistant message. */
   toolCalls?: MessageToolCall[];
+  /** The model's reasoning/thinking for this turn (assistant messages only;
+   * capped at persist time). User-facing visibility — never fed back to the
+   * model in later turns. */
+  thinking?: string;
   /** Images the user attached to this turn (user messages only). */
   images?: MessageImage[];
 }

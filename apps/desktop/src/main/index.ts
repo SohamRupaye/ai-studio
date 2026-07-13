@@ -23,6 +23,7 @@ import type { ToolRegistry } from "@ai-studio/tools-runtime";
 import { estimateTokens, getContextLimit, supportsPdfInput, supportsVision } from "@ai-studio/tokenizer";
 import type { ContentBlock } from "@ai-studio/providers";
 import type { MessageImage, MessageToolCall, SubagentRunRecord } from "@ai-studio/shared";
+import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } from "@ai-studio/shared";
 import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
 import type { ContextStats, IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse, MCPServerEntry, SkillImportOutcome } from "@ai-studio/event-bus";
 
@@ -579,7 +580,7 @@ function registerHandlers() {
           }
           break;
         }
-        if (event.type === "text" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
+        if (event.type === "text" || event.type === "thinking" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
           mainWindow?.webContents.send("chat:stream", { ...event, branchId });
         } else if (event.type === "done") {
           if (!event.result.text && !event.result.toolCalls.length) {
@@ -605,6 +606,11 @@ function registerHandlers() {
               success: tc.success,
               argsPreview: toolCallPreview(tc.args, 300),
               resultPreview: toolCallPreview(tc.result, 200),
+              // User-facing detail: the salient one-liner the row leads with
+              // plus the full (capped) args/result for the expandable panel.
+              summary: toolCallSummary(tc.name, tc.args),
+              args: toolCallArgsDetail(tc.name, tc.args),
+              result: toolCallResultDetail(tc.result),
             };
             if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
               const group = subagentRuns.get(subagentRunOrder[runIdx++]!);
@@ -612,7 +618,10 @@ function registerHandlers() {
             }
             return base;
           });
-          store.addMessage(branchId, "assistant", assistantText, model, persistedToolCalls);
+          store.addMessage(
+            branchId, "assistant", assistantText, model, persistedToolCalls, undefined,
+            event.result.thinking ? clipText(event.result.thinking, 24_000) : undefined,
+          );
 
           // Cost tracking
           costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });
@@ -975,7 +984,8 @@ function registerHandlers() {
     const branch = store.getBranch(branchId);
     const pack = (m: ReturnType<typeof store.getMessages>[number], inherited: boolean) => ({
       id: m.id, role: m.role, content: m.content, turn: m.turn, timestamp: m.timestamp,
-      model: m.model, toolCalls: m.toolCalls, images: m.images, inherited: inherited || undefined,
+      model: m.model, toolCalls: m.toolCalls, images: m.images, thinking: m.thinking,
+      inherited: inherited || undefined,
     });
     const own = store.getMessages(branchId).map(m => pack(m, false));
     if (!branch?.parentId) return own;

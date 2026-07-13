@@ -17,11 +17,16 @@ export interface AgentResult {
   text: string;
   iterations: number;
   toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string; success: boolean }>;
+  /** The model's reasoning across the turn (joined per iteration) — only
+   * present when the provider streamed thinking. User-facing visibility;
+   * never fed back into history. */
+  thinking?: string;
   cost?: string;
 }
 
 export type AgentStreamEvent =
   | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
   | { type: "tool_start"; name: string; args: Record<string, unknown> }
   | { type: "tool_end"; name: string; result: string; success: boolean }
   | { type: "tool_call_streaming"; name: string; bytesReceived: number }
@@ -114,19 +119,25 @@ export class Agent {
     // last chunk: models routinely write a long answer, then call a tool, then
     // add a short follow-up — overwriting per iteration dropped the answer.
     const textParts: string[] = [];
+    // Thinking accumulates across ALL iterations, including rejected drafts —
+    // it's process visibility, not part of the reply.
+    const thinkingParts: string[] = [];
     const maxIter = this.config.maxIterations!;
 
     while (iterations < maxIter) {
       iterations++;
       let text = "";
+      let thinking = "";
       const pendingToolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
 
       for await (const event of this.router.stream(model, history, system, toolDefs.length ? toolDefs : undefined, signal)) {
         if (event.type === "text") { text += event.text; yield { type: "text", text: event.text }; }
+        else if (event.type === "thinking") { thinking += event.text; yield { type: "thinking", text: event.text }; }
         else if (event.type === "tool_call") { pendingToolCalls.push(event); }
         else if (event.type === "tool_call_streaming") { yield event; }
         else if (event.type === "usage" && this.config.costTracker) { this.config.costTracker.record(model, event.usage); }
       }
+      if (thinking.trim()) thinkingParts.push(thinking.trim());
 
       if (!pendingToolCalls.length) {
         const correction = validateResponse(text, allToolCalls, lastUserMessage);
@@ -169,6 +180,15 @@ export class Agent {
       }
     }
 
-    yield { type: "done", result: { text: textParts.join("\n\n"), iterations, toolCalls: allToolCalls, cost: this.config.costTracker?.lastCost() } };
+    yield {
+      type: "done",
+      result: {
+        text: textParts.join("\n\n"),
+        iterations,
+        toolCalls: allToolCalls,
+        thinking: thinkingParts.length ? thinkingParts.join("\n\n") : undefined,
+        cost: this.config.costTracker?.lastCost(),
+      },
+    };
   }
 }

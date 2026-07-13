@@ -64,6 +64,9 @@ export class BedrockProvider implements Provider {
           if (event.contentBlockDelta?.delta?.text) {
             yield { type: "text", text: event.contentBlockDelta.delta.text };
           }
+          if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
+            yield { type: "thinking", text: event.contentBlockDelta.delta.reasoningContent.text };
+          }
           if (event.contentBlockDelta?.delta?.toolUse) {
             const tu = event.contentBlockDelta.delta.toolUse;
             yield { type: "tool_call", id: tu.toolUseId ?? "", name: tu.name ?? "", arguments: tu.input ?? {} };

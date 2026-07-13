@@ -1,81 +1,70 @@
-# plan.md — Skills: real end-to-end integration
+# plan.md — Tool-call transparency: open the black box
 
-Feature tracker (started 2026-07-12). Read `DESIGN.md` for the design system and `ONBOARDING.md` for project state. Check tasks off as they land; note deviations inline.
+Feature tracker (started 2026-07-13). Read `DESIGN.md` for the design system and `ONBOARDING.md` for project state. Check tasks off as they land; note deviations inline.
 
-## The problem
+## The problem (user, with screenshots)
 
-Skills exist only as scaffolding — nothing is user-reachable:
-
-1. **Two incompatible, unwired implementations** in `packages/tools-runtime/src/skills/`: `index.ts` (`SkillsService` — YAML-frontmatter `SKILL.md`, multi-dir + remote discovery, permission filtering, LLM formatting; **never instantiated anywhere**) and `runner.ts` (simple `## description/tools/instructions` markdown; wired to `skills:list` IPC but its `buildSkillPrompt` is never called outside tests).
-2. **No frontend**: composer attach-menu "Skills" item is a dead label (no onClick), `useSkills` hook exists but no component consumes it, no settings page, no management of any kind.
-3. **No slash commands**: no `/` parsing in the composer or `chat:send`.
-4. **No import/download**: `SkillsService.pullRemoteSkills` implements remote fetch but is unreachable.
-5. Aspirational stubs that anticipate skills: `protectedTools: ["skill"]` in prompt-engine pruning, persona `allowedSkills`/`deniedSkills` (never read), registry comment about a "skill tool" that doesn't exist.
+Tool activity is a black box. Rows say `bash` / `web_fetch` / `web_search` but not *what* ran: which command, which URL, which query. `argsPreview` (2026-07-13) shows raw truncated JSON — better than nothing, not an answer. There's no way to see a call's full args or its result. And model thinking/reasoning is invisible end-to-end: providers don't even parse it off the wire.
 
 ## Decisions (design of record)
 
-- **One format: YAML-frontmatter `SKILL.md`** (`name`, `description` + markdown body) — the ecosystem standard (Claude Code / anthropics-skills style), so downloaded/imported skills just work. A skill is a **directory** containing `SKILL.md` (+ optional supporting files, referenced relatively). `runner.ts`'s `## sections` format is retired — absorb anything useful, delete the rest (its tests go with it).
-- **Storage: file-based, no DB table.** Installed skills live in `<dataDir>/skills/<skill-name>/SKILL.md`. Enable/disable = `disabled_skills` list in config.yaml (same disabled-list semantics as `disabled_models` — new skills appear enabled automatically).
-- **Two invocation paths, same skill:**
-  - **User-invoked (slash command)**: typing `/` at the start of the composer opens skill autocomplete; picking one injects the skill's body into that turn's prompt (visible marker in the transcript that a skill ran).
-  - **Model-invoked**: enabled skills' name+description go into the system prompt as `<available_skills>`; a new `skill` tool loads a skill's full body on demand (this is what pruning's `protectedTools: ["skill"]` always anticipated). Progressive disclosure — bodies are never all preloaded.
-- **Scope: global only for now** (one skills dir for the whole app). Space/project-scoped skills are a later cascade feature, same as keys.
-- Persona `allowedSkills`/`deniedSkills` stay unwired for now — noted, not built.
+- **Rows lead with the salient argument, not JSON**: `bash` → the command, `web_fetch` → the URL, `web_search` → the query, file tools → the path, `subagent`/`delegate` → the task, MCP tools → best-effort first meaningful string field. One shared extractor — `toolCallSummary(name, args)` in `@ai-studio/shared` — used by the renderer (live, from `tool_start` args) and main (persisted as `summary` on `MessageToolCall`), so live and reopened rows can't drift.
+- **Rows are expandable**: clicking a tool row toggles an inline detail panel — full args (pretty JSON, mono block) and the result (mono, scrollable). New persisted fields `args` (≤4k) / `result` (≤6k) with visible truncation markers; live rows capture the same from `tool_start`/`tool_end` events (which already carry full args/result — we were dropping them).
+- **`argsPreview`/`resultPreview` stay untouched** — they are the model-facing trail (`withToolTrail`), a different consumer with different caps. UI reads `summary`/`args`/`result`, falling back to `argsPreview` for pre-existing rows (not expandable — the data was never stored).
+- **Thinking becomes a first-class stream event**: `{type: "thinking", text}` on provider `StreamEvent` → `AgentStreamEvent` → `chat:stream`. Parsed wherever a wire format carries it (see Part C). Persisted per assistant message (`messages.thinking` column, ≤24k) and rendered as a collapsed "Thinking" collapsible above tool activity — live-streaming while the model reasons.
+- **Parse-only for request-side thinking, except Codex**: Codex responses get `reasoning: {summary: "auto"}` (all codex models are gpt-5.x reasoning models — this is what makes thinking visible for the user's daily driver). Anthropic (`thinking: {budget_tokens}`) and Gemini (`thinkingConfig.includeThoughts`) need opt-in request params — deferred until a thinking config exists; the parsers are ready when they arrive.
+- **Thinking does NOT ride the hot window** — models shouldn't be fed their own stale reasoning; the trail (argsPreview) is the model-facing memory, thinking is user-facing visibility.
+- **Interleaving accepted limit (v1)**: one thinking block per turn (segments joined), above the tool list — not a full timeline of thinking↔tools ordering. Revisit if it hurts.
+- **Subagent thinking**: not folded into transcripts v1 (their drawer already shows full text+tools); noted as follow-up.
 
-## Part A — backend consolidation
+## Part A — salient summaries
 
-- [x] Consolidate on `SkillsService` as the single implementation — rewritten (`tools-runtime/src/skills/index.ts`): one managed dir, `importFromPath` (folder or bare .md), `importFromUrl` (raw SKILL.md or index.json catalogue, path-traversal-guarded), `remove`, `startWatching` (recursive fs.watch, 500ms debounce), `parseSkillFile` validation on every install path. `runner.ts` + tests deleted. *Deviation: multi-location scanning (~/.claude etc.) and the remote cache dir were dropped, not ported — one managed dir is the product model; import covers external skills.*
-- [x] Config: `disabled_skills` in config.yaml (loader + saveConfig round-trip, tested).
-- [x] `skill` tool registered in main. *Deviation: static description — the agent loop reads `getDefinitions()`, which never calls `dynamicDescription`; the live list rides the system prompt instead (rebuilt per turn anyway). Execute returns the body + a pointer to the skill's directory for relative file references.*
-- [x] `<available_skills>` block in `buildBaseSystem` (enabled + described skills only, one line of semantics, names the `/` invocation).
-- [x] IPC: `skills:list` (enabled/path/description), `skills:read`, `skills:set-enabled`, `skills:remove` (also drops the stale disabled entry), `skills:import` (native picker, per-file outcomes), `skills:pull`, `skills:reveal` (show in Finder), `skills:changed` push (watcher + mutations).
-- [x] Slash execution in `chat:send`: leading `/name` that matches an *installed* skill injects its body as a binding `<invoked_skill>` system block; the persisted message keeps the raw text. Disabled skill → friendly error, no model call, nothing persisted. *Deviation: an unknown `/name` passes through as a normal message rather than erroring — "/etc/hosts is broken" must not bounce; autocomplete makes typos unlikely.*
-- [x] Tests: 23 service tests (discovery, frontmatter, import validation incl. collisions, remove, deny-filtering, URL pull against a real local HTTP server) + 2 config tests. *Deviation: no direct chat:send test — main-process handlers have no test harness (pre-existing); the resolution regex + service are covered.*
+- [x] `toolCallSummary(name, args)` in `@ai-studio/shared` (new `tool-call.ts`): known tools (bash/web_search/web_fetch/read_file/write_file/edit_file/list_files/glob/grep/remember/kb_*/skill/subagent/delegate/think→reasoning) + MCP heuristic (preferred keys: url, query, path, title, name, prompt, text, id…) + compact-JSON fallback. Caps at 200 chars. Unit-tested.
+- [x] `MessageToolCall.summary` persisted (built in chat:send from full args); renderer computes the same live.
+- [x] Row shows summary (mono, subtle, truncating) — falls back to `argsPreview` on old rows.
 
-## Part B — frontend
+## Part B — expandable detail
 
-- [x] **Settings page `/settings/skills`** (General nav group, after MCP servers): installed row-group — `/name` in mono, description hint, enabled Switch, ⋯ menu (View instructions → Markdown in a 560px right Drawer (was a modal — cramped for long bodies; Dialog=forms, Drawer=reference) / Show in Finder / Remove with ConfirmDialog). Footer split-buttons: **Import skills** (native picker) · **Add from URL** (dialog). Empty state explains the SKILL.md format.
-- [x] **Composer slash autocomplete**: leading `/` opens an anchored panel above the composer (prefix-filtered live, ↑/↓ + Enter/Tab select, Esc dismisses — typing revives it); selecting writes `/name ` into the draft. *Deviation: no chip in the composer and no cmdk — the message text itself IS the command (that's also what persists), and a lightweight inline list beats wiring cmdk outside its dialog idiom.*
-- [x] **Attach menu "Skills" item wired**: opens the same panel in browse mode (all enabled skills; selection prefixes the draft). Empty state links to Settings → Skills.
-- [x] **Transcript marker**: user turns starting with `/name` (name matches an installed skill) render the token as a Lightning chip above the message text — derived from content, no metadata to drift. Applied to persisted and optimistic bubbles.
-- [x] `useSkills` consumed (chat page + settings); `useSkillsChangedListener` mounted in App.tsx.
-- [x] Gallery: left as-is deliberately — every item in its attach-menu demo is decorative; the real picker lives on the chat page.
-- [x] `Composer` gained a `textareaRef` escape hatch (refocus after picker insert) — DESIGN.md changelog.
+- [x] `MessageToolCall.args` (pretty JSON ≤4k) + `result` (≤6k) persisted with truncation markers (`clipText` helper shared with live path).
+- [x] Renderer: `tool_start` keeps full args; `tool_end` attaches result to the matching running call (same caps via shared helpers).
+- [x] ToolActivity rows become buttons → inline detail panel (args block + result block, mono 11px, `max-h` scroll, danger tint on failed result). Caret affordance on rows that have detail. Subagent per-agent rows keep their drawer.
+- [x] Store: no schema change needed (`tool_calls` is already a JSON column); round-trip test for the new fields.
 
-## Part B.2 — GitHub install (feedback: skills ship as GitHub repos — skills.sh / `npx skills add <repo> --skill <name>`)
+## Part C — thinking
 
-- [x] `SkillsService.discoverFromUrl(url)`: GitHub repo URLs (`github.com/owner/repo`, `/tree/branch/subpath`, `/blob/…/SKILL.md`, `owner/repo` shorthand) resolve via the GitHub API — default branch lookup → recursive tree → every `SKILL.md` in scope; each candidate's SKILL.md is fetched and validated at discovery time (frontmatter name/description drive the picker). Raw-SKILL.md URLs and index.json catalogues go through the same discovery shape. API/raw hosts are constructor-injectable (test seam). Unauthenticated API (public repos; 403 → human rate-limit message, 404 → "private repos aren't supported").
-- [x] `importFromUrl(url, pick?)`: installs discovered skills (all, or the picked names — the `--skill` equivalent); a skill's whole folder comes along (supporting files; a nested folder with its own SKILL.md belongs to that skill and is excluded), 100-file / 5MB-per-file / 50-skill caps, cleanup on partial failure.
-- [x] IPC: `skills:discover` (url → candidates + installed flags + skip reasons); `skills:pull` gains `skills?: string[]`.
-- [x] Add-from-URL dialog: URL → Find skills → pick-list (checkboxes, installed rows disabled+badged, all new ones pre-checked) → Install N.
-- [x] Tests: fixture GitHub API server — discovery with names/descriptions, pick-one install incl. support files, missing pick name, subpath scoping, repo-root skill vs nested-skill exclusion, rate-limit/404 messages; raw/catalogue tests still pass (35 total in the suite now).
-- [x] **Bonus (found probing mattpocock/skills live): `disable-model-invocation: true` frontmatter honored** — such skills are slash-only: excluded from `<available_skills>` and invisible to the `skill` tool, but `/name` works; settings row says "Slash-only". Verified against the real repo's grill-with-docs.
-- [x] **UX pass on the live page** (user feedback): actions moved from a bottom footer row to the section title row (Rescan icon + Import + Add from URL; new `actions` slot on `SettingsSection`), new `skills:reload` IPC (manual rescan fallback to the watcher, returns count), skills page column widened to `max-w-3xl`, "Installed" section hint shows the count.
+- [x] `StreamEvent` + `AgentStreamEvent` gain `{type: "thinking", text}`.
+- [x] Providers parse thinking where the wire carries it:
+  - [x] anthropic: `content_block_delta` → `thinking_delta` (`delta.thinking`); `redacted_thinking` ignored.
+  - [x] openai_compatible + openrouter + openai + azure + cloudflare (chat-completions delta shape): `delta.reasoning_content ?? delta.reasoning` (DeepSeek / OpenRouter conventions).
+  - [x] google: streamed parts with `part.thought === true`.
+  - [x] bedrock: `contentBlockDelta.delta.reasoningContent.text`.
+  - [x] codex_oauth: `response.reasoning_summary_text.delta` (+ `response.reasoning_text.delta`); request adds `reasoning: {summary: "auto"}` with a 400-retry-without fallback (defensive — the Codex CLI always sends it).
+- [x] Agent loop forwards thinking events + accumulates `AgentResult.thinking` (joined, includes rejected-draft iterations — it's process visibility).
+- [x] chat:send forwards thinking on `chat:stream`; persists on the assistant message (≤24k cap).
+- [x] Store: `messages.thinking` column (migrated-column rule — no index needed), `addMessage` param, `rowToMessage` parses; `Message.thinking?`.
+- [x] Renderer: thinking deltas rAF-batched like text; "Thinking" collapsible above tool activity — spinner + live text while streaming, collapsed by default once done; muted styling. Persisted messages render the same block.
+- [x] Tests: provider parsers (anthropic/openai_compatible/codex fixtures), agent accumulation, store round-trip.
 
-## Part B.3 — tool-call amnesia (surfaced live-testing /debate: "what bash commands did you run?" → "I didn't run any")
+## Part B.2 — detail visibility toggle (user feedback on the live feature)
 
-Two-part root cause: (1) prompt assembly rebuilt hot-window assistant messages as `{role, content}` only — persisted `tool_calls` never reached the model, so it had zero memory of its own actions on later turns; (2) we persisted only `{name, success}` — no args — so even the UI couldn't answer "what commands".
+- [x] Settings → General → new "Chat" section: "Tool call details" Switch. Off = rows keep the salient one-liner but don't expand (no caret, not clickable). On by default.
+- [x] `toolCallDetail` pref in `UiPrefsProvider` (localStorage, per-device) — presentation, not config.yaml.
 
-- [x] `MessageToolCall` gains `argsPreview` (≤300 chars, compact JSON) + `resultPreview` (≤200) — built at persist time in chat:send from `AgentResult.toolCalls` (which always had full args/results; we were dropping them).
-- [x] `buildPayload` hot window: assistant messages get their turn's trail appended for the model — `[Tool calls you made during this turn: - bash({"command":…}) ✓ → …]`, capped at 12 calls + overflow note. Stored rows and UI content untouched.
-- [x] ToolActivity rows show the args preview (mono, truncated, subtle) — live (from `tool_start` events) and persisted; a `bash` row now says *what* it ran.
-- [x] Tests: prompt-engine (trail reattachment, user rows untouched, 12-call cap + overflow note).
+## Part D — docs & closeout
 
-Note: the OTHER half of that screenshot wasn't a bug — /debate is a cross-tool consultation skill that shells out to `claude`/`gemini` CLIs via bash by design; gpt-5.4-mini was just the moderator.
+- [x] ONBOARDING.md + DESIGN.md changelog entries.
+- [ ] Clear this file when accepted.
 
-## Part C — docs & closeout
+## Verify (user, after restarting `yarn dev` — main process + packages changed)
 
-- [x] ONBOARDING.md (backend section) + DESIGN.md changelog entries.
-- [ ] Clear this file when the feature is accepted.
+1. Send a message that triggers tools: rows should read `bash npm test`, `web_fetch https://…`, `web_search rust async runtime` — not raw JSON.
+2. Click a row → args + result expand inline. Old messages: rows render as before, not expandable.
+3. On a codex (gpt-5.x) branch, ask something non-trivial → "Thinking" block streams live above the reply, collapses when done, survives reopen.
+4. MCP tool calls (e.g. notion-search) show the query/title argument.
 
-## Verify (user, after restarting `yarn dev` — main process changed)
+## Known limits (accepted)
 
-1. Settings → Skills: import a skill (e.g. a folder with SKILL.md — `~/.claude/skills/graphify` is compatible), toggle it, view instructions. Add from URL: paste `https://github.com/mattpocock/skills` → Find skills → pick e.g. grill-with-docs → Install (note: it's slash-only, the model won't list it).
-2. Chat: type `/` → autocomplete; send `/name do something` → chip renders on the turn, reply follows the skill.
-3. Ask the model something matching a skill's description without the slash — it should call the `skill` tool (visible in tool activity).
-
-## Known limits (accepted for now)
-
-- Skills are global; no per-space/project scoping yet.
-- No skill *authoring* UI (create/edit in-app) — users write SKILL.md files on disk or import; revisit if asked.
-- Persona skill gating (`allowedSkills`/`deniedSkills`) remains unwired.
+- One thinking block per turn — no thinking↔tool interleave timeline.
+- Anthropic/Gemini thinking needs request-side opt-in (no config for it yet) — parsers are ready.
+- Subagent transcripts don't capture thinking yet.
+- Pre-existing rows carry only the old previews (no migration — data wasn't stored).

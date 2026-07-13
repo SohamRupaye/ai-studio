@@ -83,6 +83,10 @@ export class AnthropicProvider implements Provider {
         } else if (event.type === "content_block_delta") {
           if (event.delta?.type === "text_delta") {
             yield { type: "text", text: event.delta.text };
+          } else if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
+            // Extended thinking (arrives only when the request enables it;
+            // redacted_thinking blocks carry no thinking_delta and are skipped).
+            yield { type: "thinking", text: event.delta.thinking };
           } else if (event.delta?.type === "input_json_delta") {
             currentToolInput += event.delta.partial_json;
           }

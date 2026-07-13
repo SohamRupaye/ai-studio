@@ -154,7 +154,10 @@ export class CodexOAuthProvider implements Provider {
     const input = this.formatMessages(messages);
     // No output cap: the codex backend-api rejects max_output_tokens
     // ("Unsupported parameter") — limits are enforced server-side.
-    const body: any = { model, instructions: system, input, stream: true, store: false };
+    // reasoning.summary makes the backend stream reasoning-summary deltas
+    // (all codex models are gpt-5.x reasoning models; the Codex CLI sends
+    // this too). Retried without on 400, in case a model rejects it.
+    const body: any = { model, instructions: system, input, stream: true, store: false, reasoning: { summary: "auto" } };
 
     if (tools?.length) {
       body.tools = tools.map(t => ({ type: "function", name: t.name, description: t.description || "", parameters: t.parameters || {} }));
@@ -164,6 +167,10 @@ export class CodexOAuthProvider implements Provider {
     if (res.status === 401) {
       const refreshed = await this.refresh();
       headers["Authorization"] = `Bearer ${refreshed.access}`;
+      res = await fetch(CODEX_ENDPOINT, { method: "POST", headers, body: JSON.stringify(body), signal });
+    }
+    if (res.status === 400 && body.reasoning) {
+      delete body.reasoning;
       res = await fetch(CODEX_ENDPOINT, { method: "POST", headers, body: JSON.stringify(body), signal });
     }
     if (!res.ok) throw new Error(`Codex ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -205,6 +212,12 @@ export class CodexOAuthProvider implements Provider {
         if (etype === "response.output_text.delta") {
           const delta = event.delta || "";
           if (delta) yield { type: "text", text: delta };
+        } else if (etype === "response.reasoning_summary_text.delta" || etype === "response.reasoning_text.delta") {
+          const delta = event.delta || "";
+          if (delta) yield { type: "thinking", text: delta };
+        } else if (etype === "response.reasoning_summary_part.added") {
+          // Parts arrive as separate summary paragraphs — keep them readable.
+          yield { type: "thinking", text: "\n\n" };
         } else if (etype === "response.completed") {
           const u = event.response?.usage || {};
           yield { type: "usage", usage: { input_tokens: u.input_tokens || 0, output_tokens: u.output_tokens || 0 } };

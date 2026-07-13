@@ -27,6 +27,7 @@ import type { Organisation, Project } from "@ai-studio/shared";
 import type { MCPServerEntry, MCPTransport, SkillEntry } from "@ai-studio/event-bus";
 import { cn, counted } from "../lib/utils";
 import { useTheme } from "../hooks/use-theme";
+import { useUiPrefs } from "./ui-prefs";
 import { useWorkspace } from "./workspace-provider";
 import {
   useCodexStatus,
@@ -346,6 +347,7 @@ function SettingsSection({
 
 function GeneralSettings() {
   const { theme, setTheme } = useTheme();
+  const { toolCallDetail, setToolCallDetail } = useUiPrefs();
 
   return (
     <>
@@ -359,6 +361,22 @@ function GeneralSettings() {
               <ButtonGroupItem value="light">Light</ButtonGroupItem>
               <ButtonGroupItem value="dark">Dark</ButtonGroupItem>
             </ButtonGroup>
+          </FieldRow>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Chat">
+        <div className="mt-2 divide-y divide-line">
+          <FieldRow
+            label="Tool call details"
+            hint="Expand tool calls in the transcript to see each call's input and output. Rows still show what ran either way."
+            htmlFor="tool-call-detail"
+          >
+            <Switch
+              id="tool-call-detail"
+              checked={toolCallDetail}
+              onCheckedChange={setToolCallDetail}
+            />
           </FieldRow>
         </div>
       </SettingsSection>

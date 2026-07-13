@@ -630,6 +630,32 @@ describe("Messages", () => {
     expect(msgs[0]!.toolCalls![0]!.agents).toBeUndefined();
   });
 
+  it("tool_calls round-trip summary/args/result detail and messages round-trip thinking", () => {
+    // The expandable tool rows and the Thinking block read these back from
+    // the persisted message — live view and reopen must show the same thing.
+    const toolCalls = [
+      {
+        name: "bash",
+        success: true,
+        argsPreview: '{"command":"npm test"}',
+        resultPreview: "212 passing",
+        summary: "npm test",
+        args: '{\n  "command": "npm test"\n}',
+        result: "212 passing (4s)",
+      },
+    ];
+    store.addMessage(branchId, "assistant", "reply", "gpt-4", toolCalls, undefined, "Let me run the tests first.");
+
+    const msg = store.getMessages(branchId)[0]!;
+    expect(msg.toolCalls).toEqual(toolCalls);
+    expect(msg.thinking).toBe("Let me run the tests first.");
+  });
+
+  it("messages without thinking read back with thinking undefined", () => {
+    store.addMessage(branchId, "assistant", "plain reply", "gpt-4");
+    expect(store.getMessages(branchId)[0]!.thinking).toBeUndefined();
+  });
+
   it("deleteLastMessage removes the last message", () => {
     store.addMessage(branchId, "user", "first");
     store.addMessage(branchId, "assistant", "last");

@@ -259,4 +259,42 @@ describe("Agent.run", () => {
     expect(capturedCtx?.messageId).toBe("m1");
     expect(capturedCtx?.agent).toBe("coder");
   });
+
+  it("forwards thinking events and accumulates them across iterations on the result", async () => {
+    const router = makeRouter([
+      async function* () {
+        yield { type: "thinking", text: "Plan: " };
+        yield { type: "thinking", text: "run the tool." };
+        yield { type: "tool_call", id: "1", name: "bash", arguments: { command: "ls" } };
+      },
+      async function* () {
+        yield { type: "thinking", text: "Looks good." };
+        yield { type: "text", text: "Done." };
+      },
+    ]);
+    const agent = new Agent(router, makeRegistry());
+
+    const events = await collect(agent.run("model", [{ role: "user", content: "list files" }], "sys"));
+
+    expect(events.filter((e) => e.type === "thinking")).toEqual([
+      { type: "thinking", text: "Plan: " },
+      { type: "thinking", text: "run the tool." },
+      { type: "thinking", text: "Looks good." },
+    ]);
+    const result = doneResult(events);
+    expect(result.thinking).toBe("Plan: run the tool.\n\nLooks good.");
+    expect(result.text).toBe("Done.");
+  });
+
+  it("omits thinking from the result when the provider never streams it", async () => {
+    const router = makeRouter([
+      async function* () {
+        yield { type: "text", text: "Plain answer." };
+      },
+    ]);
+    const agent = new Agent(router, makeRegistry());
+
+    const result = doneResult(await collect(agent.run("model", [{ role: "user", content: "hi" }], "sys")));
+    expect(result.thinking).toBeUndefined();
+  });
 });

@@ -152,6 +152,11 @@ export function toBedrockContent(content: string | ContentBlock[]): unknown[] {
 
 export type StreamEvent =
   | { type: "text"; text: string }
+  /** Model reasoning/thinking, streamed wherever the wire format carries it
+   * (Anthropic thinking_delta, chat-completions reasoning_content/reasoning,
+   * Gemini thought parts, Bedrock reasoningContent, Codex reasoning summary).
+   * User-facing visibility only — never re-sent to the model. */
+  | { type: "thinking"; text: string }
   | { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
   | { type: "tool_call_streaming"; name: string; bytesReceived: number }
   | { type: "usage"; usage: any };

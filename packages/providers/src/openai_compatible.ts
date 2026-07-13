@@ -97,6 +97,10 @@ export class OpenAICompatibleProvider implements Provider {
           const delta = chunk.choices?.[0]?.delta;
           if (!delta) continue;
           if (delta.content) yield { type: "text", text: delta.content };
+          // Reasoning models: DeepSeek-style `reasoning_content`, OpenRouter-
+          // style `reasoning`. Emitted by default on reasoning models.
+          const thinking = delta.reasoning_content ?? delta.reasoning;
+          if (typeof thinking === "string" && thinking) yield { type: "thinking", text: thinking };
           if (delta.tool_calls) {
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0;
