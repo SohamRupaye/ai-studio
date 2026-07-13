@@ -1,48 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { toast } from "sonner";
 import {
   ArrowsClockwiseIcon,
   BrainIcon,
-  CaretRightIcon,
-  CheckIcon,
   CopyIcon,
   CubeIcon,
   FileTextIcon,
-  GitBranchIcon,
   GitForkIcon,
-  GlobeIcon,
   ImagesIcon,
   LightningIcon,
-  ListChecksIcon,
-  NotebookIcon,
   PaperclipIcon,
   PencilSimpleIcon,
   PushPinIcon,
   StopIcon,
-  TerminalWindowIcon,
   TrashIcon,
-  TreeStructureIcon,
   WarningCircleIcon,
-  WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import type { MessageImage, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
+import type { MessageImage, SubagentStreamEvent } from "@ai-studio/shared";
 import { applySubagentEvent, newSubagentRecord, toolCallSummary, toolCallArgsDetail, toolCallResultDetail } from "@ai-studio/shared";
-import { cn, counted } from "../lib/utils";
-import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "./ui/drawer";
+import { cn } from "../lib/utils";
 import { invalidateQueries, useBranches, useMessages, useMutation, useSkills, useUser } from "../hooks/use-ipc-data";
-import { useUiPrefs } from "./ui-prefs";
 import { Button } from "./ui/button";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
 import { Composer, ComposerButton } from "./ui/composer";
 import { KbdGroup } from "./ui/kbd";
 import { Markdown } from "./ui/markdown";
@@ -65,7 +45,20 @@ import {
   MessageScrollerViewport,
 } from "./ui/message-scroller";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
-import { Spinner } from "./ui/spinner";
+import {
+  ImageLightbox,
+  MessageImages,
+  StagedImage,
+  ThinkingBlock,
+  TypingDots,
+  UserMessageBody,
+  arrayBufferToBase64,
+  formatTime,
+  greetingLine,
+} from "./chat/message-parts";
+import { SubagentDetailDrawer } from "./chat/subagents";
+import { ToolActivity, attachLiveAgents } from "./chat/tool-activity";
+import type { SubagentRun, ToolCallState } from "./chat/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat / branch page — the composer + message scroller composed against real
@@ -75,26 +68,6 @@ import { Spinner } from "./ui/spinner";
 // forkAtIndex = that turn — git semantics, fork mid-history) and "pin"
 // (branch:pin-add; pins feed the branch's context assembly).
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** One delegated agent inside a subagent/delegate call — built live from
- * `subagent` stream events (via the same shared reducer main persists with),
- * or read back from the persisted message's tool_calls. runId/startedAt are
- * only present on live runs. */
-type SubagentRun = SubagentRunRecord & { runId?: string; startedAt?: number };
-
-type ToolCallState = {
-  name: string;
-  status: "running" | "done" | "error";
-  /** Human-salient one-liner (the bash command, the URL, the query) — the
-   * row answers "what did that call actually do". Live rows compute it with
-   * the same shared toolCallSummary main persists with; rows persisted
-   * before summaries existed fall back to the stored argsPreview. */
-  summary?: string;
-  /** Full (capped) args/result for the expandable detail panel. */
-  args?: string;
-  result?: string;
-  agents?: SubagentRun[];
-};
 
 interface StreamState {
   text: string;
@@ -106,166 +79,11 @@ interface StreamState {
   subagentRuns: SubagentRun[];
 }
 
-/** Groups live agent runs by runId (first-seen order) and attaches each group
- * to the turn's subagent/delegate calls in invocation order — the same
- * matching main uses when it persists the message. */
-function attachLiveAgents(calls: ToolCallState[], runs: SubagentRun[]): ToolCallState[] {
-  if (!runs.length) return calls;
-  const groups: SubagentRun[][] = [];
-  const groupIdx = new Map<string, number>();
-  for (const r of runs) {
-    let i = groupIdx.get(r.runId ?? "");
-    if (i === undefined) {
-      i = groups.length;
-      groupIdx.set(r.runId ?? "", i);
-      groups.push([]);
-    }
-    groups[i]!.push(r);
-  }
-  let gi = 0;
-  return calls.map((c) =>
-    (c.name === "subagent" || c.name === "delegate") && gi < groups.length
-      ? { ...c, agents: groups[gi++] }
-      : c,
-  );
-}
-
 interface ErrorState {
   turn: number;
   message: string;
   rateLimited?: boolean;
   retryAfterSeconds?: number;
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-/** Base64 for IPC transport, chunked so large images don't blow the one-shot
- * String.fromCharCode argument limit. */
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let binary = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
-
-// Time-of-day greeting for the empty state — the sketch's "Good morning,
-// Soham!" moment. Name comes from the user profile; degrades to just the
-// greeting when none is set.
-function greetingLine(name?: string): string {
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  return name ? `${greeting}, ${name}` : greeting;
-}
-
-/** Loads a staged/attached image blob (main has the bytes; the renderer has no
- * filesystem access) and renders it. Shows nothing until the data URL arrives. */
-function BlobImage({ blobPath, alt, className }: { blobPath: string; alt: string; className?: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    let live = true;
-    window.ipc.invoke("attachment:data", { blobPath }).then((url) => { if (live) setSrc(url); });
-    return () => { live = false; };
-  }, [blobPath]);
-  if (!src) return <div className={className} aria-label={alt} />;
-  return <img src={src} alt={alt} className={className} />;
-}
-
-function StagedImage({ blobPath, filename }: { blobPath: string; filename: string }) {
-  return (
-    <BlobImage
-      blobPath={blobPath}
-      alt={filename}
-      className="size-16 rounded-lg border border-line object-cover"
-    />
-  );
-}
-
-/** A user message's text, with a leading "/skill" invocation rendered as a
- * chip when the name matches an installed skill (the message text itself IS
- * the command — no separate metadata to drift from it). */
-function UserMessageBody({ text, skillNames }: { text: string; skillNames: ReadonlySet<string> }) {
-  const match = /^\/([\w-]+)[ \t]*([\s\S]*)$/.exec(text);
-  if (!match || !skillNames.has(match[1]!)) return <Markdown text={text} />;
-  return (
-    <div>
-      <span className="mb-1 inline-flex items-center gap-1 rounded-full border border-line bg-surface-1 px-2.5 py-0.5 font-mono text-[12px] text-fg">
-        <LightningIcon size={12} weight="fill" />
-        {match[1]}
-      </span>
-      {match[2] ? <Markdown text={match[2]} /> : null}
-    </div>
-  );
-}
-
-/** A turn's images, rendered ABOVE the bubble (never inside it — an image
- * inside MessageContent stretches the bubble around long text). Click opens
- * the fullscreen viewer. Follows the Message's own role alignment. */
-function MessageImages({
-  images,
-  onOpen,
-}: {
-  images: MessageImage[];
-  onOpen: (image: MessageImage) => void;
-}) {
-  return (
-    <div className="flex max-w-[85%] flex-wrap gap-2 in-data-[role=user]:justify-end">
-      {images.map((img) => (
-        <button
-          key={img.blobPath}
-          type="button"
-          aria-label={`View ${img.filename} fullscreen`}
-          onClick={() => onOpen(img)}
-          className="cursor-zoom-in overflow-hidden rounded-md border border-line transition-opacity hover:opacity-90"
-        >
-          <BlobImage blobPath={img.blobPath} alt={img.filename} className="max-h-48 object-contain" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Fullscreen image viewer — Escape, the close button, or a click anywhere
- * dismisses it. */
-function ImageLightbox({
-  image,
-  onClose,
-}: {
-  image: MessageImage | null;
-  onClose: () => void;
-}) {
-  return (
-    <BaseDialog.Root open={image !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <BaseDialog.Portal>
-        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/80 data-[open]:animate-fade-in data-[closed]:animate-fade-out" />
-        <BaseDialog.Popup
-          className="fixed inset-0 z-50 flex cursor-zoom-out flex-col items-center justify-center gap-3 p-8 outline-none data-[open]:animate-fade-in data-[closed]:animate-fade-out"
-          onClick={onClose}
-        >
-          {image && (
-            <>
-              <BlobImage
-                blobPath={image.blobPath}
-                alt={image.filename}
-                className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-xl"
-              />
-              <span className="text-body-sm text-white/70 select-none">{image.filename}</span>
-            </>
-          )}
-          <BaseDialog.Close
-            aria-label="Close"
-            className="pressable absolute right-4 top-4 flex size-8 items-center justify-center rounded-md bg-black/50 text-white/80 hover:bg-black/70 hover:text-white"
-          >
-            <XIcon size={18} />
-          </BaseDialog.Close>
-        </BaseDialog.Popup>
-      </BaseDialog.Portal>
-    </BaseDialog.Root>
-  );
 }
 
 export function ChatPage() {
@@ -1142,372 +960,5 @@ export function ChatPage() {
         }}
       />
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tool activity — collapsible list of a turn's tool calls, same grammar as
-// the "Explored 4 files" marker in the gallery. Rendered live while
-// streaming and again (from the persisted message) once the turn lands, so
-// what the assistant DID stays visible alongside what it said.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** What kind of work a tool name represents — drives the row's icon. */
-function toolIcon(name: string): React.ComponentProps<typeof MarkerIcon>["children"] {
-  if (/^(web_search|web_fetch|http_)/.test(name)) return <GlobeIcon />;
-  if (/^(read_file|write_file|edit_file|apply_patch|list_files|glob|grep)/.test(name)) return <FileTextIcon />;
-  if (/^(bash|terminal_)/.test(name)) return <TerminalWindowIcon />;
-  if (/^(remember|recall_memories)/.test(name)) return <BrainIcon />;
-  if (/^kb_/.test(name)) return <NotebookIcon />;
-  if (/^(subagent|delegate)/.test(name)) return <TreeStructureIcon />;
-  if (/^(todo_|think)/.test(name)) return <ListChecksIcon />;
-  if (/^git/.test(name)) return <GitBranchIcon />;
-  return <WrenchIcon />;
-}
-
-function ToolActivity({
-  calls,
-  onAgentClick,
-}: {
-  calls: ToolCallState[];
-  onAgentClick?: (run: SubagentRun) => void;
-}) {
-  const running = calls.some((c) => c.status === "running");
-  const failed = calls.filter((c) => c.status === "error").length;
-  return (
-    <Collapsible defaultOpen className="mb-1.5">
-      <CollapsibleTrigger className="py-1">
-        {running ? <Spinner size="sm" /> : <CheckIcon size={12} weight="bold" />}
-        {counted(calls.length, "tool call")}
-        {failed > 0 && <span className="text-danger-text">· {failed} failed</span>}
-      </CollapsibleTrigger>
-      <CollapsiblePanel>
-        <div className="flex flex-col gap-1 pb-1.5 pl-1.5 pt-2.5">
-          {calls.map((call, i) => (
-            <div key={i} className="flex flex-col gap-1">
-              <ToolCallRow call={call} />
-              {call.agents?.map((agent) => (
-                <SubagentRow
-                  key={`${agent.runId ?? ""}:${agent.agentId}`}
-                  run={agent}
-                  onClick={onAgentClick}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </CollapsiblePanel>
-    </Collapsible>
-  );
-}
-
-/** One tool call: the row leads with the salient argument (the command, the
- * URL, the query); clicking expands the call's full input and result. The
- * Settings → General "Tool call details" toggle turns the expansion off —
- * rows still say what ran either way. */
-function ToolCallRow({ call }: { call: ToolCallState }) {
-  const { toolCallDetail } = useUiPrefs();
-  const [open, setOpen] = useState(false);
-  const result = call.result;
-  const hasDetail = toolCallDetail && Boolean(call.args || result);
-  return (
-    <div className="flex min-w-0 flex-col">
-      <button
-        type="button"
-        disabled={!hasDetail}
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "group/call flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left",
-          hasDetail && "pressable hover:bg-surface-2",
-        )}
-      >
-        <span
-          className={cn(
-            "flex size-4 shrink-0 items-center justify-center text-fg-subtle [&>svg]:size-3.5",
-            call.status === "error" && "text-danger-text",
-          )}
-        >
-          {call.status === "running" ? <Spinner size="sm" /> : toolIcon(call.name)}
-        </span>
-        <span className="flex min-w-0 flex-1 items-baseline gap-2 font-mono text-[12px] text-fg-muted">
-          <span className="shrink-0">{call.name}</span>
-          {call.summary && (
-            <span className="min-w-0 truncate text-[11px] text-fg-subtle">{call.summary}</span>
-          )}
-        </span>
-        {call.status === "error" && (
-          <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
-        )}
-        {hasDetail && (
-          <CaretRightIcon
-            size={11}
-            weight="bold"
-            className={cn(
-              "shrink-0 text-fg-subtle opacity-0 transition-transform duration-200 ease-(--ease-standard) group-hover/call:opacity-100",
-              open && "rotate-90 opacity-100",
-            )}
-          />
-        )}
-      </button>
-      {open && hasDetail && (
-        <div className="ml-6 mt-1 flex min-w-0 flex-col gap-1.5 pb-1">
-          {call.args && <ToolDetailBlock label="Input" text={call.args} />}
-          {result && (
-            <ToolDetailBlock
-              label={call.status === "error" ? "Error" : "Result"}
-              text={result}
-              danger={call.status === "error"}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ToolDetailBlock({ label, text, danger }: { label: string; text: string; danger?: boolean }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span className={cn("text-label-sm text-fg-subtle", danger && "text-danger-text")}>{label}</span>
-      <pre
-        className={cn(
-          "max-h-56 min-w-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-line bg-surface-1 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-fg-muted",
-          danger && "border-danger-soft text-danger-text",
-        )}
-      >
-        {text}
-      </pre>
-    </div>
-  );
-}
-
-/** The model's reasoning for a turn. Live (while no reply text yet) it stays
- * open and follows the stream; once the answer starts — and on persisted
- * messages — it rests collapsed. A user toggle always wins. */
-function ThinkingBlock({ text, live }: { text: string; live?: boolean }) {
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  return (
-    <Collapsible
-      open={userOpen ?? live ?? false}
-      onOpenChange={(o) => setUserOpen(o)}
-      className="mb-1.5"
-    >
-      <CollapsibleTrigger className="py-1">
-        {live ? <Spinner size="sm" /> : <BrainIcon size={12} />}
-        {live ? "Thinking…" : "Thinking"}
-      </CollapsibleTrigger>
-      <CollapsiblePanel>
-        <div className="border-l border-line py-1.5 pl-4 pr-1 pt-2 text-body-sm text-fg-muted [&_*]:text-body-sm">
-          <Markdown text={text.trim()} />
-        </div>
-      </CollapsiblePanel>
-    </Collapsible>
-  );
-}
-
-/** Live elapsed-time ticker for a running agent. */
-function Elapsed({ since }: { since: number }) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return <>{formatDuration(Date.now() - since)}</>;
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
-}
-
-/** One delegated agent under its subagent/delegate call — click opens the
- * transcript drawer. Shows the current tool + elapsed time while running. */
-function SubagentRow({ run, onClick }: { run: SubagentRun; onClick?: (run: SubagentRun) => void }) {
-  const lastStep = run.steps[run.steps.length - 1];
-  const currentTool =
-    run.status === "running" && lastStep?.type === "tool" && lastStep.success === undefined
-      ? lastStep.tool
-      : undefined;
-  return (
-    <button
-      type="button"
-      onClick={() => onClick?.(run)}
-      className="pressable group/agent ml-5 flex items-center gap-2 rounded-md border-l border-line py-1 pl-3 pr-2 text-left hover:bg-surface-2"
-    >
-      <span
-        className={
-          run.status === "failed" ? "flex shrink-0 text-danger-text" : "flex shrink-0 text-fg-subtle"
-        }
-      >
-        {run.status === "running" ? (
-          <Spinner size="sm" />
-        ) : run.status === "failed" ? (
-          <WarningCircleIcon size={14} />
-        ) : (
-          <TreeStructureIcon size={14} />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted group-hover/agent:text-fg">
-        {run.agentId}
-      </span>
-      {currentTool && (
-        <span className="shrink-0 font-mono text-[11px] text-fg-subtle">{currentTool}</span>
-      )}
-      <span className="shrink-0 font-mono text-[11px] text-fg-subtle">
-        {run.status === "running" && run.startedAt ? (
-          <Elapsed since={run.startedAt} />
-        ) : run.durationMs !== undefined ? (
-          formatDuration(run.durationMs)
-        ) : null}
-      </span>
-      {run.model && (
-        <span className="shrink-0 font-mono text-[11px] text-fg-subtle">{run.model}</span>
-      )}
-    </button>
-  );
-}
-
-/** One transcript step: a stretch of the agent's own text (markdown) or a
- * tool call with its args and outcome preview. */
-function SubagentStepView({ step, active }: { step: SubagentRun["steps"][number]; active: boolean }) {
-  if (step.type === "text") {
-    return (
-      <div className="text-body-sm">
-        <Markdown text={step.text ?? ""} />
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-md border border-line bg-surface-2 px-2.5 py-1.5">
-      <div className="flex items-center gap-2">
-        <span
-          className={
-            step.success === false ? "flex shrink-0 text-danger-text" : "flex shrink-0 text-fg-subtle"
-          }
-        >
-          {active ? <Spinner size="sm" /> : toolIcon(step.tool ?? "")}
-        </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted">
-          {step.tool}
-        </span>
-        {step.success === false && (
-          <WarningCircleIcon size={14} className="shrink-0 text-danger-text" />
-        )}
-      </div>
-      {step.args && step.args !== "{}" && (
-        <div className="mt-1 truncate font-mono text-[11px] text-fg-subtle">{step.args}</div>
-      )}
-      {step.resultPreview && (
-        <div className="mt-1 line-clamp-2 font-mono text-[11px] text-fg-subtle">
-          → {step.resultPreview}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** The full transcript of one delegated agent — everything it writes and
- * every tool call, streamed live. A NON-MODAL drawer (no backdrop): the point
- * is watching the agent alongside the chat, not focusing into a modal. */
-function SubagentDetailDrawer({
-  run,
-  onClose,
-}: {
-  run: SubagentRun | null;
-  onClose: () => void;
-}) {
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  // Follow the transcript while the agent works (the drawer is a live view;
-  // scrolling history mid-run is what the persisted record is for).
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (el && run?.status === "running") el.scrollTop = el.scrollHeight;
-  }, [run]);
-
-  return (
-    <Drawer open={run !== null} onOpenChange={(open) => !open && onClose()} modal={false}>
-      {run && (
-        <DrawerContent showBackdrop={false}>
-          <DrawerHeader className="border-b border-line">
-            <DrawerTitle className="flex items-center gap-2.5">
-              {run.status === "running" && <Spinner size="sm" />}
-              <span className="min-w-0 truncate font-mono text-[15px]">{run.agentId}</span>
-              {run.status === "failed" && (
-                <span className="shrink-0 text-body-sm font-normal text-danger-text">failed</span>
-              )}
-            </DrawerTitle>
-            <DrawerDescription className="flex items-center gap-2 font-mono text-[12px]">
-              {run.model && <span>{run.model}</span>}
-              <span>
-                {run.status === "running" && run.startedAt ? (
-                  <Elapsed since={run.startedAt} />
-                ) : run.durationMs !== undefined ? (
-                  formatDuration(run.durationMs)
-                ) : null}
-              </span>
-            </DrawerDescription>
-          </DrawerHeader>
-          <DrawerBody ref={bodyRef} className="flex flex-col gap-3 py-4">
-            {run.task && (
-              <section>
-                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Task</h4>
-                <p className="whitespace-pre-wrap text-body-sm text-fg-muted">{run.task}</p>
-              </section>
-            )}
-            {(run.steps.length > 0 || run.status === "running") && (
-              <section>
-                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">
-                  Transcript
-                </h4>
-                <div className="flex flex-col gap-2">
-                  {run.steps.map((step, i) => (
-                    <SubagentStepView
-                      key={i}
-                      step={step}
-                      active={
-                        run.status === "running" &&
-                        i === run.steps.length - 1 &&
-                        step.type === "tool" &&
-                        step.success === undefined
-                      }
-                    />
-                  ))}
-                  {run.status === "running" && <TypingDots />}
-                </div>
-              </section>
-            )}
-            {run.error && (
-              <section>
-                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Error</h4>
-                <p className="whitespace-pre-wrap text-body-sm text-danger-text">{run.error}</p>
-              </section>
-            )}
-            {/* The transcript already contains everything the agent wrote — a
-                separate Result section only serves records persisted before
-                transcripts existed. */}
-            {run.result && !run.steps.some((s) => s.type === "text") && (
-              <section>
-                <h4 className="mb-1.5 text-label-sm uppercase tracking-wide text-fg-subtle">Result</h4>
-                <Markdown text={run.result} />
-              </section>
-            )}
-          </DrawerBody>
-        </DrawerContent>
-      )}
-    </Drawer>
-  );
-}
-
-function TypingDots() {
-  return (
-    <span className="flex items-center gap-1 px-1 py-1.5" aria-label="Thinking">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          style={{ animationDelay: `${i * 150}ms` }}
-          className="size-1.5 animate-typing rounded-full bg-fg-subtle"
-        />
-      ))}
-    </span>
   );
 }
