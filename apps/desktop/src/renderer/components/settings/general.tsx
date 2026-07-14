@@ -10,7 +10,8 @@ import { FieldRow, ScopeHeader, SettingsSection } from "./shared";
 
 export function GeneralSettings() {
   const { theme, setTheme } = useTheme();
-  const { toolCallDetail, setToolCallDetail } = useUiPrefs();
+  const { toolCallDetail, setToolCallDetail, notifyMode, setNotifyMode, notifySound, setNotifySound } =
+    useUiPrefs();
 
   return (
     <>
@@ -39,6 +40,36 @@ export function GeneralSettings() {
               id="tool-call-detail"
               checked={toolCallDetail}
               onCheckedChange={setToolCallDetail}
+            />
+          </FieldRow>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Notifications"
+        hint="Get pinged when a chat's reply finishes — handy for long agent runs you leave to work while you're elsewhere."
+      >
+        <div className="mt-2 divide-y divide-line">
+          <FieldRow
+            label="Desktop notifications"
+            hint="“When away” only notifies while AI Studio isn't the focused window."
+          >
+            <ButtonGroup value={notifyMode} onValueChange={(v) => setNotifyMode(v as typeof notifyMode)}>
+              <ButtonGroupItem value="off">Off</ButtonGroupItem>
+              <ButtonGroupItem value="unfocused">When away</ButtonGroupItem>
+              <ButtonGroupItem value="always">Always</ButtonGroupItem>
+            </ButtonGroup>
+          </FieldRow>
+          <FieldRow
+            label="Notification sound"
+            hint="Play the system sound with the notification."
+            htmlFor="notify-sound"
+          >
+            <Switch
+              id="notify-sound"
+              checked={notifySound}
+              disabled={notifyMode === "off"}
+              onCheckedChange={setNotifySound}
             />
           </FieldRow>
         </div>

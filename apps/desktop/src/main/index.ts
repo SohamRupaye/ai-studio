@@ -27,6 +27,7 @@ import { registerMemoryHandlers } from "./ipc/memory.js";
 import { registerWindowHandlers } from "./ipc/window.js";
 import { registerSystemHandlers } from "./ipc/system.js";
 import { registerToolingHandlers } from "./ipc/tools.js";
+import { registerNotifyHandlers } from "./ipc/notify.js";
 
 if (require("electron-squirrel-startup")) app.quit();
 
@@ -39,6 +40,9 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true, nodeIntegration: false, sandbox: false,
+      // Enables Chromium's built-in PDF viewer so the artifacts page can render
+      // a preserved PDF original in an <iframe> (blob: URL).
+      plugins: true,
     },
   });
   setMainWindow(win);
@@ -219,6 +223,7 @@ function registerHandlers() {
   registerMemoryHandlers();
   registerSystemHandlers();
   registerToolingHandlers();
+  registerNotifyHandlers();
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

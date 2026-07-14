@@ -1,11 +1,13 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useTheme } from "./hooks/use-theme";
-import { useChatTitledListener, useMCPChangedListener, useModelsRefreshListener, useSkillsChangedListener } from "./hooks/use-ipc-data";
+import { useChatTitledListener, useMCPChangedListener, useModelsRefreshListener, useNotifyActivatedListener, useSkillsChangedListener } from "./hooks/use-ipc-data";
 import { AuthProvider } from "./components/auth-provider";
 import { WorkspaceProvider } from "./components/workspace-provider";
 import { UiPrefsProvider } from "./components/ui-prefs";
 import { AppShell } from "./components/app-shell";
 import { ChatPage } from "./components/chat-page";
+import { ArtifactsPage } from "./components/artifacts-page";
+import { MemoriesPage } from "./components/memories-page";
 import { ProjectSettingsRedirect, SettingsPage } from "./components/settings-page";
 import { UiGallery } from "./components/ui-gallery";
 import { Toaster } from "./components/ui/sonner";
@@ -33,6 +35,7 @@ export default function App() {
   useChatTitledListener();
   useMCPChangedListener();
   useSkillsChangedListener();
+  useNotifyActivatedListener();
 
   const applied =
     theme === "system"
@@ -62,15 +65,15 @@ export default function App() {
               <Route index element={<Placeholder title="Home" />} />
               <Route path="/knowledge-base" element={<Placeholder title="Knowledge base" />} />
               <Route path="/graph" element={<Placeholder title="Knowledge graph" />} />
-              <Route path="/spaces/:spaceId/memories" element={<Placeholder title="Memories" />} />
-              <Route path="/spaces/:spaceId/artifacts" element={<Placeholder title="Artifacts" />} />
+              <Route path="/spaces/:spaceId/memories" element={<MemoriesPage />} />
+              <Route path="/spaces/:spaceId/artifacts" element={<ArtifactsPage />} />
               <Route path="/chats/:chatId" element={<Placeholder title="Chat" />} />
               <Route path="/chats/:chatId/branches/:branchId" element={<ChatPageRoute />} />
               <Route path="/branches/compare" element={<Placeholder title="Compare branches" />} />
               <Route path="/costs" element={<Placeholder title="Costs" />} />
               {/* Project-level artifact/memory management, reached from settings. */}
-              <Route path="/artifacts" element={<Placeholder title="Project artifacts" />} />
-              <Route path="/memories" element={<Placeholder title="Project memories" />} />
+              <Route path="/artifacts" element={<ArtifactsPage />} />
+              <Route path="/memories" element={<MemoriesPage />} />
               {/* Settings scopes: General ▸ Organizations ▸ Projects (the
                   override cascade). Bare /settings lands on General. */}
               <Route path="/settings" element={<Navigate to="/settings/general" replace />} />

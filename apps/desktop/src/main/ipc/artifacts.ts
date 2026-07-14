@@ -1,4 +1,4 @@
-import { dialog } from "electron";
+import { dialog, shell } from "electron";
 import { basename, extname, join, sep } from "node:path";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -103,6 +103,61 @@ export function registerArtifactHandlers() {
   handle("artifact:list", ({ projectId }) => store.listArtifacts(projectId));
   handle("artifact:get", ({ id }) => store.getArtifact(id) ?? null);
   handle("artifact:update", ({ id, content, title }) => { store.updateArtifact(id, content, title); });
+  handle("artifact:rename", ({ id, title }) => { store.renameArtifact(id, title); });
+  handle("artifact:delete", ({ id }) => store.deleteArtifact(id));
+
+  // Resolve an artifact's preserved-original blob to an absolute path, scoped
+  // to the blobs dir so a tampered row can't point the reader elsewhere.
+  const artifactBlobAbs = (id: string): { abs: string; mime: string } | null => {
+    const artifact = store.getArtifact(id);
+    if (!artifact?.blobPath) return null;
+    const abs = join(dataDirPath, artifact.blobPath);
+    if (!abs.startsWith(join(dataDirPath, "blobs") + sep)) return null;
+    return { abs, mime: artifact.mime ?? "application/octet-stream" };
+  };
+
+  // Original bytes (base64) for the renderer to render — e.g. a PDF turned
+  // into a blob: URL for the built-in viewer. Null when no original was kept.
+  handle("artifact:file", ({ id }) => {
+    const resolved = artifactBlobAbs(id);
+    if (!resolved) return null;
+    try {
+      return { base64: readFileSync(resolved.abs).toString("base64"), mime: resolved.mime };
+    } catch { return null; }
+  });
+
+  // Convert a preserved .docx original to display HTML for the in-app viewer.
+  // mammoth generates markup from a fixed tag whitelist (and escapes all text),
+  // so the result is safe to inject; embedded images arrive as data: URLs,
+  // which the CSP's img-src already allows. Lazy import, same as ingestion.
+  handle("artifact:docx-html", async ({ id }) => {
+    const resolved = artifactBlobAbs(id);
+    if (!resolved || !resolved.mime.includes("wordprocessingml")) return null;
+    try {
+      const mammoth = (await import("mammoth")).default as {
+        convertToHtml(input: { buffer: Buffer }): Promise<{ value: string }>;
+      };
+      const { value } = await mammoth.convertToHtml({ buffer: readFileSync(resolved.abs) });
+      return value.trim() ? { html: value } : null;
+    } catch {
+      return null;
+    }
+  });
+
+  handle("artifact:reveal", ({ id }) => {
+    const resolved = artifactBlobAbs(id);
+    if (!resolved) return false;
+    shell.showItemInFolder(resolved.abs);
+    return true;
+  });
+
+  handle("artifact:open-external", async ({ id }) => {
+    const resolved = artifactBlobAbs(id);
+    if (!resolved) return false;
+    // Empty string = success; anything else is the OS error message.
+    const err = await shell.openPath(resolved.abs);
+    return err === "";
+  });
 
   // Attach files to a branch: parse each to text, preserve non-text originals
   // as blobs, persist as artifacts, and auto-select them so the next turn sees

@@ -77,6 +77,23 @@ export class ArtifactsRepository {
     ).run(content, title ?? null, now, id);
   }
 
+  /** Rename only — no version bump, the content is untouched. */
+  renameArtifact(id: string, title: string): void {
+    this.db.prepare(
+      `UPDATE artifacts SET title = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(title, Date.now(), id);
+  }
+
+  /** Soft delete: the row stays so its blob survives an undelete and the
+   * startup sweep still counts it as referenced (see referencedBlobPaths).
+   * Returns false if nothing live matched. */
+  deleteArtifact(id: string): boolean {
+    const info = this.db.prepare(
+      `UPDATE artifacts SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(Date.now(), id);
+    return info.changes > 0;
+  }
+
   getArtifact(id: string): any | undefined {
     const row = this.db.prepare("SELECT * FROM artifacts WHERE id = ? AND deleted_at IS NULL").get(id) as any;
     if (!row) return undefined;
@@ -85,6 +102,6 @@ export class ArtifactsRepository {
 
   listArtifacts(projectId: string): any[] {
     return (this.db.prepare("SELECT * FROM artifacts WHERE project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC").all(projectId) as any[])
-      .map(r => ({ id: r.id, branchId: r.branch_id, projectId: r.project_id, type: r.type, title: r.title, version: r.version, source: r.source ?? "extracted", createdAt: r.created_at, updatedAt: r.updated_at }));
+      .map(r => ({ id: r.id, branchId: r.branch_id, projectId: r.project_id, type: r.type, title: r.title, version: r.version, source: r.source ?? "extracted", mime: r.mime ?? null, createdAt: r.created_at, updatedAt: r.updated_at }));
   }
 }

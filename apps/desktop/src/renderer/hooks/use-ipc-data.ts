@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   IpcInvokeChannel,
   IpcInvokeRequest,
@@ -229,6 +230,21 @@ export function useSkillsChangedListener(): void {
     });
     return off;
   }, []);
+}
+
+/**
+ * Subscribes once (mount in App.tsx) to "notify:activated" — pushed when the
+ * user clicks a native notification — and navigates to the originating chat so
+ * clicking the ping lands you back on the reply that triggered it.
+ */
+export function useNotifyActivatedListener(): void {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const off = window.ipc.on("notify:activated", ({ branchId, chatId }) => {
+      if (branchId && chatId) navigate(`/chats/${chatId}/branches/${branchId}`);
+    });
+    return off;
+  }, [navigate]);
 }
 
 /**

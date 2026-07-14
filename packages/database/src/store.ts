@@ -318,6 +318,14 @@ export class Store {
     this.artifacts.updateArtifact(id, content, title);
   }
 
+  renameArtifact(id: string, title: string): void {
+    this.artifacts.renameArtifact(id, title);
+  }
+
+  deleteArtifact(id: string): boolean {
+    return this.artifacts.deleteArtifact(id);
+  }
+
   getArtifact(id: string): any | undefined {
     return this.artifacts.getArtifact(id);
   }

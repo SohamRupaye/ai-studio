@@ -140,6 +140,13 @@ Sidebar collapse persists via `UiPrefsProvider` (`sidebarOpen`), same pattern as
 
 Dated entries, newest first: what changed and **why**. Add one whenever tokens or component behavior change.
 
+### 2026-07-14 — Artifacts page: every format renders in the app's own chrome (`components/viewers/`)
+
+- **Chromium's built-in PDF viewer is gone** (its dark gray toolbar read as someone else's app inside ours). `PdfViewer` renders pages with **pdf.js** (`pdfjs-dist`, worker bundled via a `?url` import — CSP gained `worker-src 'self' blob:`, and `frame-src blob:` left with the iframe). Chrome is ours: a quiet toolbar row (`Page N of M` left, zoom −/%/+ and a fit-width toggle right, ghost icon buttons), pages as white paper cards (`rounded-xs shadow-md`) floating over a **`bg-sunken` well** — the recessed-content reading of the elevation ramp. Fit-width is the default zoom and tracks resizes; manual zoom (0.25×–4×) is an override the fit button clears. Pages render to canvas only near the viewport (IntersectionObserver, ±1200px) and free their bitmaps when they leave, so a long deck doesn't hold every page in memory; unrendered pages hold their exact size as `skeleton` placeholders.
+- **Word docs get a native reading view**: new `artifact:docx-html` IPC converts the preserved blob with mammoth (`convertToHtml`, lazy import, same whitelist-tag safety as ingestion); `DocxViewer` types it with the app scale via scoped `[&_h1]`-style selectors mirroring the Markdown component, so uploaded and generated documents read as one family. Links open externally (window-open handler), `#anchors` stay in-page. Conversion failure falls back to the old extracted-text banner.
+- **CSV/TSV and spreadsheets are tables now**: `TableViewer` parses delimited text with an RFC-4180-ish parser (quoted delimiters/newlines/doubled quotes — unit-tested in `parse-delimited.test.ts`); `SheetViewer` splits ingestion's `## Sheet:` sections back into per-sheet tabs (segmented `Tabs`; single sheets skip the bar). Sticky header row (inset-shadow hairline — borders don't travel with sticky), mono row-number gutter, truncate-with-title cells, footer stating `rows · columns` and any cap (first 2 000 rows). CSV/TSV stay **editable** (their text IS the file); blob-rendered views (pdf/docx/sheet) don't.
+- The "can't preview here" banner survives only as the fallback for preserved originals with no dedicated viewer or a failed conversion.
+
 ### 2026-07-13 (later) — Tool calls open up: salient rows, expandable detail, live Thinking
 
 - **Why (user, with screenshots)**: rows still read as a black box — `web_fetch` without the URL, `bash` × 8 without the commands, and model reasoning invisible entirely. The raw-JSON `argsPreview` from the morning was a stopgap, not an answer.

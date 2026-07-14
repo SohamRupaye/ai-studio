@@ -9,6 +9,7 @@ function Switch({ className, ...props }: React.ComponentProps<typeof BaseSwitch.
       className={cn(
         "pressable inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border border-line bg-sunken p-0.5 shadow-sunken",
         "data-[checked]:border-primary data-[checked]:bg-primary data-[checked]:shadow-none",
+        "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40",
         className,
       )}
       {...props}

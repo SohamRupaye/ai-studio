@@ -21,6 +21,7 @@ import {
 import type { MessageImage, SubagentStreamEvent } from "@ai-studio/shared";
 import { applySubagentEvent, newSubagentRecord, toolCallSummary, toolCallArgsDetail, toolCallResultDetail } from "@ai-studio/shared";
 import { cn } from "../lib/utils";
+import { notifyChatDone } from "../lib/notify";
 import { invalidateQueries, useBranches, useMessages, useMutation, useSkills, useUser } from "../hooks/use-ipc-data";
 import { Button } from "./ui/button";
 import { Composer, ComposerButton } from "./ui/composer";
@@ -87,10 +88,15 @@ interface ErrorState {
 }
 
 export function ChatPage() {
-  const { branchId } = useParams();
+  const { branchId, chatId } = useParams();
   const navigate = useNavigate();
   const { data: branches } = useBranches();
   const branch = branches?.find((b) => b.id === branchId);
+  // Snapshot of what a finished-turn notification needs, refreshed every
+  // render so the stream's `done` handler (created once per branch) reads the
+  // live name instead of whatever was loaded when its effect first ran.
+  const notifyInfoRef = useRef<{ branchId?: string; chatId?: string; name?: string }>({});
+  notifyInfoRef.current = { branchId, chatId, name: branch?.name };
   const { data: user } = useUser();
 
   const { data: messages } = useMessages(branchId);
@@ -252,6 +258,14 @@ export function ChatPage() {
           flushFrameRef.current = null;
         }
         setStreaming((s) => (s ? { ...s, text: event.text } : s));
+        // Ping the OS if the user stepped away — the whole reason someone
+        // kicks off a long turn and switches apps. Self-gates on prefs + focus.
+        notifyChatDone({
+          name: notifyInfoRef.current.name,
+          text: event.text,
+          branchId: notifyInfoRef.current.branchId,
+          chatId: notifyInfoRef.current.chatId,
+        });
         // This mount may not be the one that called send() (e.g. the user
         // navigated away and back while it was still running) — refetch
         // unconditionally so the persisted reply shows up either way.

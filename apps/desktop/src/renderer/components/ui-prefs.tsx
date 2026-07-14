@@ -1,4 +1,11 @@
 import { createContext, useContext, useState, useCallback } from "react";
+import {
+  getNotifyMode,
+  getNotifySound,
+  setNotifyModePref,
+  setNotifySoundPref,
+  type NotifyMode,
+} from "../lib/notify";
 
 interface UiPrefsValue {
   rightPanelOpen: boolean;
@@ -10,6 +17,12 @@ interface UiPrefsValue {
    * input/output detail. Settings → General toggle; on by default. */
   toolCallDetail: boolean;
   setToolCallDetail: (show: boolean) => void;
+  /** When to raise a native notification as a chat's reply finishes. */
+  notifyMode: NotifyMode;
+  setNotifyMode: (mode: NotifyMode) => void;
+  /** Whether the finished-reply notification plays the system sound. */
+  notifySound: boolean;
+  setNotifySound: (on: boolean) => void;
 }
 
 const UiPrefsContext = createContext<UiPrefsValue | null>(null);
@@ -28,6 +41,8 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
   const [toolCallDetail, setToolCallDetailState] = useState<boolean>(
     () => localStorage.getItem(TOOL_DETAIL_KEY) !== "off",
   );
+  const [notifyMode, setNotifyModeState] = useState<NotifyMode>(() => getNotifyMode());
+  const [notifySound, setNotifySoundState] = useState<boolean>(() => getNotifySound());
 
   const setRightPanelOpen = useCallback((open: boolean) => {
     setOpen(open);
@@ -55,6 +70,16 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(TOOL_DETAIL_KEY, show ? "on" : "off");
   }, []);
 
+  const setNotifyMode = useCallback((mode: NotifyMode) => {
+    setNotifyModeState(mode);
+    setNotifyModePref(mode);
+  }, []);
+
+  const setNotifySound = useCallback((on: boolean) => {
+    setNotifySoundState(on);
+    setNotifySoundPref(on);
+  }, []);
+
   return (
     <UiPrefsContext.Provider
       value={{
@@ -65,6 +90,10 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
         toggleSidebar,
         toolCallDetail,
         setToolCallDetail,
+        notifyMode,
+        setNotifyMode,
+        notifySound,
+        setNotifySound,
       }}
     >
       {children}

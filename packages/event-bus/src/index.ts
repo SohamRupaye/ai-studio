@@ -264,9 +264,54 @@ export interface IpcInvokeMap {
   "message:delete": [{ branchId: string; turn: number }, number];
 
   // Artifacts
-  "artifact:list": [{ projectId: string }, Array<{ id: string; type: string; title: string; version: number }>];
-  "artifact:get": [{ id: string }, { id: string; type: string; title: string; content: string; version: number } | null];
+  "artifact:list": [
+    { projectId: string },
+    Array<{
+      id: string;
+      type: string;
+      title: string;
+      version: number;
+      source: string;
+      mime: string | null;
+      createdAt: number;
+      updatedAt: number;
+    }>,
+  ];
+  "artifact:get": [
+    { id: string },
+    {
+      id: string;
+      type: string;
+      title: string;
+      content: string;
+      version: number;
+      /** "extracted" (auto-detected from an assistant reply) or "upload". */
+      source: string;
+      /** Provenance for uploaded documents (null on agent-extracted artifacts). */
+      originalFilename: string | null;
+      mime: string | null;
+      /** Set only when the original bytes were preserved (PDF/DOCX/XLSX). */
+      blobPath: string | null;
+      byteSize: number | null;
+      createdAt: number;
+      updatedAt: number;
+    } | null,
+  ];
   "artifact:update": [{ id: string; content: string; title?: string }, void];
+  "artifact:rename": [{ id: string; title: string }, void];
+  "artifact:delete": [{ id: string }, boolean];
+  /** Original bytes of an uploaded artifact, base64-encoded, for the renderer
+   * to render (e.g. pdf.js rendering a preserved PDF). Null when no original
+   * was preserved. */
+  "artifact:file": [{ id: string }, { base64: string; mime: string } | null];
+  /** A preserved .docx original converted to display HTML (mammoth). Null when
+   * the artifact isn't a docx with a preserved blob or conversion fails — the
+   * viewer then falls back to the extracted text. */
+  "artifact:docx-html": [{ id: string }, { html: string } | null];
+  /** Reveal an uploaded artifact's original file in the OS file manager. */
+  "artifact:reveal": [{ id: string }, boolean];
+  /** Open an uploaded artifact's original file in the OS default app. */
+  "artifact:open-external": [{ id: string }, boolean];
 
   // Memory
   "memory:list": [{ scope?: string }, MemoryFact[]];
@@ -394,6 +439,17 @@ export interface IpcInvokeMap {
   // Window
   "window:is-fullscreen": [void, boolean];
 
+  // Notifications
+  /** Show a native OS notification (e.g. a chat's reply finished while the
+   * user was in another app). No-op if the OS can't show notifications. The
+   * renderer decides *whether* to call this — based on the user's prefs and
+   * window focus — and main renders it, focusing/restoring the window and
+   * pushing `notify:activated` when the notification is clicked. */
+  "notify:show": [
+    { title: string; body: string; silent?: boolean; branchId?: string; chatId?: string },
+    void,
+  ];
+
   // Knowledge base
   "kb:list": [{ category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
   "kb:search": [{ query: string; category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
@@ -421,6 +477,9 @@ export interface IpcEventMap {
   /** Fired when the installed skills change (import, remove, external edit),
    * so skill lists refetch without polling. */
   "skills:changed": void;
+  /** Pushed when the user clicks a native notification, so the renderer can
+   * bring the originating chat into view. */
+  "notify:activated": { branchId?: string; chatId?: string };
 }
 
 // ── Channel name helpers ──────────────────────────────────────────────────────
