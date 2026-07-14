@@ -201,9 +201,12 @@ describe("startAuthFlow", () => {
     const cb = new URL(redirectUri);
     cb.searchParams.set("code", fake.issuedCode);
     cb.searchParams.set("state", "forged-state");
+    // Attach the rejection handler BEFORE triggering the callback so the
+    // promise is never transiently unhandled (avoids PromiseRejectionHandledWarning).
+    const completePromise = expect(flow.complete).rejects.toThrow(/state mismatch/);
     const resp = await fetch(cb.toString());
     expect(resp.status).toBe(400);
-    await expect(flow.complete).rejects.toThrow(/state mismatch/);
+    await completePromise;
     const entry = await auth.get("fake");
     expect(entry?.tokens).toBeUndefined();
   });
@@ -214,8 +217,11 @@ describe("startAuthFlow", () => {
     const cb = new URL(redirectUri);
     cb.searchParams.set("error", "access_denied");
     cb.searchParams.set("error_description", "User said no");
+    // Attach the rejection handler BEFORE triggering the callback so the
+    // promise is never transiently unhandled (avoids PromiseRejectionHandledWarning).
+    const completePromise = expect(flow.complete).rejects.toThrow("User said no");
     await fetch(cb.toString());
-    await expect(flow.complete).rejects.toThrow("User said no");
+    await completePromise;
   });
 
   it("can be cancelled, which frees the loopback server", async () => {
