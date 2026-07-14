@@ -1,4 +1,4 @@
-import { API_KEY_PROVIDERS, getConfig } from "@ai-studio/providers";
+import { API_KEY_PROVIDERS, getConfig } from "@squirl/providers";
 import { handle } from "./handle.js";
 import { store, globalMem, graph, orgRouters } from "../state.js";
 

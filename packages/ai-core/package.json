@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/ai-core",
+  "name": "@squirl/ai-core",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,16 +18,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/context-engine": "workspace:*",
-    "@ai-studio/database": "workspace:*",
-    "@ai-studio/event-bus": "workspace:*",
-    "@ai-studio/graph-engine": "workspace:*",
-    "@ai-studio/prompt-engine": "workspace:*",
-    "@ai-studio/providers": "workspace:*",
-    "@ai-studio/shared": "workspace:*",
-    "@ai-studio/tokenizer": "workspace:*",
-    "@ai-studio/tools-runtime": "workspace:*",
-    "@huggingface/transformers": "3.4.1"
+    "@huggingface/transformers": "3.4.1",
+    "@squirl/context-engine": "workspace:*",
+    "@squirl/database": "workspace:*",
+    "@squirl/event-bus": "workspace:*",
+    "@squirl/graph-engine": "workspace:*",
+    "@squirl/prompt-engine": "workspace:*",
+    "@squirl/providers": "workspace:*",
+    "@squirl/shared": "workspace:*",
+    "@squirl/tokenizer": "workspace:*",
+    "@squirl/tools-runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.7.2",

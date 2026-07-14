@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Space, Chat, MessageImage, MessageToolCall, SubagentRunRecord, SubagentStreamEvent } from "@ai-studio/shared";
+import type { Branch, Organisation, Project, Space, Chat, MessageImage, MessageToolCall, SubagentRunRecord, SubagentStreamEvent } from "@squirl/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 

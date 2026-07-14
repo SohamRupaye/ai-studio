@@ -7,7 +7,7 @@ import {
   PlugsIcon,
   GearIcon
 } from "@phosphor-icons/react";
-import type { Organisation, Project } from "@ai-studio/shared";
+import type { Organisation, Project } from "@squirl/shared";
 import { cn } from "../../lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Branch, Message, MessageImage, Summary, Organisation, Project, Space, Chat } from "@ai-studio/shared";
+import type { Branch, Message, MessageImage, Summary, Organisation, Project, Space, Chat } from "@squirl/shared";
 import { SCHEMA, applyMigrations } from "./schema.js";
 import { OrganisationsRepository } from "./repositories/organisations.js";
 import { ProjectsRepository } from "./repositories/projects.js";

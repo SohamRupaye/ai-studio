@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { GearIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
-import type { Project } from "@ai-studio/shared";
+import type { Project } from "@squirl/shared";
 import { cn } from "../lib/utils";
 import { useWorkspace } from "./workspace-provider";
 import { useMutation } from "../hooks/use-ipc-data";

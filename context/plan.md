@@ -8,7 +8,7 @@ Tool activity is a black box. Rows say `bash` / `web_fetch` / `web_search` but n
 
 ## Decisions (design of record)
 
-- **Rows lead with the salient argument, not JSON**: `bash` → the command, `web_fetch` → the URL, `web_search` → the query, file tools → the path, `subagent`/`delegate` → the task, MCP tools → best-effort first meaningful string field. One shared extractor — `toolCallSummary(name, args)` in `@ai-studio/shared` — used by the renderer (live, from `tool_start` args) and main (persisted as `summary` on `MessageToolCall`), so live and reopened rows can't drift.
+- **Rows lead with the salient argument, not JSON**: `bash` → the command, `web_fetch` → the URL, `web_search` → the query, file tools → the path, `subagent`/`delegate` → the task, MCP tools → best-effort first meaningful string field. One shared extractor — `toolCallSummary(name, args)` in `@squirl/shared` — used by the renderer (live, from `tool_start` args) and main (persisted as `summary` on `MessageToolCall`), so live and reopened rows can't drift.
 - **Rows are expandable**: clicking a tool row toggles an inline detail panel — full args (pretty JSON, mono block) and the result (mono, scrollable). New persisted fields `args` (≤4k) / `result` (≤6k) with visible truncation markers; live rows capture the same from `tool_start`/`tool_end` events (which already carry full args/result — we were dropping them).
 - **`argsPreview`/`resultPreview` stay untouched** — they are the model-facing trail (`withToolTrail`), a different consumer with different caps. UI reads `summary`/`args`/`result`, falling back to `argsPreview` for pre-existing rows (not expandable — the data was never stored).
 - **Thinking becomes a first-class stream event**: `{type: "thinking", text}` on provider `StreamEvent` → `AgentStreamEvent` → `chat:stream`. Parsed wherever a wire format carries it (see Part C). Persisted per assistant message (`messages.thinking` column, ≤24k) and rendered as a collapsed "Thinking" collapsible above tool activity — live-streaming while the model reasons.
@@ -19,7 +19,7 @@ Tool activity is a black box. Rows say `bash` / `web_fetch` / `web_search` but n
 
 ## Part A — salient summaries
 
-- [x] `toolCallSummary(name, args)` in `@ai-studio/shared` (new `tool-call.ts`): known tools (bash/web_search/web_fetch/read_file/write_file/edit_file/list_files/glob/grep/remember/kb_*/skill/subagent/delegate/think→reasoning) + MCP heuristic (preferred keys: url, query, path, title, name, prompt, text, id…) + compact-JSON fallback. Caps at 200 chars. Unit-tested.
+- [x] `toolCallSummary(name, args)` in `@squirl/shared` (new `tool-call.ts`): known tools (bash/web_search/web_fetch/read_file/write_file/edit_file/list_files/glob/grep/remember/kb_*/skill/subagent/delegate/think→reasoning) + MCP heuristic (preferred keys: url, query, path, title, name, prompt, text, id…) + compact-JSON fallback. Caps at 200 chars. Unit-tested.
 - [x] `MessageToolCall.summary` persisted (built in chat:send from full args); renderer computes the same live.
 - [x] Row shows summary (mono, subtle, truncating) — falls back to `argsPreview` on old rows.
 

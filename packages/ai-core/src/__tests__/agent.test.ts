@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Router } from "@ai-studio/providers";
-import type { ToolRegistry, ToolResult, ToolContext } from "@ai-studio/tools-runtime";
+import type { Router } from "@squirl/providers";
+import type { ToolRegistry, ToolResult, ToolContext } from "@squirl/tools-runtime";
 import { Agent, type AgentStreamEvent } from "../agent.js";
 import { CostTracker } from "../costs.js";
 

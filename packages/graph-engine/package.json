@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/graph-engine",
+  "name": "@squirl/graph-engine",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,8 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/shared": "workspace:*",
-    "@huggingface/transformers": "3.4.1"
+    "@huggingface/transformers": "3.4.1",
+    "@squirl/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.7.2",

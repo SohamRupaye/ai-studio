@@ -1,6 +1,6 @@
-import type { Store } from "@ai-studio/database";
-import type { MetaGraph } from "@ai-studio/graph-engine";
-import type { Branch } from "@ai-studio/shared";
+import type { Store } from "@squirl/database";
+import type { MetaGraph } from "@squirl/graph-engine";
+import type { Branch } from "@squirl/shared";
 
 export interface BranchDiff {
   onlyInA: Array<{ topic: string; decision: string; turn: number }>;

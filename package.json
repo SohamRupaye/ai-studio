@@ -1,8 +1,8 @@
 {
-  "name": "ai-studio",
+  "name": "squirl",
   "version": "0.1.0",
   "private": true,
-  "description": "AI Studio - Graph-based AI orchestration desktop platform",
+  "description": "Squirl - Model-agnostic organizational intelligence layer",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20.0.0"
@@ -20,15 +20,15 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "clean": "turbo run clean",
-    "postinstall": "yarn workspace @ai-studio/desktop exec electron-rebuild -f -w better-sqlite3 || true",
-    "rebuild:electron": "yarn workspace @ai-studio/desktop exec electron-rebuild -f -w better-sqlite3",
-    "desktop:dev": "yarn workspace @ai-studio/desktop dev",
-    "desktop:build": "yarn workspace @ai-studio/desktop build",
-    "desktop:package": "yarn workspace @ai-studio/desktop package",
-    "desktop:make": "yarn workspace @ai-studio/desktop make"
+    "postinstall": "yarn workspace @squirl/desktop exec electron-rebuild -f -w better-sqlite3 || true",
+    "rebuild:electron": "yarn workspace @squirl/desktop exec electron-rebuild -f -w better-sqlite3",
+    "desktop:dev": "yarn workspace @squirl/desktop dev",
+    "desktop:build": "yarn workspace @squirl/desktop build",
+    "desktop:package": "yarn workspace @squirl/desktop package",
+    "desktop:make": "yarn workspace @squirl/desktop make"
   },
   "devDependencies": {
-    "@ai-studio/eslint-config": "workspace:*",
+    "@squirl/eslint-config": "workspace:*",
     "@vitest/coverage-v8": "^3.2.0",
     "eslint": "9.17.0",
     "turbo": "2.3.3",

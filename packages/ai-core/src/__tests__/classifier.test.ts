@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Router } from "@ai-studio/providers";
-import type { MetaGraph } from "@ai-studio/graph-engine";
+import type { Router } from "@squirl/providers";
+import type { MetaGraph } from "@squirl/graph-engine";
 
 const getConfigMock = vi.fn(() => ({ classifier: { enabled: true }, classifierModel: "test-model" }));
-vi.mock("@ai-studio/providers", () => ({ getConfig: getConfigMock }));
+vi.mock("@squirl/providers", () => ({ getConfig: getConfigMock }));
 
 // classifyLocal does `const { pipeline } = await import("@huggingface/transformers")`
 // then `localPipeline = await pipeline(...)` then calls `localPipeline(text, labels)`.

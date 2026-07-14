@@ -1,16 +1,16 @@
 import { app, BrowserWindow, shell } from "electron";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
-import { Store, GlobalMemory } from "@ai-studio/database";
-import { Router, getConfig, loadConfig } from "@ai-studio/providers";
+import { Store, GlobalMemory } from "@squirl/database";
+import { Router, getConfig, loadConfig } from "@squirl/providers";
 import {
   CostTracker, createRuntime, loadPending, resumeQueue, loadNodeCounter,
   PermissionStore, PersonaRegistry, SnapshotManager,
-} from "@ai-studio/ai-core";
+} from "@squirl/ai-core";
 import {
   createDefaultRegistry, loadMCPServers, getLSPClient, SkillsService, getMCPManager,
-} from "@ai-studio/tools-runtime";
-import { MetaGraph } from "@ai-studio/graph-engine";
+} from "@squirl/tools-runtime";
+import { MetaGraph } from "@squirl/graph-engine";
 import {
   mainWindow, store, router, graph, registry, globalMem, snapshots, skills, nodeCounter,
   currentProjectId, memoryScope, refreshModelsInBackground,

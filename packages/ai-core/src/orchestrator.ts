@@ -2,20 +2,20 @@
  * Orchestrator - The missing glue connecting context engine → agent
  * Single entry point: runWithContext(branch, query) → agent stream
  */
-import type { Router } from "@ai-studio/providers";
-import type { ToolRegistry } from "@ai-studio/tools-runtime";
-import type { Store, GlobalMemory } from "@ai-studio/database";
-import type { MetaGraph } from "@ai-studio/graph-engine";
-import { buildPayload } from "@ai-studio/prompt-engine";
+import type { Router } from "@squirl/providers";
+import type { ToolRegistry } from "@squirl/tools-runtime";
+import type { Store, GlobalMemory } from "@squirl/database";
+import type { MetaGraph } from "@squirl/graph-engine";
+import { buildPayload } from "@squirl/prompt-engine";
 import { Agent, type AgentStreamEvent, type AgentConfig } from "./agent.js";
 import { CostTracker } from "./costs.js";
 
 // Lazy imports for modules that may not have been built yet
 async function getFileReferences() {
-  try { return await import("@ai-studio/prompt-engine"); } catch { return null; }
+  try { return await import("@squirl/prompt-engine"); } catch { return null; }
 }
 async function getPruning() {
-  try { return await import("@ai-studio/prompt-engine"); } catch { return null; }
+  try { return await import("@squirl/prompt-engine"); } catch { return null; }
 }
 
 export interface OrchestratorConfig {

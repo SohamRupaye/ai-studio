@@ -1,4 +1,4 @@
-import type { Store } from "@ai-studio/database";
+import type { Store } from "@squirl/database";
 
 interface ExtractedArtifact {
   type: string;

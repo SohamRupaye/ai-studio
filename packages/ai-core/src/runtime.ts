@@ -1,6 +1,6 @@
-import type { Router } from "@ai-studio/providers";
-import { setSubagentDependencies, type ToolRegistry, type SubagentRunMeta } from "@ai-studio/tools-runtime";
-import type { SubagentStreamEvent } from "@ai-studio/shared";
+import type { Router } from "@squirl/providers";
+import { setSubagentDependencies, type ToolRegistry, type SubagentRunMeta } from "@squirl/tools-runtime";
+import type { SubagentStreamEvent } from "@squirl/shared";
 import { Agent } from "./agent.js";
 
 export type SubagentEvent = SubagentStreamEvent;
@@ -30,7 +30,7 @@ export function createRuntime(
   };
 
   const runTask = async (task: string, model: string, systemPrompt: string, allowedTools?: string[], meta?: SubagentRunMeta): Promise<string> => {
-    const { ToolRegistry: TR } = await import("@ai-studio/tools-runtime");
+    const { ToolRegistry: TR } = await import("@squirl/tools-runtime");
     const subReg = new TR();
     for (const def of registry.getDefinitions()) {
       if (BLOCKED.has(def.name)) continue;

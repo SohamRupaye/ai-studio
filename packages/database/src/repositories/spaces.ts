@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import type { Space } from "@ai-studio/shared";
+import type { Space } from "@squirl/shared";
 
 export class SpacesRepository {
   constructor(private db: Database.Database) {}

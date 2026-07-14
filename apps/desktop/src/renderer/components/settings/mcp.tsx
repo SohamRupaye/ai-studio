@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PlusIcon } from "@phosphor-icons/react";
-import type { MCPServerEntry, MCPTransport } from "@ai-studio/event-bus";
+import type { MCPServerEntry, MCPTransport } from "@squirl/event-bus";
 import { cn, counted } from "../../lib/utils";
 import { useMCPServers, useMutation } from "../../hooks/use-ipc-data";
 import { ProviderTile } from "../provider-logos";

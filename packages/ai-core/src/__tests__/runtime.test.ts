@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Router } from "@ai-studio/providers";
-import { createDefaultRegistry } from "@ai-studio/tools-runtime";
-import type { ToolContext } from "@ai-studio/tools-runtime";
-import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
+import type { Router } from "@squirl/providers";
+import { createDefaultRegistry } from "@squirl/tools-runtime";
+import type { ToolContext } from "@squirl/tools-runtime";
+import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
 import { createRuntime, type SubagentEvent } from "../runtime.js";
 
 // Regression: createRuntime used to set a PRIVATE ai-core copy of the

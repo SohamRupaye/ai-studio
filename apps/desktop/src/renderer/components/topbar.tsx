@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import type { Branch } from "@ai-studio/shared";
+import type { Branch } from "@squirl/shared";
 import { cn } from "../lib/utils";
 import { useUiPrefs } from "./ui-prefs";
 import { useWorkspace } from "./workspace-provider";

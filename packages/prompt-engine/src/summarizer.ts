@@ -1,7 +1,7 @@
-import type { Store } from "@ai-studio/database";
-import { type Router } from "@ai-studio/providers";
-import type { Message, Summary } from "@ai-studio/shared";
-import { embed, cosineSim } from "@ai-studio/graph-engine";
+import type { Store } from "@squirl/database";
+import { type Router } from "@squirl/providers";
+import type { Message, Summary } from "@squirl/shared";
+import { embed, cosineSim } from "@squirl/graph-engine";
 
 /**
  * Configurable compaction settings - lets users tune when/how context gets compressed
@@ -256,7 +256,7 @@ export async function runSummarizeMiddle(messages: Message[], model: string): Pr
   }
 
   try {
-    const { Router } = await import("@ai-studio/providers");
+    const { Router } = await import("@squirl/providers");
     const router = Router.fromEnv();
     const result = await router.call(model, [{ role: "user", content: prompt }], SUMMARY_SYSTEM);
     return result.text.trim();
@@ -280,7 +280,7 @@ export async function runSummarizeAncestry(messages: Message[], model: string): 
   }
 
   try {
-    const { Router } = await import("@ai-studio/providers");
+    const { Router } = await import("@squirl/providers");
     const router = Router.fromEnv();
     const result = await router.call(model, [{ role: "user", content: prompt }], ANCESTRY_SUMMARY_SYSTEM);
     return result.text.trim();

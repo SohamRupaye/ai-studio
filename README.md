@@ -1,8 +1,8 @@
-# AI Studio
+# Squirl 🐿️
 
 > A model-agnostic organizational intelligence layer — like Git for AI-native work.
 
-Context is the primary object, not chat. AI Studio accumulates knowledge, decisions, reasoning, and artifacts across branches so you never re-explain context to an AI again.
+Context is the primary object, not chat. Squirl accumulates knowledge, decisions, reasoning, and artifacts across branches so you never re-explain context to an AI again.
 
 ## Status
 

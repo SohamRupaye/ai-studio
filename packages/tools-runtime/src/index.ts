@@ -1,5 +1,5 @@
 /**
- * @ai-studio/tools-runtime - Unified tool infrastructure
+ * @squirl/tools-runtime - Unified tool infrastructure
  *
  * Sub-modules:
  * - mcp: Multi-transport MCP client (stdio/SSE/HTTP) with OAuth & reconnection

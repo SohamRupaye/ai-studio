@@ -1,8 +1,8 @@
 /**
  * Subagent Isolation - Token budget, time limit, output validation
  */
-import type { Router } from "@ai-studio/providers";
-import type { ToolRegistry } from "@ai-studio/tools-runtime";
+import type { Router } from "@squirl/providers";
+import type { ToolRegistry } from "@squirl/tools-runtime";
 import { Agent, type AgentConfig } from "./agent.js";
 import { CostTracker } from "./costs.js";
 
@@ -42,7 +42,7 @@ export async function runIsolatedSubagent(
   const ALWAYS_BLOCKED = new Set(["subagent", "delegate", "delegate_result", "delegate_list"]);
   const blocked = new Set([...ALWAYS_BLOCKED, ...(cfg.blockedTools ?? [])]);
 
-  const { ToolRegistry: TR } = await import("@ai-studio/tools-runtime");
+  const { ToolRegistry: TR } = await import("@squirl/tools-runtime");
   const subReg = new TR();
   for (const def of registry.getDefinitions()) {
     if (blocked.has(def.name)) continue;

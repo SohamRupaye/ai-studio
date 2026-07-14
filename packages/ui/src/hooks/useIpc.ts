@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { IpcEventChannel, IpcEventPayload } from "@ai-studio/event-bus";
+import type { IpcEventChannel, IpcEventPayload } from "@squirl/event-bus";
 
 /**
  * Subscribe to a main-process push event and auto-cleanup on unmount.

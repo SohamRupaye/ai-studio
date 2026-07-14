@@ -18,8 +18,8 @@ import {
   WarningCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import type { MessageImage, SubagentStreamEvent } from "@ai-studio/shared";
-import { applySubagentEvent, newSubagentRecord, toolCallSummary, toolCallArgsDetail, toolCallResultDetail } from "@ai-studio/shared";
+import type { MessageImage, SubagentStreamEvent } from "@squirl/shared";
+import { applySubagentEvent, newSubagentRecord, toolCallSummary, toolCallArgsDetail, toolCallResultDetail } from "@squirl/shared";
 import { cn } from "../lib/utils";
 import { notifyChatDone } from "../lib/notify";
 import { invalidateQueries, useBranches, useMessages, useMutation, useSkills, useUser } from "../hooks/use-ipc-data";

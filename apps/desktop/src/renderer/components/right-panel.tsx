@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import type { MemoryFact, SelectableArtifact } from "@ai-studio/event-bus";
+import type { MemoryFact, SelectableArtifact } from "@squirl/event-bus";
 import {
   useActivePersona,
   useBranchArtifacts,

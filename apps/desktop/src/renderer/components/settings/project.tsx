@@ -9,7 +9,7 @@ import {
   TrashIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
-import type { Project } from "@ai-studio/shared";
+import type { Project } from "@squirl/shared";
 import { useMutation } from "../../hooks/use-ipc-data";
 import { DeleteProjectDialog } from "../delete-project-dialog";
 import { Button } from "../ui/button";

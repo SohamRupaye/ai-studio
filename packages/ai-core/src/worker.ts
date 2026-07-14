@@ -12,7 +12,7 @@
 
 import type { Agent } from "./agent.js";
 import type { AgentStreamEvent } from "./agent.js";
-import type { ContentBlock } from "@ai-studio/providers";
+import type { ContentBlock } from "@squirl/providers";
 
 /**
  * Run the agent loop with cooperative yielding to prevent blocking the event loop.

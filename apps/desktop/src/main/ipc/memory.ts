@@ -1,4 +1,4 @@
-import type { ContextStats } from "@ai-studio/event-bus";
+import type { ContextStats } from "@squirl/event-bus";
 import { handle } from "./handle.js";
 import { store, globalMem } from "../state.js";
 

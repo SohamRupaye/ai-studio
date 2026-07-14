@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/context-engine",
+  "name": "@squirl/context-engine",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,9 +18,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/graph-engine": "workspace:*",
-    "@ai-studio/shared": "workspace:*",
-    "@ai-studio/tokenizer": "workspace:*"
+    "@squirl/graph-engine": "workspace:*",
+    "@squirl/shared": "workspace:*",
+    "@squirl/tokenizer": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.7.2",

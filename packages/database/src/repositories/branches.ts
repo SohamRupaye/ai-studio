@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import type { Branch } from "@ai-studio/shared";
+import type { Branch } from "@squirl/shared";
 
 export class BranchesRepository {
   constructor(private db: Database.Database) {}

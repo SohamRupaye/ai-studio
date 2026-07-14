@@ -1,4 +1,4 @@
-import { embed, cosineSim, type MetaGraph } from "@ai-studio/graph-engine";
+import { embed, cosineSim, type MetaGraph } from "@squirl/graph-engine";
 
 export function mmrRerank(
   queryEmb: number[],

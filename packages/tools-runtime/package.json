@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/tools-runtime",
+  "name": "@squirl/tools-runtime",
   "version": "0.2.0",
   "private": true,
   "main": "dist/index.js",
@@ -38,8 +38,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/providers": "workspace:*",
-    "@ai-studio/shared": "workspace:*",
+    "@squirl/providers": "workspace:*",
+    "@squirl/shared": "workspace:*",
     "glob": "^10.3.10"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/ui",
+  "name": "@squirl/ui",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -17,8 +17,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ai-studio/event-bus": "workspace:*",
-    "@ai-studio/shared": "workspace:*"
+    "@squirl/event-bus": "workspace:*",
+    "@squirl/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "19.0.1",

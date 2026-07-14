@@ -1,12 +1,12 @@
 import { dialog, shell } from "electron";
 import { basename } from "node:path";
-import { getConfig, saveConfig } from "@ai-studio/providers";
-import type { MCPServerConfigEntry } from "@ai-studio/providers";
+import { getConfig, saveConfig } from "@squirl/providers";
+import type { MCPServerConfigEntry } from "@squirl/providers";
 import {
   getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer, authenticateMCPServer,
   kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry,
-} from "@ai-studio/tools-runtime";
-import type { SkillImportOutcome } from "@ai-studio/event-bus";
+} from "@squirl/tools-runtime";
+import type { SkillImportOutcome } from "@squirl/event-bus";
 import { handle } from "./handle.js";
 import {
   mainWindow, registry, permissions, personas, snapshots, skills, store, dataDirPath,

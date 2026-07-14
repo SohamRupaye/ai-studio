@@ -56,7 +56,7 @@ jobs:
           queries: security-extended
 
       - name: Build packages for analysis
-        run: yarn turbo run build --filter='!@ai-studio/desktop'
+        run: yarn turbo run build --filter='!@squirl/desktop'
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

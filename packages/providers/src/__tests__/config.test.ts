@@ -12,16 +12,16 @@ let originalEnv: string | undefined;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "config-test-"));
-  originalEnv = process.env["AI_STUDIO_MODEL"];
-  delete process.env["AI_STUDIO_MODEL"];
+  originalEnv = process.env["SQUIRL_MODEL"];
+  delete process.env["SQUIRL_MODEL"];
 });
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
   if (originalEnv === undefined) {
-    delete process.env["AI_STUDIO_MODEL"];
+    delete process.env["SQUIRL_MODEL"];
   } else {
-    process.env["AI_STUDIO_MODEL"] = originalEnv;
+    process.env["SQUIRL_MODEL"] = originalEnv;
   }
 });
 
@@ -51,9 +51,9 @@ describe("loadConfig", () => {
     expect(cfg.apiKeys.anthropic).toBe("test-key");
   });
 
-  it("AI_STUDIO_MODEL env var overrides defaultModel", async () => {
+  it("SQUIRL_MODEL env var overrides defaultModel", async () => {
     const { loadConfig } = await import("../config.js");
-    process.env["AI_STUDIO_MODEL"] = "override-model";
+    process.env["SQUIRL_MODEL"] = "override-model";
     const cfgPath = join(tmpDir, "config.yaml");
     writeFileSync(cfgPath, `default_model: claude-sonnet-4\nmax_tokens: 16384\n`);
     const cfg = loadConfig(cfgPath);

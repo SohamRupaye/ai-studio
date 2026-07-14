@@ -1,4 +1,4 @@
-import type { SubagentRunRecord } from "@ai-studio/shared";
+import type { SubagentRunRecord } from "@squirl/shared";
 
 /** One delegated agent inside a subagent/delegate call — built live from
  * `subagent` stream events (via the same shared reducer main persists with),

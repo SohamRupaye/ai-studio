@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import type { Project } from "@ai-studio/shared";
+import type { Project } from "@squirl/shared";
 
 export class ProjectsRepository {
   constructor(private db: Database.Database) {}

@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/providers",
+  "name": "@squirl/providers",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,7 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/shared": "workspace:*",
+    "@squirl/shared": "workspace:*",
     "yaml": "2.7.1"
   },
   "devDependencies": {

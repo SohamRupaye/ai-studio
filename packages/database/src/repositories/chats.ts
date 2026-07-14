@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import type { Chat } from "@ai-studio/shared";
+import type { Chat } from "@squirl/shared";
 import type { SpacesRepository } from "./spaces.js";
 import type { BranchesRepository } from "./branches.js";
 

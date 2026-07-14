@@ -11,18 +11,18 @@ AI Studio is a model-agnostic organizational intelligence layer — like Git for
 ## Architecture
 
 ```
-@ai-studio/shared          → Type definitions (Message, Branch, Org, Project, Chat)
-@ai-studio/tokenizer       → Token counting + model context limits
-@ai-studio/event-bus       → Typed IPC contracts (40+ channels)
-@ai-studio/database        → SQLite store (users, orgs, projects, chats, branches, messages, artifacts, costs)
-@ai-studio/graph-engine    → SQLite-backed knowledge graph with local MiniLM-L6 embeddings
-@ai-studio/providers       → Anthropic, OpenAI, Google, CodexOAuth + Router with retry/fallback
-@ai-studio/context-engine  → RAG retrieval with MMR reranking, cross-branch knowledge sharing
-@ai-studio/tools-runtime   → 50+ tools, MCP client, LSP client, Skills system
-@ai-studio/prompt-engine   → Tiered context builder + progressive summarization + branch diff
-@ai-studio/ai-core         → Agent loop, classifier, cost tracker, artifact extractor
-@ai-studio/ui              → React hooks (minimal — UI not yet built)
-@ai-studio/desktop         → Electron app (main process + basic renderer)
+@squirl/shared          → Type definitions (Message, Branch, Org, Project, Chat)
+@squirl/tokenizer       → Token counting + model context limits
+@squirl/event-bus       → Typed IPC contracts (40+ channels)
+@squirl/database        → SQLite store (users, orgs, projects, chats, branches, messages, artifacts, costs)
+@squirl/graph-engine    → SQLite-backed knowledge graph with local MiniLM-L6 embeddings
+@squirl/providers       → Anthropic, OpenAI, Google, CodexOAuth + Router with retry/fallback
+@squirl/context-engine  → RAG retrieval with MMR reranking, cross-branch knowledge sharing
+@squirl/tools-runtime   → 50+ tools, MCP client, LSP client, Skills system
+@squirl/prompt-engine   → Tiered context builder + progressive summarization + branch diff
+@squirl/ai-core         → Agent loop, classifier, cost tracker, artifact extractor
+@squirl/ui              → React hooks (minimal — UI not yet built)
+@squirl/desktop         → Electron app (main process + basic renderer)
 ```
 
 ---
@@ -235,7 +235,7 @@ AI Studio is a model-agnostic organizational intelligence layer — like Git for
 ## Next Steps (Recommended Order)
 
 1. **Finalize Figma designs** → lock down component list + interactions
-2. **Setup design system** (shadcn/ui + Tailwind in `@ai-studio/ui`)
+2. **Setup design system** (shadcn/ui + Tailwind in `@squirl/ui`)
 3. **Build sidebar** → org/project/chat/branch tree with IPC wiring
 4. **Build chat view** → messages + streaming + model selector
 5. **Build right panel** → context/memory/artifacts/costs

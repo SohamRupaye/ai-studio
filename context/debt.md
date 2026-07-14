@@ -31,10 +31,10 @@ Known gaps we chose not to build yet, each with the context to decide later and 
 
 ## Lint is not running anywhere — pre-existing, surfaced 2026-07-09
 
-`yarn lint` cannot pass: workspaces have `lint: "eslint src/"` scripts but no `eslint` devDependency and there are **no `eslint.config.*` files in the repo** (ESLint 9 needs flat configs; `tooling/eslint` exports one nothing consumes). The occasional turbo "pass" is a stale cache replay. Fix is ~20 minutes: add `eslint` + `@ai-studio/eslint-config` as devDeps where the script exists, add per-workspace `eslint.config.js` importing the tooling config.
+`yarn lint` cannot pass: workspaces have `lint: "eslint src/"` scripts but no `eslint` devDependency and there are **no `eslint.config.*` files in the repo** (ESLint 9 needs flat configs; `tooling/eslint` exports one nothing consumes). The occasional turbo "pass" is a stale cache replay. Fix is ~20 minutes: add `eslint` + `@squirl/eslint-config` as devDeps where the script exists, add per-workspace `eslint.config.js` importing the tooling config.
 
 **Pickup trigger:** before relying on CI lint as a gate, or the next "chore: lint" pass.
 
 ## Capability predicates live in the tokenizer package — cosmetic
 
-`supportsVision()` / `supportsPdfInput()` are model-capability metadata, not tokenization, but moving them to `@ai-studio/shared` would add a new cross-package dependency for a purely cosmetic relocation. Leave until something else forces a `shared` dependency in `tokenizer`.
+`supportsVision()` / `supportsPdfInput()` are model-capability metadata, not tokenization, but moving them to `@squirl/shared` would add a new cross-package dependency for a purely cosmetic relocation. Leave until something else forces a `shared` dependency in `tokenizer`.

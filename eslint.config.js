@@ -1,4 +1,4 @@
-const baseConfig = require('@ai-studio/eslint-config');
+const baseConfig = require('@squirl/eslint-config');
 
 /** @type {import('eslint').Linter.Config[]} */
 module.exports = [

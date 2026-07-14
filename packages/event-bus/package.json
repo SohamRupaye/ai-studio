@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/event-bus",
+  "name": "@squirl/event-bus",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ai-studio/shared": "workspace:*"
+    "@squirl/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.7.2"

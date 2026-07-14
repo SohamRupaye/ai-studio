@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import type { IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse } from "@ai-studio/event-bus";
+import type { IpcInvokeChannel, IpcInvokeRequest, IpcInvokeResponse } from "@squirl/event-bus";
 
 export function handle<C extends IpcInvokeChannel>(
   channel: C,

@@ -1,6 +1,6 @@
-import type { Router, ProviderMessage, StreamEvent, ContentBlock } from "@ai-studio/providers";
-import { contentToText } from "@ai-studio/providers";
-import type { ToolRegistry } from "@ai-studio/tools-runtime";
+import type { Router, ProviderMessage, StreamEvent, ContentBlock } from "@squirl/providers";
+import { contentToText } from "@squirl/providers";
+import type { ToolRegistry } from "@squirl/tools-runtime";
 import { CostTracker } from "./costs.js";
 
 export interface ToolContext {

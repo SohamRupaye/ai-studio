@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/prompt-engine",
+  "name": "@squirl/prompt-engine",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,12 +18,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-studio/context-engine": "workspace:*",
-    "@ai-studio/database": "workspace:*",
-    "@ai-studio/graph-engine": "workspace:*",
-    "@ai-studio/providers": "workspace:*",
-    "@ai-studio/shared": "workspace:*",
-    "@ai-studio/tokenizer": "workspace:*"
+    "@squirl/context-engine": "workspace:*",
+    "@squirl/database": "workspace:*",
+    "@squirl/graph-engine": "workspace:*",
+    "@squirl/providers": "workspace:*",
+    "@squirl/shared": "workspace:*",
+    "@squirl/tokenizer": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.7.2",

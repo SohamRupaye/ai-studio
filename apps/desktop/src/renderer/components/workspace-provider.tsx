@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Organisation, Project } from "@ai-studio/shared";
+import type { Organisation, Project } from "@squirl/shared";
 import { useOrgs, useProjects } from "../hooks/use-ipc-data";
 
 // ─────────────────────────────────────────────────────────────────────────────

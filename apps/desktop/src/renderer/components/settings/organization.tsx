@@ -9,7 +9,7 @@ import {
   SignOutIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
-import type { Organisation, Project } from "@ai-studio/shared";
+import type { Organisation, Project } from "@squirl/shared";
 import { counted } from "../../lib/utils";
 import { useWorkspace } from "../workspace-provider";
 import { useMutation, useQuery } from "../../hooks/use-ipc-data";

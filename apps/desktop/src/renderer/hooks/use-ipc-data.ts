@@ -4,7 +4,7 @@ import type {
   IpcInvokeChannel,
   IpcInvokeRequest,
   IpcInvokeResponse,
-} from "@ai-studio/event-bus";
+} from "@squirl/event-bus";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global refetch registry

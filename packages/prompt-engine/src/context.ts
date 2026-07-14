@@ -1,9 +1,9 @@
-import type { Message, MessageImage, Summary, Branch } from "@ai-studio/shared";
-import type { Store } from "@ai-studio/database";
-import type { GlobalMemory } from "@ai-studio/database";
-import type { MetaGraph } from "@ai-studio/graph-engine";
-import { estimateTokens, getContextLimit } from "@ai-studio/tokenizer";
-import { retrieveFromGraph } from "@ai-studio/context-engine";
+import type { Message, MessageImage, Summary, Branch } from "@squirl/shared";
+import type { Store } from "@squirl/database";
+import type { GlobalMemory } from "@squirl/database";
+import type { MetaGraph } from "@squirl/graph-engine";
+import { estimateTokens, getContextLimit } from "@squirl/tokenizer";
+import { retrieveFromGraph } from "@squirl/context-engine";
 import { runSummarizeAncestry, runSummarizeMiddle } from "./summarizer.js";
 
 export interface ContextPayload {

@@ -22,7 +22,7 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
-import type { Branch, Chat, Space } from "@ai-studio/shared";
+import type { Branch, Chat, Space } from "@squirl/shared";
 import { cn, counted } from "../lib/utils";
 import { useAuth } from "./auth-provider";
 import { useWorkspace } from "./workspace-provider";

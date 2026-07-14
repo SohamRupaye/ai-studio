@@ -147,7 +147,7 @@ export function loadConfig(configPath?: string): Config {
   }
 
   const cfg: Config = {
-    defaultModel: process.env["AI_STUDIO_MODEL"] || raw.default_model || "gpt-5.4-mini",
+    defaultModel: process.env["SQUIRL_MODEL"] || raw.default_model || "gpt-5.4-mini",
     classifierModel: raw.classifier_model || "gpt-5.4-mini",
     maxTokens: Number(raw.max_tokens) || 8192,
     classifierMaxTokens: Number(raw.classifier_max_tokens) || 200,

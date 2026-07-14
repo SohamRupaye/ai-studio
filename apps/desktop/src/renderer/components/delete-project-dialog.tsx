@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Project } from "@ai-studio/shared";
+import type { Project } from "@squirl/shared";
 import { counted } from "../lib/utils";
 import { useMutation } from "../hooks/use-ipc-data";
 import { ConfirmDialog } from "./confirm-dialog";

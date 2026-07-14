@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { BrainIcon, TrashIcon } from "@phosphor-icons/react";
-import type { MemoryFact } from "@ai-studio/event-bus";
+import type { MemoryFact } from "@squirl/event-bus";
 import { counted } from "../lib/utils";
 import { useWorkspace } from "./workspace-provider";
 import { useMemory, useMutation } from "../hooks/use-ipc-data";

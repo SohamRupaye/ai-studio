@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import type { Message, MessageImage, Summary } from "@ai-studio/shared";
+import type { Message, MessageImage, Summary } from "@squirl/shared";
 
 /** Messages and their compaction summaries — both keyed by branch and turn. */
 export class MessagesRepository {

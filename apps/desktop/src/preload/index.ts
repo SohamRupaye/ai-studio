@@ -7,7 +7,7 @@ import type {
   IpcInvokeRequest,
   IpcInvokeResponse,
   IpcEventPayload,
-} from "@ai-studio/event-bus";
+} from "@squirl/event-bus";
 
 // Typed IPC bridge exposed as window.ipc in the renderer.
 

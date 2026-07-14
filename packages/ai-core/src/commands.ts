@@ -1,9 +1,9 @@
 /**
  * Slash Commands - /compact, /cost, /model, /memory, /clear, /persona, /help
  */
-import type { Store, GlobalMemory } from "@ai-studio/database";
-import { shouldSummarize, runPendingSummaries } from "@ai-studio/prompt-engine";
-import type { Router } from "@ai-studio/providers";
+import type { Store, GlobalMemory } from "@squirl/database";
+import { shouldSummarize, runPendingSummaries } from "@squirl/prompt-engine";
+import type { Router } from "@squirl/providers";
 import type { CostTracker } from "./costs.js";
 import type { PersonaRegistry } from "./personas.js";
 

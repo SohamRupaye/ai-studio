@@ -1,5 +1,5 @@
-import { Router, API_KEY_PROVIDERS, getConfig, saveConfig } from "@ai-studio/providers";
-import { createRuntime } from "@ai-studio/ai-core";
+import { Router, API_KEY_PROVIDERS, getConfig, saveConfig } from "@squirl/providers";
+import { createRuntime } from "@squirl/ai-core";
 import { handle } from "./handle.js";
 import {
   store, router, registry, orgRouters, currentUserId,

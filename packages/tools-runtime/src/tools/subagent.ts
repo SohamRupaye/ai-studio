@@ -2,7 +2,7 @@
  * subagent.ts — Parallel & background subagent execution.
  *
  * Agent execution is fully injected via setSubagentDependencies — this package
- * has no direct dependency on @ai-studio/ai-core.
+ * has no direct dependency on @squirl/ai-core.
  */
 
 import type { ToolDefinition } from "../types.js";

@@ -1,5 +1,5 @@
 {
-  "name": "@ai-studio/vitest-config",
+  "name": "@squirl/vitest-config",
   "version": "0.1.0",
   "private": true,
   "exports": {

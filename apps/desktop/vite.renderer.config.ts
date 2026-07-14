@@ -19,6 +19,6 @@ export default defineConfig({
     // named …" until node_modules/.vite is deleted. Serving the dist
     // directly always picks up the current build. (dist is dependency-free
     // ESM, so exclusion is safe.)
-    exclude: ["@ai-studio/shared"],
+    exclude: ["@squirl/shared"],
   },
 });

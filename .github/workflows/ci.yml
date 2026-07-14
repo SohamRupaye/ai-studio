@@ -54,16 +54,16 @@ jobs:
         run: npm rebuild better-sqlite3
 
       - name: Build packages
-        run: yarn turbo run build --filter='!@ai-studio/desktop'
+        run: yarn turbo run build --filter='!@squirl/desktop'
 
       - name: Typecheck
-        run: yarn turbo run typecheck --filter='!@ai-studio/desktop'
+        run: yarn turbo run typecheck --filter='!@squirl/desktop'
 
       - name: Lint
-        run: yarn turbo run lint --filter='!@ai-studio/desktop'
+        run: yarn turbo run lint --filter='!@squirl/desktop'
 
       - name: Test
-        run: yarn turbo run test --filter='!@ai-studio/desktop'
+        run: yarn turbo run test --filter='!@squirl/desktop'
 
   coverage:
     name: Coverage Report
@@ -110,10 +110,10 @@ jobs:
         run: npm rebuild better-sqlite3
 
       - name: Build packages
-        run: yarn turbo run build --filter='!@ai-studio/desktop'
+        run: yarn turbo run build --filter='!@squirl/desktop'
 
       - name: Run tests with coverage
-        run: yarn turbo run test --filter='!@ai-studio/desktop' -- --coverage
+        run: yarn turbo run test --filter='!@squirl/desktop' -- --coverage
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4

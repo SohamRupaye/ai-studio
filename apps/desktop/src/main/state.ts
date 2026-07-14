@@ -1,10 +1,10 @@
 import type { BrowserWindow } from "electron";
-import type { Store, GlobalMemory } from "@ai-studio/database";
-import { Router } from "@ai-studio/providers";
-import type { CostTracker, PermissionStore, PersonaRegistry, SnapshotManager } from "@ai-studio/ai-core";
-import type { SkillsService, ToolRegistry } from "@ai-studio/tools-runtime";
-import type { MetaGraph } from "@ai-studio/graph-engine";
-import type { MCPServerEntry } from "@ai-studio/event-bus";
+import type { Store, GlobalMemory } from "@squirl/database";
+import { Router } from "@squirl/providers";
+import type { CostTracker, PermissionStore, PersonaRegistry, SnapshotManager } from "@squirl/ai-core";
+import type { SkillsService, ToolRegistry } from "@squirl/tools-runtime";
+import type { MetaGraph } from "@squirl/graph-engine";
+import type { MCPServerEntry } from "@squirl/event-bus";
 
 // ── Globals ───────────────────────────────────────────────────────────────────
 // Shared mutable state, moved verbatim from index.ts. ES-module imports are

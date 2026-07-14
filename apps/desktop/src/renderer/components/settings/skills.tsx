@@ -7,7 +7,7 @@ import {
   PlusIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
-import type { SkillEntry } from "@ai-studio/event-bus";
+import type { SkillEntry } from "@squirl/event-bus";
 import { cn, counted } from "../../lib/utils";
 import { useMutation, useQuery, useSkills } from "../../hooks/use-ipc-data";
 import { ConfirmDialog } from "../confirm-dialog";

@@ -1,6 +1,6 @@
 import { dialog } from "electron";
 import { writeFileSync } from "node:fs";
-import { compareBranches, getAncestryMessages, runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
+import { compareBranches, getAncestryMessages, runPendingSummaries, shouldSummarize } from "@squirl/prompt-engine";
 import { handle } from "./handle.js";
 import { mainWindow, store, router, graph, activeBranchId, setActiveBranchId } from "../state.js";
 

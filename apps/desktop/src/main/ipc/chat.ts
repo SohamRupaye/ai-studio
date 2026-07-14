@@ -1,15 +1,15 @@
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { Router, getConfig, ProviderRateLimitError } from "@ai-studio/providers";
-import type { ContentBlock } from "@ai-studio/providers";
-import { Agent, createRuntime, classifyAndIndex, extractAndPersistArtifacts, runAgentCooperative } from "@ai-studio/ai-core";
-import { buildPayload, runPendingSummaries, shouldSummarize } from "@ai-studio/prompt-engine";
-import { getContextLimit, supportsPdfInput, supportsVision } from "@ai-studio/tokenizer";
-import type { MessageToolCall, SubagentRunRecord } from "@ai-studio/shared";
-import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } from "@ai-studio/shared";
-import { applySubagentEvent, newSubagentRecord } from "@ai-studio/shared";
-import type { ContextStats } from "@ai-studio/event-bus";
-import type { SkillInfo } from "@ai-studio/tools-runtime";
+import { Router, getConfig, ProviderRateLimitError } from "@squirl/providers";
+import type { ContentBlock } from "@squirl/providers";
+import { Agent, createRuntime, classifyAndIndex, extractAndPersistArtifacts, runAgentCooperative } from "@squirl/ai-core";
+import { buildPayload, runPendingSummaries, shouldSummarize } from "@squirl/prompt-engine";
+import { getContextLimit, supportsPdfInput, supportsVision } from "@squirl/tokenizer";
+import type { MessageToolCall, SubagentRunRecord } from "@squirl/shared";
+import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } from "@squirl/shared";
+import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
+import type { ContextStats } from "@squirl/event-bus";
+import type { SkillInfo } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
   mainWindow, store, router, graph, globalMem, registry, costTracker, personas, skills,

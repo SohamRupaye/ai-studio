@@ -5,225 +5,6 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@ai-studio/ai-core@workspace:*, @ai-studio/ai-core@workspace:packages/ai-core":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/ai-core@workspace:packages/ai-core"
-  dependencies:
-    "@ai-studio/context-engine": "workspace:*"
-    "@ai-studio/database": "workspace:*"
-    "@ai-studio/event-bus": "workspace:*"
-    "@ai-studio/graph-engine": "workspace:*"
-    "@ai-studio/prompt-engine": "workspace:*"
-    "@ai-studio/providers": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@ai-studio/tokenizer": "workspace:*"
-    "@ai-studio/tools-runtime": "workspace:*"
-    "@huggingface/transformers": "npm:3.4.1"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/context-engine@workspace:*, @ai-studio/context-engine@workspace:packages/context-engine":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/context-engine@workspace:packages/context-engine"
-  dependencies:
-    "@ai-studio/graph-engine": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@ai-studio/tokenizer": "workspace:*"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/database@workspace:*, @ai-studio/database@workspace:packages/database":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/database@workspace:packages/database"
-  dependencies:
-    "@ai-studio/shared": "workspace:*"
-    "@types/better-sqlite3": "npm:7.6.12"
-    better-sqlite3: "npm:11.7.0"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/desktop@workspace:apps/desktop":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/desktop@workspace:apps/desktop"
-  dependencies:
-    "@ai-studio/ai-core": "workspace:*"
-    "@ai-studio/context-engine": "workspace:*"
-    "@ai-studio/database": "workspace:*"
-    "@ai-studio/event-bus": "workspace:*"
-    "@ai-studio/graph-engine": "workspace:*"
-    "@ai-studio/prompt-engine": "workspace:*"
-    "@ai-studio/providers": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@ai-studio/tokenizer": "workspace:*"
-    "@ai-studio/tools-runtime": "workspace:*"
-    "@ai-studio/ui": "workspace:*"
-    "@base-ui-components/react": "npm:^1.0.0-rc.0"
-    "@electron-forge/cli": "npm:7.6.0"
-    "@electron-forge/maker-deb": "npm:7.6.0"
-    "@electron-forge/maker-dmg": "npm:7.6.0"
-    "@electron-forge/maker-rpm": "npm:7.6.0"
-    "@electron-forge/maker-squirrel": "npm:7.6.0"
-    "@electron-forge/maker-zip": "npm:7.6.0"
-    "@electron-forge/plugin-vite": "npm:7.6.0"
-    "@electron/rebuild": "npm:3.7.1"
-    "@fontsource-variable/mona-sans": "npm:^5.2.8"
-    "@hookform/resolvers": "npm:^5.4.0"
-    "@lobehub/icons-static-svg": "npm:^1.91.0"
-    "@phosphor-icons/react": "npm:^2.1.10"
-    "@shadcn/react": "npm:^0.2.0"
-    "@tailwindcss/vite": "npm:^4.3.0"
-    "@types/node": "npm:22.10.5"
-    "@types/react": "npm:19.0.1"
-    "@types/react-dom": "npm:19.0.1"
-    "@vitejs/plugin-react": "npm:4.3.4"
-    class-variance-authority: "npm:^0.7.1"
-    clsx: "npm:^2.1.1"
-    cmdk: "npm:^1.1.1"
-    electron: "npm:33.2.1"
-    electron-liquid-glass: "npm:1.1.1"
-    electron-squirrel-startup: "npm:1.0.1"
-    mammoth: "npm:^1.8.0"
-    pdf-parse: "npm:^1.1.1"
-    pdfjs-dist: "npm:^6.1.200"
-    react: "npm:19.0.0"
-    react-dom: "npm:19.0.0"
-    react-hook-form: "npm:^7.80.0"
-    react-router-dom: "npm:^7.17.0"
-    simple-icons: "npm:^16.25.0"
-    sonner: "npm:^2.0.7"
-    tailwind-merge: "npm:^3.6.0"
-    tailwindcss: "npm:^4.3.0"
-    ts-node: "npm:^10.9.2"
-    typescript: "npm:5.7.2"
-    vite: "npm:6.0.7"
-    vitest: "npm:^3.2.0"
-    xlsx: "npm:^0.18.5"
-    zod: "npm:^4.4.3"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/eslint-config@workspace:*, @ai-studio/eslint-config@workspace:tooling/eslint":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/eslint-config@workspace:tooling/eslint"
-  dependencies:
-    "@typescript-eslint/eslint-plugin": "npm:8.18.2"
-    "@typescript-eslint/parser": "npm:8.18.2"
-    eslint: "npm:9.17.0"
-    typescript: "npm:5.7.2"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/event-bus@workspace:*, @ai-studio/event-bus@workspace:packages/event-bus":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/event-bus@workspace:packages/event-bus"
-  dependencies:
-    "@ai-studio/shared": "workspace:*"
-    typescript: "npm:5.7.2"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/graph-engine@workspace:*, @ai-studio/graph-engine@workspace:packages/graph-engine":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/graph-engine@workspace:packages/graph-engine"
-  dependencies:
-    "@ai-studio/shared": "workspace:*"
-    "@huggingface/transformers": "npm:3.4.1"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/prompt-engine@workspace:*, @ai-studio/prompt-engine@workspace:packages/prompt-engine":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/prompt-engine@workspace:packages/prompt-engine"
-  dependencies:
-    "@ai-studio/context-engine": "workspace:*"
-    "@ai-studio/database": "workspace:*"
-    "@ai-studio/graph-engine": "workspace:*"
-    "@ai-studio/providers": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@ai-studio/tokenizer": "workspace:*"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/providers@workspace:*, @ai-studio/providers@workspace:packages/providers":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/providers@workspace:packages/providers"
-  dependencies:
-    "@ai-studio/shared": "workspace:*"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-    yaml: "npm:2.7.1"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/shared@workspace:*, @ai-studio/shared@workspace:packages/shared":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/shared@workspace:packages/shared"
-  dependencies:
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/tokenizer@workspace:*, @ai-studio/tokenizer@workspace:packages/tokenizer":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/tokenizer@workspace:packages/tokenizer"
-  dependencies:
-    tiktoken: "npm:1.0.18"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/tools-runtime@workspace:*, @ai-studio/tools-runtime@workspace:packages/tools-runtime":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/tools-runtime@workspace:packages/tools-runtime"
-  dependencies:
-    "@ai-studio/providers": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@types/node": "npm:^20.11.0"
-    glob: "npm:^10.3.10"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/typescript-config@workspace:tooling/typescript":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/typescript-config@workspace:tooling/typescript"
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/ui@workspace:*, @ai-studio/ui@workspace:packages/ui":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/ui@workspace:packages/ui"
-  dependencies:
-    "@ai-studio/event-bus": "workspace:*"
-    "@ai-studio/shared": "workspace:*"
-    "@types/react": "npm:19.0.1"
-    "@types/react-dom": "npm:19.0.1"
-    typescript: "npm:5.7.2"
-  peerDependencies:
-    react: ^19.0.0
-    react-dom: ^19.0.0
-  languageName: unknown
-  linkType: soft
-
-"@ai-studio/vitest-config@workspace:tooling/vitest":
-  version: 0.0.0-use.local
-  resolution: "@ai-studio/vitest-config@workspace:tooling/vitest"
-  languageName: unknown
-  linkType: soft
-
 "@ampproject/remapping@npm:^2.3.0":
   version: 2.3.0
   resolution: "@ampproject/remapping@npm:2.3.0"
@@ -2815,6 +2596,225 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@squirl/ai-core@workspace:*, @squirl/ai-core@workspace:packages/ai-core":
+  version: 0.0.0-use.local
+  resolution: "@squirl/ai-core@workspace:packages/ai-core"
+  dependencies:
+    "@huggingface/transformers": "npm:3.4.1"
+    "@squirl/context-engine": "workspace:*"
+    "@squirl/database": "workspace:*"
+    "@squirl/event-bus": "workspace:*"
+    "@squirl/graph-engine": "workspace:*"
+    "@squirl/prompt-engine": "workspace:*"
+    "@squirl/providers": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@squirl/tokenizer": "workspace:*"
+    "@squirl/tools-runtime": "workspace:*"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/context-engine@workspace:*, @squirl/context-engine@workspace:packages/context-engine":
+  version: 0.0.0-use.local
+  resolution: "@squirl/context-engine@workspace:packages/context-engine"
+  dependencies:
+    "@squirl/graph-engine": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@squirl/tokenizer": "workspace:*"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/database@workspace:*, @squirl/database@workspace:packages/database":
+  version: 0.0.0-use.local
+  resolution: "@squirl/database@workspace:packages/database"
+  dependencies:
+    "@squirl/shared": "workspace:*"
+    "@types/better-sqlite3": "npm:7.6.12"
+    better-sqlite3: "npm:11.7.0"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/desktop@workspace:apps/desktop":
+  version: 0.0.0-use.local
+  resolution: "@squirl/desktop@workspace:apps/desktop"
+  dependencies:
+    "@base-ui-components/react": "npm:^1.0.0-rc.0"
+    "@electron-forge/cli": "npm:7.6.0"
+    "@electron-forge/maker-deb": "npm:7.6.0"
+    "@electron-forge/maker-dmg": "npm:7.6.0"
+    "@electron-forge/maker-rpm": "npm:7.6.0"
+    "@electron-forge/maker-squirrel": "npm:7.6.0"
+    "@electron-forge/maker-zip": "npm:7.6.0"
+    "@electron-forge/plugin-vite": "npm:7.6.0"
+    "@electron/rebuild": "npm:3.7.1"
+    "@fontsource-variable/mona-sans": "npm:^5.2.8"
+    "@hookform/resolvers": "npm:^5.4.0"
+    "@lobehub/icons-static-svg": "npm:^1.91.0"
+    "@phosphor-icons/react": "npm:^2.1.10"
+    "@shadcn/react": "npm:^0.2.0"
+    "@squirl/ai-core": "workspace:*"
+    "@squirl/context-engine": "workspace:*"
+    "@squirl/database": "workspace:*"
+    "@squirl/event-bus": "workspace:*"
+    "@squirl/graph-engine": "workspace:*"
+    "@squirl/prompt-engine": "workspace:*"
+    "@squirl/providers": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@squirl/tokenizer": "workspace:*"
+    "@squirl/tools-runtime": "workspace:*"
+    "@squirl/ui": "workspace:*"
+    "@tailwindcss/vite": "npm:^4.3.0"
+    "@types/node": "npm:22.10.5"
+    "@types/react": "npm:19.0.1"
+    "@types/react-dom": "npm:19.0.1"
+    "@vitejs/plugin-react": "npm:4.3.4"
+    class-variance-authority: "npm:^0.7.1"
+    clsx: "npm:^2.1.1"
+    cmdk: "npm:^1.1.1"
+    electron: "npm:33.2.1"
+    electron-liquid-glass: "npm:1.1.1"
+    electron-squirrel-startup: "npm:1.0.1"
+    mammoth: "npm:^1.8.0"
+    pdf-parse: "npm:^1.1.1"
+    pdfjs-dist: "npm:^6.1.200"
+    react: "npm:19.0.0"
+    react-dom: "npm:19.0.0"
+    react-hook-form: "npm:^7.80.0"
+    react-router-dom: "npm:^7.17.0"
+    simple-icons: "npm:^16.25.0"
+    sonner: "npm:^2.0.7"
+    tailwind-merge: "npm:^3.6.0"
+    tailwindcss: "npm:^4.3.0"
+    ts-node: "npm:^10.9.2"
+    typescript: "npm:5.7.2"
+    vite: "npm:6.0.7"
+    vitest: "npm:^3.2.0"
+    xlsx: "npm:^0.18.5"
+    zod: "npm:^4.4.3"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/eslint-config@workspace:*, @squirl/eslint-config@workspace:tooling/eslint":
+  version: 0.0.0-use.local
+  resolution: "@squirl/eslint-config@workspace:tooling/eslint"
+  dependencies:
+    "@typescript-eslint/eslint-plugin": "npm:8.18.2"
+    "@typescript-eslint/parser": "npm:8.18.2"
+    eslint: "npm:9.17.0"
+    typescript: "npm:5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/event-bus@workspace:*, @squirl/event-bus@workspace:packages/event-bus":
+  version: 0.0.0-use.local
+  resolution: "@squirl/event-bus@workspace:packages/event-bus"
+  dependencies:
+    "@squirl/shared": "workspace:*"
+    typescript: "npm:5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/graph-engine@workspace:*, @squirl/graph-engine@workspace:packages/graph-engine":
+  version: 0.0.0-use.local
+  resolution: "@squirl/graph-engine@workspace:packages/graph-engine"
+  dependencies:
+    "@huggingface/transformers": "npm:3.4.1"
+    "@squirl/shared": "workspace:*"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/prompt-engine@workspace:*, @squirl/prompt-engine@workspace:packages/prompt-engine":
+  version: 0.0.0-use.local
+  resolution: "@squirl/prompt-engine@workspace:packages/prompt-engine"
+  dependencies:
+    "@squirl/context-engine": "workspace:*"
+    "@squirl/database": "workspace:*"
+    "@squirl/graph-engine": "workspace:*"
+    "@squirl/providers": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@squirl/tokenizer": "workspace:*"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/providers@workspace:*, @squirl/providers@workspace:packages/providers":
+  version: 0.0.0-use.local
+  resolution: "@squirl/providers@workspace:packages/providers"
+  dependencies:
+    "@squirl/shared": "workspace:*"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+    yaml: "npm:2.7.1"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/shared@workspace:*, @squirl/shared@workspace:packages/shared":
+  version: 0.0.0-use.local
+  resolution: "@squirl/shared@workspace:packages/shared"
+  dependencies:
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/tokenizer@workspace:*, @squirl/tokenizer@workspace:packages/tokenizer":
+  version: 0.0.0-use.local
+  resolution: "@squirl/tokenizer@workspace:packages/tokenizer"
+  dependencies:
+    tiktoken: "npm:1.0.18"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/tools-runtime@workspace:*, @squirl/tools-runtime@workspace:packages/tools-runtime":
+  version: 0.0.0-use.local
+  resolution: "@squirl/tools-runtime@workspace:packages/tools-runtime"
+  dependencies:
+    "@squirl/providers": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@types/node": "npm:^20.11.0"
+    glob: "npm:^10.3.10"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/typescript-config@workspace:tooling/typescript":
+  version: 0.0.0-use.local
+  resolution: "@squirl/typescript-config@workspace:tooling/typescript"
+  languageName: unknown
+  linkType: soft
+
+"@squirl/ui@workspace:*, @squirl/ui@workspace:packages/ui":
+  version: 0.0.0-use.local
+  resolution: "@squirl/ui@workspace:packages/ui"
+  dependencies:
+    "@squirl/event-bus": "workspace:*"
+    "@squirl/shared": "workspace:*"
+    "@types/react": "npm:19.0.1"
+    "@types/react-dom": "npm:19.0.1"
+    typescript: "npm:5.7.2"
+  peerDependencies:
+    react: ^19.0.0
+    react-dom: ^19.0.0
+  languageName: unknown
+  linkType: soft
+
+"@squirl/vitest-config@workspace:tooling/vitest":
+  version: 0.0.0-use.local
+  resolution: "@squirl/vitest-config@workspace:tooling/vitest"
+  languageName: unknown
+  linkType: soft
+
 "@standard-schema/utils@npm:^0.3.0":
   version: 0.3.0
   resolution: "@standard-schema/utils@npm:0.3.0"
@@ -3592,19 +3592,6 @@ __metadata:
   checksum: 10c0/a42f67faa79e3e6687a4923050e7c9807db3848a037076f791d10e092677d65c1d2d863b7848560699f40fc0502c19f40963fb1cd1fb3d338a7423df8e45e039
   languageName: node
   linkType: hard
-
-"ai-studio@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "ai-studio@workspace:."
-  dependencies:
-    "@ai-studio/eslint-config": "workspace:*"
-    "@vitest/coverage-v8": "npm:^3.2.0"
-    eslint: "npm:9.17.0"
-    turbo: "npm:2.3.3"
-    typescript: "npm:5.7.2"
-    vitest: "npm:^3.2.0"
-  languageName: unknown
-  linkType: soft
 
 "ajv@npm:^6.12.4, ajv@npm:^6.14.0":
   version: 6.15.0
@@ -9160,6 +9147,19 @@ __metadata:
   checksum: 10c0/ecadcfe4c771890140da5023d43e190b7566d9cf8b2d238600f31bec0fc653f328da4450eb04bd59a431771a8e9cc0e118f0aa3974b683a4981b4e07abc2a5bb
   languageName: node
   linkType: hard
+
+"squirl@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "squirl@workspace:."
+  dependencies:
+    "@squirl/eslint-config": "workspace:*"
+    "@vitest/coverage-v8": "npm:^3.2.0"
+    eslint: "npm:9.17.0"
+    turbo: "npm:2.3.3"
+    typescript: "npm:5.7.2"
+    vitest: "npm:^3.2.0"
+  languageName: unknown
+  linkType: soft
 
 "ssf@npm:~0.11.2":
   version: 0.11.2

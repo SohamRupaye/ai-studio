@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Router } from "@ai-studio/providers";
-import type { MetaGraph } from "@ai-studio/graph-engine";
-import { getConfig } from "@ai-studio/providers";
+import type { Router } from "@squirl/providers";
+import type { MetaGraph } from "@squirl/graph-engine";
+import { getConfig } from "@squirl/providers";
 
 export interface ClassifierResult {
   significant: boolean;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { BrainIcon, LightningIcon, XIcon } from "@phosphor-icons/react";
-import type { MessageImage } from "@ai-studio/shared";
+import type { MessageImage } from "@squirl/shared";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { Markdown } from "../ui/markdown";
 import { Spinner } from "../ui/spinner";
