@@ -93,6 +93,10 @@ export interface Config {
    * enabled automatically.
    */
   disabledSkills: string[];
+  /** Opt-in: expose the local-browser tools (Patchright-driven Chrome using
+   * the user's own profile). Off by default — it drives a real browser and
+   * can act on logged-in sessions, so it stays dark until explicitly enabled. */
+  browserToolEnabled: boolean;
   context: { hotWindow: number; hotTokenBudget: number; summaryEvery: number };
   classifier: { enabled: boolean };
   mcpServers: MCPServerConfigEntry[];
@@ -170,6 +174,7 @@ export function loadConfig(configPath?: string): Config {
       summaryEvery: Number(raw.context?.summary_every) || 10,
     },
     classifier: { enabled: raw.classifier?.enabled !== false },
+    browserToolEnabled: raw.browser_tool_enabled === true,
     mcpServers: Array.isArray(raw.mcp_servers)
       ? raw.mcp_servers.map((s: any) => ({ type: "stdio", ...s }))
       : [],
@@ -206,6 +211,7 @@ export function saveConfig(patch: {
   disabledModels?: Record<string, string[]>;
   /** Whole-list replacement of the disabled-skill names; empty array clears it. */
   disabledSkills?: string[];
+  browserToolEnabled?: boolean;
 }): Config {
   const path = _configPath || join(process.cwd(), "config.yaml");
   _configPath = path;
@@ -243,6 +249,11 @@ export function saveConfig(patch: {
   if (patch.disabledSkills) {
     if (patch.disabledSkills.length) raw.disabled_skills = patch.disabledSkills;
     else delete raw.disabled_skills;
+  }
+
+  if (patch.browserToolEnabled !== undefined) {
+    if (patch.browserToolEnabled) raw.browser_tool_enabled = true;
+    else delete raw.browser_tool_enabled;
   }
 
   if (patch.apiKeys) {

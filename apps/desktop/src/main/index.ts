@@ -9,7 +9,7 @@ import {
 } from "@squirl/ai-core";
 import {
   createDefaultRegistry, loadMCPServers, getLSPClient, SkillsService, getMCPManager,
-  ToolVetoError, setBashConfirmCallback,
+  ToolVetoError, setBashConfirmCallback, registerBrowserTools, setBrowserProfileDir,
 } from "@squirl/tools-runtime";
 import { MetaGraph } from "@squirl/graph-engine";
 import {
@@ -281,6 +281,10 @@ async function initRuntime() {
       return `Deleted "${a.name}".`;
     },
   );
+
+  // Opt-in local browser tools (Patchright). Profile lives under userData.
+  setBrowserProfileDir(join(dataDir, "browser-profile"));
+  if (cfg.browserToolEnabled) registerBrowserTools(registry);
 
   createRuntime(router, registry, cfg.defaultModel);
 

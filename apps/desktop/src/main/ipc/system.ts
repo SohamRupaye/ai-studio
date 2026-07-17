@@ -1,10 +1,21 @@
 import { Router, API_KEY_PROVIDERS, getConfig, saveConfig } from "@squirl/providers";
 import { createRuntime } from "@squirl/ai-core";
+import { registerBrowserTools, unregisterBrowserTools } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
   store, router, registry, orgRouters, currentUserId,
   setRouter, setCurrentUserId, refreshModelsInBackground,
 } from "../state.js";
+
+// Tracks whether the local-browser tools are currently registered, so a
+// config:set only registers/unregisters on an actual change of state.
+let browserToolsOn = getConfig().browserToolEnabled;
+function reconcileBrowserTools(enabled: boolean) {
+  if (enabled === browserToolsOn) return;
+  if (enabled) registerBrowserTools(registry);
+  else unregisterBrowserTools(registry);
+  browserToolsOn = enabled;
+}
 
 export function registerSystemHandlers() {
   // ── User ────────────────────────────────────────────────────────────────────
@@ -72,6 +83,7 @@ export function registerSystemHandlers() {
       classifierEnabled: cfg.classifier.enabled,
       mcpServers: cfg.mcpServers,
       disabledModels: cfg.disabledModels,
+      browserToolEnabled: cfg.browserToolEnabled,
     };
   });
 
@@ -90,6 +102,9 @@ export function registerSystemHandlers() {
     orgRouters.clear(); // org routers layer over the base config — rebuild them too
     refreshModelsInBackground(router);
     createRuntime(router, registry, cfg.defaultModel);
+    // Toggle the local browser tools live (register is idempotent; disabling
+    // removes them). Enabling mid-session means no restart to try it out.
+    reconcileBrowserTools(cfg.browserToolEnabled);
   });
 
   // ── Costs ───────────────────────────────────────────────────────────────────

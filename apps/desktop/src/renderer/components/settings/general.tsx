@@ -1,4 +1,5 @@
 import { XIcon } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import { useTheme } from "../../hooks/use-theme";
 import { useMutation, useQuery } from "../../hooks/use-ipc-data";
 import { useUiPrefs } from "../ui-prefs";
@@ -49,6 +50,8 @@ export function GeneralSettings() {
 
       <ToolPermissionsSection />
 
+      <LocalBrowserSection />
+
       <SettingsSection
         title="Notifications"
         hint="Get pinged when a chat's reply finishes — handy for long agent runs you leave to work while you're elsewhere."
@@ -84,6 +87,39 @@ export function GeneralSettings() {
         servers.
       </p>
     </>
+  );
+}
+
+/**
+ * Opt-in local-browser tools. Off by default — they drive a real Chrome
+ * window using the user's own logged-in profile, so enabling is a deliberate
+ * act. Enabling takes effect immediately (main reconciles on config:set).
+ */
+function LocalBrowserSection() {
+  const { data: cfg } = useQuery("config:get", undefined);
+  const setBrowser = useMutation("config:set");
+  const enabled = Boolean(cfg?.browserToolEnabled);
+
+  return (
+    <SettingsSection title="Local browser">
+      <div className="mt-2 divide-y divide-line">
+        <FieldRow
+          label="Let agents use a local browser"
+          hint="Agents can drive a separate Chrome window using your own logged-in profile — for pages that need a real browser, sign-in, or block automation. Sessions stay on this machine; typed values are never saved to the transcript."
+          htmlFor="browser-tool"
+        >
+          <Switch
+            id="browser-tool"
+            checked={enabled}
+            onCheckedChange={(v) =>
+              setBrowser
+                .mutate({ browserToolEnabled: v })
+                .catch(() => toast.error("Couldn't update the local browser setting"))
+            }
+          />
+        </FieldRow>
+      </div>
+    </SettingsSection>
   );
 }
 

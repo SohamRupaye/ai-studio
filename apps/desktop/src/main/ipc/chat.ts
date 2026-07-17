@@ -10,6 +10,7 @@ import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } f
 import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
 import type { ContextStats } from "@squirl/event-bus";
 import type { SkillInfo } from "@squirl/tools-runtime";
+import { BROWSER_FILL_TOOL_ID } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
   mainWindow, store, router, graph, globalMem, registry, costTracker, personas, skills,
@@ -23,6 +24,16 @@ export type ExtendedAbortController = AbortController & { supersededByNewMessage
 
 let abortController: ExtendedAbortController | null = null;
 let summaryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Redact secret-bearing tool args before they're streamed or persisted.
+ * browser_fill's `text` is whatever the user types into a page (passwords,
+ * card numbers) — it must never land in a transcript or the model trail. */
+function redactToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (name === BROWSER_FILL_TOOL_ID && args && typeof args === "object" && "text" in args) {
+    return { ...args, text: "•••" };
+  }
+  return args;
+}
 
 // ── Summarization ─────────────────────────────────────────────────────────────
 
@@ -277,7 +288,11 @@ export async function executeTurn({ branchId, message, images, controller }: {
         }
         break;
       }
-      if (event.type === "text" || event.type === "thinking" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
+      if (event.type === "tool_start") {
+        // Redact secrets (browser_fill's typed text) before they reach the
+        // renderer's live row detail — same redaction the persisted row gets.
+        mainWindow?.webContents.send("chat:stream", { ...event, args: redactToolArgs(event.name, event.args), branchId });
+      } else if (event.type === "text" || event.type === "thinking" || event.type === "tool_end" || event.type === "tool_call_streaming") {
         mainWindow?.webContents.send("chat:stream", { ...event, branchId });
       } else if (event.type === "done") {
         if (!event.result.text && !event.result.toolCalls.length) {
@@ -299,15 +314,16 @@ export async function executeTurn({ branchId, message, images, controller }: {
           // Previews persist with the call so the UI can answer "what
           // command ran" and prompt assembly can remind the model of its
           // own actions on later turns (see withToolTrail in prompt-engine).
+          const safeArgs = redactToolArgs(tc.name, tc.args);
           const base: MessageToolCall = {
             name: tc.name,
             success: tc.success,
-            argsPreview: toolCallPreview(tc.args, 300),
+            argsPreview: toolCallPreview(safeArgs, 300),
             resultPreview: toolCallPreview(tc.result, 200),
             // User-facing detail: the salient one-liner the row leads with
             // plus the full (capped) args/result for the expandable panel.
-            summary: toolCallSummary(tc.name, tc.args),
-            args: toolCallArgsDetail(tc.name, tc.args),
+            summary: toolCallSummary(tc.name, safeArgs),
+            args: toolCallArgsDetail(tc.name, safeArgs),
             result: toolCallResultDetail(tc.result),
           };
           if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
