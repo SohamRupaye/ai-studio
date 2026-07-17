@@ -57,6 +57,8 @@ import {
   formatTime,
   greetingLine,
 } from "./chat/message-parts";
+import { ApprovalCard } from "./chat/approval-card";
+import type { PendingApproval } from "./chat/approval-card";
 import { SubagentDetailDrawer } from "./chat/subagents";
 import { ToolActivity, attachLiveAgents } from "./chat/tool-activity";
 import type { SubagentRun, ToolCallState } from "./chat/types";
@@ -128,6 +130,8 @@ export function ChatPage() {
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState<StreamState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
+  // A side-effecting tool call waiting on the user (main blocks the turn).
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   // The just-sent user message, shown immediately — chat:send's IPC reply
   // doesn't resolve until the whole turn (including the assistant's reply)
   // finishes, so waiting for a real refetch would leave the user's own
@@ -249,10 +253,16 @@ export function ChatPage() {
           }
           return { ...s, toolCalls };
         });
+      } else if (event.type === "approval_request") {
+        setPendingApproval({ id: event.id, name: event.name, summary: event.summary });
+      } else if (event.type === "approval_resolved") {
+        // Fires on every resolution path (decision, timeout, abort).
+        setPendingApproval((p) => (p && p.id === event.id ? null : p));
       } else if (event.type === "done") {
         // done carries the authoritative full text — drop anything buffered.
         textBufRef.current = "";
         thinkingBufRef.current = "";
+        setPendingApproval(null);
         if (flushFrameRef.current !== null) {
           cancelAnimationFrame(flushFrameRef.current);
           flushFrameRef.current = null;
@@ -271,6 +281,7 @@ export function ChatPage() {
         // unconditionally so the persisted reply shows up either way.
         invalidateQueries();
       } else if (event.type === "error") {
+        setPendingApproval(null);
         setErrorState({
           turn: event.turn ?? -1,
           message: event.message,
@@ -883,6 +894,7 @@ export function ChatPage() {
       </MessageScrollerProvider>
 
       <div className="mx-auto w-full max-w-2xl shrink-0 px-6 pb-6">
+        {pendingApproval && <ApprovalCard key={pendingApproval.id} approval={pendingApproval} />}
         {errorState && (
           <div className="mb-2 flex items-center gap-2.5 rounded-lg border border-line bg-danger-soft px-3.5 py-2.5 text-body-sm text-danger-text">
             <WarningCircleIcon size={16} className="shrink-0" />

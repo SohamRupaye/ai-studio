@@ -37,9 +37,11 @@ const WARN_PATTERNS = [
   /\bkill\b/,
 ];
 
-let _confirmCallback: ((msg: string) => Promise<boolean>) | null = null;
+// Receives the raw command (not a formatted message) so the approval UI can
+// summarize it the same way it summarizes any other tool call.
+let _confirmCallback: ((command: string) => Promise<boolean>) | null = null;
 
-export function setBashConfirmCallback(cb: (msg: string) => Promise<boolean>) {
+export function setBashConfirmCallback(cb: (command: string) => Promise<boolean>) {
   _confirmCallback = cb;
 }
 
@@ -56,7 +58,7 @@ export const bash: ToolHandler = async (args) => {
   for (const pattern of WARN_PATTERNS) {
     if (pattern.test(cmd)) {
       if (_confirmCallback) {
-        const ok = await _confirmCallback(`⚠️  Potentially dangerous: ${cmd}\nProceed?`);
+        const ok = await _confirmCallback(cmd);
         if (!ok) return "Command cancelled by user.";
       }
       break;

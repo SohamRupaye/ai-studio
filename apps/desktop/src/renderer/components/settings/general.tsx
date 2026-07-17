@@ -1,4 +1,6 @@
+import { XIcon } from "@phosphor-icons/react";
 import { useTheme } from "../../hooks/use-theme";
+import { useMutation, useQuery } from "../../hooks/use-ipc-data";
 import { useUiPrefs } from "../ui-prefs";
 import { ButtonGroup, ButtonGroupItem } from "../ui/button-group";
 import { Switch } from "../ui/switch";
@@ -45,6 +47,8 @@ export function GeneralSettings() {
         </div>
       </SettingsSection>
 
+      <ToolPermissionsSection />
+
       <SettingsSection
         title="Notifications"
         hint="Get pinged when a chat's reply finishes — handy for long agent runs you leave to work while you're elsewhere."
@@ -80,5 +84,41 @@ export function GeneralSettings() {
         servers.
       </p>
     </>
+  );
+}
+
+/**
+ * "Always allow" rules saved from the chat's tool-approval card. Rendered
+ * only when at least one rule exists — with none saved, there's nothing to
+ * manage and the approval card explains itself in context.
+ */
+function ToolPermissionsSection() {
+  const { data: rules } = useQuery("permissions:list", undefined);
+  const removeRule = useMutation("permissions:remove");
+  const allowed = (rules ?? []).filter((r) => r.decision === "allow");
+  if (!allowed.length) return null;
+
+  return (
+    <SettingsSection
+      title="Tool permissions"
+      hint="Tools you marked “Always allow” run without an approval card. Remove a rule to be asked again."
+    >
+      <div className="mt-2 divide-y divide-line">
+        {allowed.map((r) => (
+          <div key={`${r.tool}:${r.pattern ?? ""}`} className="group/rule flex items-center gap-3 py-2.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-body-sm text-fg">{r.tool}</span>
+            <span className="shrink-0 text-body-sm text-fg-subtle">Always allowed</span>
+            <button
+              type="button"
+              aria-label={`Remove rule for ${r.tool}`}
+              className="pressable shrink-0 rounded-sm p-1 text-fg-subtle opacity-0 hover:bg-surface-2 hover:text-fg focus-visible:opacity-100 group-hover/rule:opacity-100"
+              onClick={() => removeRule.mutate({ tool: r.tool, pattern: r.pattern })}
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </SettingsSection>
   );
 }

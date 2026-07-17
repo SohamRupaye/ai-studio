@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ToolRegistry } from "../registry.js";
+import { ToolRegistry, ToolVetoError } from "../registry.js";
 import type { ToolContext, ToolDefinition, ToolResult, ToolFilterContext } from "../registry.js";
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,33 @@ describe("ToolRegistry", () => {
     });
     await registry.execute("foo", { value: "original" }, ctx);
     expect((received[0] as Record<string, unknown>)["value"]).toBe("modified");
+  });
+
+  it("onBeforeExecute hook can veto via ToolVetoError — executor never runs, result is a vetoed error", async () => {
+    const executor = vi.fn(okExecutor);
+    registry.register(makeStringDef("foo"), executor);
+    registry.onBeforeExecute(() => {
+      throw new ToolVetoError("User declined this tool call.");
+    });
+    const result = await registry.execute("foo", { value: "x" }, ctx);
+    expect(executor).not.toHaveBeenCalled();
+    expect(result.output).toBe("User declined this tool call.");
+    expect(result.metadata?.error).toBe(true);
+    expect(result.metadata?.vetoed).toBe(true);
+  });
+
+  it("veto in one call does not affect the next (per-call decision)", async () => {
+    const executor = vi.fn(okExecutor);
+    registry.register(makeStringDef("foo"), executor);
+    let deny = true;
+    registry.onBeforeExecute(() => {
+      if (deny) throw new ToolVetoError("denied");
+    });
+    await registry.execute("foo", { value: "x" }, ctx);
+    deny = false;
+    const result = await registry.execute("foo", { value: "x" }, ctx);
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe("success");
   });
 
   // --- After hook ---

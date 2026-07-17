@@ -129,6 +129,9 @@ export class ValidationError extends Error {
   }
 }
 
+/** Thrown by a before-execute hook to veto a tool call (e.g. the user denied approval). */
+export class ToolVetoError extends Error {}
+
 function validateArgs(toolId: string, args: unknown, schema: JSONSchema): unknown {
   if (schema.type !== "object") return args;
   if (args == null || typeof args !== "object") {
@@ -328,6 +331,9 @@ export class ToolRegistry extends EventEmitter {
       this.spans.push(span);
       this.emit("tool_error", { ...span, duration: span.endTime - span.startTime });
 
+      if (err instanceof ToolVetoError) {
+        return { title: "Declined", output: err.message, metadata: { error: true, vetoed: true } };
+      }
       if (err instanceof ValidationError) {
         return { title: "Validation Error", output: err.message, metadata: { error: true, validation: true } };
       }

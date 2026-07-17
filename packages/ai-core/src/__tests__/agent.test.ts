@@ -217,6 +217,34 @@ describe("Agent.run", () => {
     });
   });
 
+  it("a vetoed tool call (approval denied) yields tool_end success:false and the loop continues", async () => {
+    // The registry converts a ToolVetoError from a before-hook into an error
+    // ToolResult — the agent must surface it as a failed call and keep going,
+    // exactly like any other tool error (the model sees the denial text).
+    const execute = vi.fn(async (): Promise<ToolResult> => ({
+      title: "Declined",
+      output: "User declined this tool call.",
+      metadata: { error: true, vetoed: true },
+    }));
+    const router = makeRouter([
+      async function* () {
+        yield { type: "tool_call", id: "1", name: "notion_create_page", arguments: { title: "Q3" } };
+      },
+      async function* () {
+        yield { type: "text", text: "Understood — not creating the page." };
+      },
+    ]);
+    const agent = new Agent(router, makeRegistry(execute));
+
+    const events = await collect(agent.run("model", [{ role: "user", content: "make a page" }], "sys"));
+
+    const toolEnd = events.find((e) => e.type === "tool_end");
+    expect(toolEnd).toMatchObject({ type: "tool_end", name: "notion_create_page", success: false });
+    const result = doneResult(events);
+    expect(result.text).toBe("Understood — not creating the page.");
+    expect(result.toolCalls[0]).toMatchObject({ name: "notion_create_page", success: false });
+  });
+
   it("records cost from usage events and reflects it on the done result", async () => {
     const router = makeRouter([
       async function* () {

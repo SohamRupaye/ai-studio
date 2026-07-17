@@ -9,6 +9,7 @@ import {
 } from "@squirl/ai-core";
 import {
   createDefaultRegistry, loadMCPServers, getLSPClient, SkillsService, getMCPManager,
+  ToolVetoError, setBashConfirmCallback,
 } from "@squirl/tools-runtime";
 import { MetaGraph } from "@squirl/graph-engine";
 import {
@@ -19,6 +20,7 @@ import {
   setActiveBranchId, setCurrentUserId,
 } from "./state.js";
 import { sweepOrphanBlobs } from "./images.js";
+import { needsApproval, requestApproval } from "./approvals.js";
 import { registerChatHandlers } from "./ipc/chat.js";
 import { registerArtifactHandlers } from "./ipc/artifacts.js";
 import { registerWorkspaceHandlers } from "./ipc/workspace.js";
@@ -102,6 +104,21 @@ async function initRuntime() {
     }
     return result;
   });
+
+  // Approval gate: side-effecting MCP tools pause the turn on an inline
+  // approve/deny card. One hook covers the chat agent and subagents alike
+  // (subagent registries delegate back to this registry's execute). A "sub"
+  // sessionId means a delegated agent — the card routes to the turn's branch.
+  registry.onBeforeExecute(async (toolId, args, ctx) => {
+    if (!needsApproval(toolId)) return args;
+    const branchId = ctx.sessionId && ctx.sessionId !== "sub" ? ctx.sessionId : undefined;
+    const allowed = await requestApproval({ name: toolId, args, branchId });
+    if (!allowed) throw new ToolVetoError("User declined this tool call. Do not retry it unless they ask.");
+    return args;
+  });
+  // bash's warn-pattern commands (rm, git push, DROP TABLE…) route through
+  // the same card; a denial returns bash's own "Command cancelled by user."
+  setBashConfirmCallback((command) => requestApproval({ name: "bash", args: { command } }));
 
   // App-level memory tools wired to the SAME GlobalMemory the UI reads from.
   // (The built-in kb_* tools write to a separate JSON store, so the agent's

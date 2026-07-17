@@ -167,6 +167,11 @@ export type AgentStreamEvent =
   // the UI can show exactly what each delegated agent is doing. "start" may
   // fire twice for one agent (model fallback re-announces the actual model).
   | ({ type: "subagent"; branchId: string } & SubagentStreamEvent)
+  // A side-effecting tool call is paused awaiting user approval. The turn
+  // blocks until chat:approval-decision resolves it (or the 5-min timeout
+  // denies). approval_resolved clears the card on timeout/abort paths too.
+  | { type: "approval_request"; branchId: string; id: string; name: string; summary: string }
+  | { type: "approval_resolved"; branchId: string; id: string }
   | { type: "done"; branchId: string; text: string; iterations: number; cost?: string }
   | { type: "error"; branchId: string; message: string; turn?: number; rateLimited?: boolean; retryAfterSeconds?: number };
 
@@ -176,6 +181,9 @@ export interface IpcInvokeMap {
   // Chat
   "chat:send": [{ branchId: string; message: string; images?: MessageImage[] }, void];
   "chat:abort": [void, void];
+  /** Resolve a pending tool-approval request (approval_request stream event).
+   * `always` persists an allow rule in the PermissionStore. */
+  "chat:approval-decision": [{ id: string; allowed: boolean; always?: boolean }, void];
   /** Copy images into data/blobs (downscaling oversized PNG/JPEG to fit
    * provider limits) and return references to attach to the next message,
    * plus per-file reasons for anything skipped. With `paths` (drag-drop) the

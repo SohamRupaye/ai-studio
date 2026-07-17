@@ -15,6 +15,7 @@ import {
   mainWindow, store, router, graph, globalMem, registry, costTracker, personas, skills,
   nodeCounter, dataDirPath, currentProjectId, setCurrentProjectId, memoryScope, routerFor,
 } from "../state.js";
+import { cancelPendingApprovals, finishApproval, setApprovalTurnBranch } from "../approvals.js";
 
 /** AbortController tagged with why it was aborted, so a superseded request
  * can tell the renderer (an explicit user Stop already handles its own UI). */
@@ -48,6 +49,8 @@ export function registerChatHandlers() {
       abortController.supersededByNewMessage = true;
       abortController.abort();
     }
+    // A superseded turn's pending approval card must not outlive it.
+    cancelPendingApprovals();
     const myController: ExtendedAbortController = new AbortController();
     abortController = myController;
     const signal = myController.signal;
@@ -225,6 +228,8 @@ export function registerChatHandlers() {
       }
     }
 
+    // Approval cards raised by subagents (sessionId "sub") route to this turn's branch.
+    setApprovalTurnBranch(branchId);
     try {
       for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
         if (signal.aborted) {
@@ -335,10 +340,21 @@ export function registerChatHandlers() {
           retryAfterSeconds: err instanceof ProviderRateLimitError ? err.retryAfterSeconds : undefined,
         });
       }
+    } finally {
+      setApprovalTurnBranch(null);
     }
   });
 
-  handle("chat:abort", () => { abortController?.abort(); abortController = null; });
+  handle("chat:abort", () => {
+    abortController?.abort();
+    abortController = null;
+    // Deny anything still waiting on the card — the turn it belongs to is gone.
+    cancelPendingApprovals();
+  });
+
+  handle("chat:approval-decision", ({ id, allowed, always }) => {
+    finishApproval(id, { allowed, always });
+  });
 }
 
 // ── System prompt ─────────────────────────────────────────────────────────────

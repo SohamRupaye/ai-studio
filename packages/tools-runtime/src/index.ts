@@ -61,7 +61,7 @@ export { SkillsService, parseSkillFile } from "./skills";
 export type { SkillInfo, SkillPermission, SkillImportResult, SkillDiscovery, DiscoveredSkill, SkillsServiceOptions } from "./skills";
 
 // Registry
-export { ToolRegistry, ValidationError } from "./registry";
+export { ToolRegistry, ValidationError, ToolVetoError } from "./registry";
 export type {
   ToolDefinition,
   ToolResult,
@@ -88,6 +88,9 @@ export { createDefaultRegistry, loadMCPServers, getLSPClient, getMCPManager, add
 // must not depend on ai-core) — ai-core's createRuntime injects it.
 export { setSubagentDependencies } from "./tools/subagent";
 export type { SubagentRunMeta } from "./tools/subagent";
+
+// Bash warn-pattern confirmation (wired by the desktop app's approval flow)
+export { setBashConfirmCallback } from "./tools/bash";
 
 // Knowledge base (IPC-friendly wrappers)
 export { kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry } from "./tools/knowledge_base";
