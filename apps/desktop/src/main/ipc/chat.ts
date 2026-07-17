@@ -5,7 +5,7 @@ import type { ContentBlock } from "@squirl/providers";
 import { Agent, createRuntime, classifyAndIndex, extractAndPersistArtifacts, runAgentCooperative } from "@squirl/ai-core";
 import { buildPayload, runPendingSummaries, shouldSummarize } from "@squirl/prompt-engine";
 import { getContextLimit, supportsPdfInput, supportsVision } from "@squirl/tokenizer";
-import type { MessageToolCall, SubagentRunRecord } from "@squirl/shared";
+import type { MessageImage, MessageToolCall, SubagentRunRecord } from "@squirl/shared";
 import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } from "@squirl/shared";
 import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
 import type { ContextStats } from "@squirl/event-bus";
@@ -19,7 +19,7 @@ import { cancelPendingApprovals, finishApproval, setApprovalTurnBranch } from ".
 
 /** AbortController tagged with why it was aborted, so a superseded request
  * can tell the renderer (an explicit user Stop already handles its own UI). */
-type ExtendedAbortController = AbortController & { supersededByNewMessage?: boolean };
+export type ExtendedAbortController = AbortController & { supersededByNewMessage?: boolean };
 
 let abortController: ExtendedAbortController | null = null;
 let summaryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,7 +40,6 @@ export function registerChatHandlers() {
   // ── Chat ────────────────────────────────────────────────────────────────────
 
   handle("chat:send", async ({ branchId, message, images }) => {
-    if (!mainWindow) return;
     // If a prior request is still in flight, it's being superseded by this
     // new message (not a user-initiated Stop) — tag the OLD controller so
     // its own loop (holding a reference to it) knows to notify the renderer
@@ -53,308 +52,7 @@ export function registerChatHandlers() {
     cancelPendingApprovals();
     const myController: ExtendedAbortController = new AbortController();
     abortController = myController;
-    const signal = myController.signal;
-
-    const branch = store.getBranch(branchId);
-    if (!branch) {
-      mainWindow.webContents.send("chat:stream", { type: "error", branchId, message: `Branch ${branchId} not found`, turn: store.getMessageCount(branchId) - 1 });
-      return;
-    }
-    const cfg = getConfig();
-    const model = branch.model || cfg.defaultModel;
-
-    // Slash-invoked skill: "/name rest of message". Only a leading token that
-    // matches an INSTALLED skill counts as an invocation — anything else
-    // ("/etc/hosts is broken") passes through as a normal message. Both the
-    // composer's autocomplete and a hand-typed command converge here.
-    let invokedSkill: SkillInfo | undefined;
-    const slash = message.match(/^\/([A-Za-z0-9][\w-]*)/);
-    if (slash) {
-      const candidate = skills.get(slash[1]!);
-      if (candidate) {
-        if (cfg.disabledSkills.includes(candidate.name)) {
-          // Nothing persisted yet, so turn -1 (same convention as the vision gate).
-          mainWindow.webContents.send("chat:stream", {
-            type: "error",
-            branchId,
-            message: `The skill "/${candidate.name}" is disabled. Enable it in Settings → Skills, then resend.`,
-            turn: -1,
-          });
-          return;
-        }
-        invokedSkill = candidate;
-      }
-    }
-
-    // Capability gate (honest block): don't silently drop an attached image on
-    // a text-only model. Refuse before persisting so the user can switch model
-    // and resend — never a half-committed turn.
-    if (images?.length && !supportsVision(model)) {
-      mainWindow.webContents.send("chat:stream", {
-        type: "error",
-        branchId,
-        message: `${model} can't view images. Switch to a vision-capable model, then resend.`,
-        // Nothing was persisted, so there is no turn to point at — -1 routes
-        // the renderer's Retry down the plain-resend path (no edit).
-        turn: -1,
-      });
-      return;
-    }
-
-    store.addMessage(branchId, "user", message, undefined, undefined, images);
-    // Turn number of the user message this invocation is answering — threaded
-    // through every error event below so the renderer can mark specifically
-    // THIS message (not whichever one is currently last) as failed.
-    const userTurn = store.getMessageCount(branchId) - 1;
-
-    // Track the project this branch belongs to, for scoping memories.
-    setCurrentProjectId(branch.chatId ? (store.getChat(branch.chatId)?.projectId ?? "") : "");
-
-    const payload = await buildPayload(store, branch, graph, globalMem, message, {
-      nativePdf: supportsPdfInput(model),
-    });
-
-    // Capture what the model sees this turn for the right panel's context
-    // inspector. Persisted (survives restarts) and captured here as a side
-    // effect — deliberately never recomputed on demand, since a payload
-    // dry-run can spend tokens (ancestry compression, embeddings).
-    const contextStats: ContextStats = {
-      model,
-      tokenEstimate: payload.tokenEstimate,
-      contextLimit: getContextLimit(model),
-      tierAncestry: payload.tierAncestry,
-      tierWarm: payload.tierWarm,
-      tierRetrieved: payload.tierRetrieved,
-      tierHot: payload.tierHot,
-      artifactTokens: payload.artifactTokens,
-      capturedAt: Date.now(),
-    };
-    store.setMeta(`ctxstats:${branchId}`, JSON.stringify(contextStats));
-    // Org-level API keys override the globals: this chat runs on its org's router.
-    const chatRouter = routerFor(
-      currentProjectId ? store.getProject(currentProjectId)?.orgId : undefined,
-    );
-    // Per-agent lifecycle for this turn's subagent/delegate calls: forwarded
-    // to the renderer live and persisted with the assistant message on done.
-    // Runs group by runId in first-seen order, matched to subagent/delegate
-    // tool calls in invocation order at persist time. The trail itself is
-    // built by the same shared reducer the renderer uses (applySubagentEvent)
-    // so the live drawer and the persisted record can't drift.
-    const subagentRunOrder: string[] = [];
-    const subagentRuns = new Map<string, Map<string, SubagentRunRecord>>();
-    const subagentStartedAt = new Map<string, number>();
-    // Set at persist time when a background delegate is still running: the
-    // persisted agents arrays hold the SAME record objects the reducer keeps
-    // mutating, so a late terminal event only needs to re-serialize the row.
-    let lateWriteback: { messageId: string; toolCalls: MessageToolCall[] } | null = null;
-    createRuntime(chatRouter, registry, model, (ev) => {
-      let group = subagentRuns.get(ev.runId);
-      if (!group) { group = new Map(); subagentRuns.set(ev.runId, group); subagentRunOrder.push(ev.runId); }
-      let rec = group.get(ev.agentId);
-      if (!rec) { rec = newSubagentRecord(ev.agentId); group.set(ev.agentId, rec); }
-      applySubagentEvent(rec, ev);
-      const key = `${ev.runId}:${ev.agentId}`;
-      if (ev.status === "start" && !subagentStartedAt.has(key)) subagentStartedAt.set(key, Date.now());
-      if (ev.status === "done" || ev.status === "failed") {
-        const started = subagentStartedAt.get(key);
-        if (started) rec.durationMs = Date.now() - started;
-        if (rec.result && rec.result.length > 16_000) rec.result = `${rec.result.slice(0, 16_000)}\n…[truncated]`;
-        if (lateWriteback) {
-          try { store.updateMessageToolCalls(lateWriteback.messageId, lateWriteback.toolCalls); }
-          catch (e) { console.error("[delegate] late writeback failed:", (e as Error)?.message); }
-        }
-      }
-      mainWindow?.webContents.send("chat:stream", { type: "subagent", branchId, ...ev });
-    });
-
-    // Active persona for this branch (if any) layers its own system prompt
-    // ahead of the base instructions and restricts which tools it can see.
-    const activePersonaName = store.getMeta(`persona:${branchId}`) || "default";
-    const persona = personas.get(activePersonaName);
-
-    // Project-level custom instructions (set in project settings) sit between
-    // the app boilerplate and the per-conversation context.
-    const projectPrompt = (currentProjectId ? store.getProject(currentProjectId)?.systemPrompt : undefined)?.trim();
-    const baseSystem = buildBaseSystem(projectPrompt, payload.systemContext);
-    let system = persona && persona.name !== "default"
-      ? `${persona.systemPrompt}\n\n${baseSystem}`
-      : baseSystem;
-    // A slash-invoked skill binds this turn: its full body rides the system
-    // prompt (the persisted user message keeps the raw "/name …" text, so the
-    // transcript shows what was typed and forks inherit the invocation).
-    if (invokedSkill) {
-      system += `\n\n<invoked_skill name="${invokedSkill.name}">\nThe user invoked this skill for this request — its instructions are binding for this turn.\n${invokedSkill.content}\n(Supporting files for this skill live in ${dirname(invokedSkill.location)} — resolve relative paths against that directory.)\n</invoked_skill>`;
-    }
-    // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
-    const agent = new Agent(chatRouter, registry, { sessionId: branchId });
-
-    // Resolve image refs on hot-window messages into content the model gets.
-    // Vision models receive native image blocks (base64 read from the blob);
-    // this is only reached when the model supports vision (the current turn is
-    // gated above, and historical images degrade to a text note for safety).
-    const vision = supportsVision(model);
-    const agentMessages = payload.messages.map(m => {
-      if (!m.images?.length) return { role: m.role, content: m.content };
-      if (!vision) {
-        const names = m.images.map(im => im.filename).join(", ");
-        return { role: m.role, content: `${m.content}\n\n[Attached image(s): ${names} — the current model can't view images.]` };
-      }
-      const blocks: ContentBlock[] = m.content ? [{ type: "text", text: m.content }] : [];
-      for (const im of m.images) {
-        try {
-          const data = readFileSync(join(dataDirPath, im.blobPath)).toString("base64");
-          blocks.push({ type: "image", mediaType: im.mediaType, data });
-        } catch {
-          // Blob missing (swept or lost) — keep the turn, but tell the model
-          // an image was here rather than silently narrowing what it sees.
-          blocks.push({ type: "text", text: `\n[Attached image "${im.filename}" is no longer available.]` });
-        }
-      }
-      return { role: m.role, content: blocks };
-    });
-
-    // Selected PDFs the model reads natively ride the current turn as
-    // document blocks (before the text, per provider guidance). Re-attached
-    // each send while selected — same lifetime as the extracted-text path
-    // they replace. A missing blob degrades to a visible note.
-    if (payload.nativeDocuments.length && agentMessages.length) {
-      const last = agentMessages[agentMessages.length - 1]!;
-      if (last.role === "user") {
-        const docBlocks: ContentBlock[] = [];
-        for (const doc of payload.nativeDocuments) {
-          try {
-            const data = readFileSync(join(dataDirPath, doc.blobPath)).toString("base64");
-            docBlocks.push({ type: "document", mediaType: doc.mime, data, title: doc.title });
-          } catch {
-            docBlocks.push({ type: "text", text: `[Attached document "${doc.title}" is no longer available.]\n` });
-          }
-        }
-        const existing: ContentBlock[] = typeof last.content === "string"
-          ? (last.content ? [{ type: "text", text: last.content }] : [])
-          : last.content;
-        last.content = [...docBlocks, ...existing];
-      }
-    }
-
-    // Approval cards raised by subagents (sessionId "sub") route to this turn's branch.
-    setApprovalTurnBranch(branchId);
-    try {
-      for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
-        if (signal.aborted) {
-          // Only notify the renderer if this request was superseded by a
-          // newer message — an explicit user Stop already cleans up its own
-          // UI client-side and doesn't need (or want) an error toast here.
-          if (myController.supersededByNewMessage) {
-            mainWindow?.webContents.send("chat:stream", { type: "error", branchId, message: "Cancelled — a newer message was sent.", turn: userTurn });
-          }
-          break;
-        }
-        if (event.type === "text" || event.type === "thinking" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
-          mainWindow?.webContents.send("chat:stream", { ...event, branchId });
-        } else if (event.type === "done") {
-          if (!event.result.text && !event.result.toolCalls.length) {
-            mainWindow?.webContents.send("chat:stream", {
-              type: "error",
-              branchId,
-              message: `${model} returned an empty response. This can happen with free-tier models under load — try again or switch models.`,
-              turn: userTurn,
-            });
-            break;
-          }
-          const assistantText = event.result.text;
-          // Attach each subagent/delegate call's per-agent detail. A background
-          // delegate still running persists as "running" for now — the late
-          // writeback below re-serializes the row when it settles in-process,
-          // and the startup sweep fails whatever a restart orphans.
-          let runIdx = 0;
-          const persistedToolCalls = event.result.toolCalls.map((tc) => {
-            // Previews persist with the call so the UI can answer "what
-            // command ran" and prompt assembly can remind the model of its
-            // own actions on later turns (see withToolTrail in prompt-engine).
-            const base: MessageToolCall = {
-              name: tc.name,
-              success: tc.success,
-              argsPreview: toolCallPreview(tc.args, 300),
-              resultPreview: toolCallPreview(tc.result, 200),
-              // User-facing detail: the salient one-liner the row leads with
-              // plus the full (capped) args/result for the expandable panel.
-              summary: toolCallSummary(tc.name, tc.args),
-              args: toolCallArgsDetail(tc.name, tc.args),
-              result: toolCallResultDetail(tc.result),
-            };
-            if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
-              const group = subagentRuns.get(subagentRunOrder[runIdx++]!);
-              if (group?.size) base.agents = [...group.values()];
-            }
-            return base;
-          });
-          const assistantMsg = store.addMessage(
-            branchId, "assistant", assistantText, model, persistedToolCalls, undefined,
-            event.result.thinking ? clipText(event.result.thinking, 24_000) : undefined,
-          );
-          if (persistedToolCalls.some((tc) => tc.agents?.some((a) => a.status === "running"))) {
-            lateWriteback = { messageId: assistantMsg.id, toolCalls: persistedToolCalls };
-          }
-
-          // Cost tracking
-          costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });
-          const lastEntry = costTracker.lastCost();
-          const [inRate, outRate] = getCostRate(model);
-          const estOut = Math.ceil(assistantText.length / 4);
-          const costUsd = (payload.tokenEstimate * inRate + estOut * outRate) / 1_000_000;
-          store.recordCost(branchId, model, payload.tokenEstimate, estOut, costUsd);
-
-          mainWindow?.webContents.send("chat:stream", {
-            type: "done", branchId, text: assistantText, iterations: event.result.iterations, cost: lastEntry,
-          });
-
-          // Classify + index
-          const turnNum = store.getMessageCount(branchId) - 1;
-          classifyAndIndex(router, graph, nodeCounter, message, assistantText, branchId, turnNum);
-
-          // Deterministic memory capture — guarantees an explicit "remember X"
-          // request is persisted even if the model didn't call the remember tool.
-          try {
-            const calledRemember =
-              Array.isArray((event.result as any).toolCalls) &&
-              (event.result as any).toolCalls.some((tc: any) => tc.name === "remember");
-            if (!calledRemember) {
-              const fact = extractMemoryFact(message);
-              if (fact) globalMem.add(fact, memoryScope());
-            }
-          } catch { /* non-fatal */ }
-
-          // Auto-extract artifacts
-          if (branch.chatId) {
-            const chat = store.getChat(branch.chatId);
-            if (chat) {
-              extractAndPersistArtifacts(store, assistantText, branchId, chat.projectId);
-            }
-          }
-
-          scheduleSummarization(branchId);
-
-          // Auto-title: a chat created without a name titles itself off this
-          // exchange. Fire-and-forget — a failure just leaves the flag set,
-          // so the next completed turn retries.
-          autoTitleChat(branch.chatId, branchId, assistantText, chatRouter, model)
-            .catch((e) => console.error("[auto-title]", e?.message ?? e));
-        }
-      }
-    } catch (err: any) {
-      if (!signal.aborted) {
-        mainWindow?.webContents.send("chat:stream", {
-          type: "error",
-          branchId,
-          message: err.message,
-          turn: userTurn,
-          rateLimited: err instanceof ProviderRateLimitError,
-          retryAfterSeconds: err instanceof ProviderRateLimitError ? err.retryAfterSeconds : undefined,
-        });
-      }
-    } finally {
-      setApprovalTurnBranch(null);
-    }
+    await executeTurn({ branchId, message, images, controller: myController });
   });
 
   handle("chat:abort", () => {
@@ -367,6 +65,324 @@ export function registerChatHandlers() {
   handle("chat:approval-decision", ({ id, allowed, always }) => {
     finishApproval(id, { allowed, always });
   });
+}
+
+/**
+ * Run one full agent turn on a branch: persist the user message, build the
+ * context payload, stream the agent, persist the assistant reply with tool
+ * detail, then run the post-turn pipeline (costs, classify, memory capture,
+ * artifacts, summarization, auto-title). Used by the chat:send handler
+ * (module abortController) and the automations scheduler (its own private
+ * controller, so a scheduled run never clobbers a user's in-flight turn).
+ */
+export async function executeTurn({ branchId, message, images, controller }: {
+  branchId: string;
+  message: string;
+  images?: MessageImage[];
+  controller: ExtendedAbortController;
+}) {
+  if (!mainWindow) return;
+  const signal = controller.signal;
+  const branch = store.getBranch(branchId);
+  if (!branch) {
+    mainWindow.webContents.send("chat:stream", { type: "error", branchId, message: `Branch ${branchId} not found`, turn: store.getMessageCount(branchId) - 1 });
+    return;
+  }
+  const cfg = getConfig();
+  const model = branch.model || cfg.defaultModel;
+
+  // Slash-invoked skill: "/name rest of message". Only a leading token that
+  // matches an INSTALLED skill counts as an invocation — anything else
+  // ("/etc/hosts is broken") passes through as a normal message. Both the
+  // composer's autocomplete and a hand-typed command converge here.
+  let invokedSkill: SkillInfo | undefined;
+  const slash = message.match(/^\/([A-Za-z0-9][\w-]*)/);
+  if (slash) {
+    const candidate = skills.get(slash[1]!);
+    if (candidate) {
+      if (cfg.disabledSkills.includes(candidate.name)) {
+        // Nothing persisted yet, so turn -1 (same convention as the vision gate).
+        mainWindow.webContents.send("chat:stream", {
+          type: "error",
+          branchId,
+          message: `The skill "/${candidate.name}" is disabled. Enable it in Settings → Skills, then resend.`,
+          turn: -1,
+        });
+        return;
+      }
+      invokedSkill = candidate;
+    }
+  }
+
+  // Capability gate (honest block): don't silently drop an attached image on
+  // a text-only model. Refuse before persisting so the user can switch model
+  // and resend — never a half-committed turn.
+  if (images?.length && !supportsVision(model)) {
+    mainWindow.webContents.send("chat:stream", {
+      type: "error",
+      branchId,
+      message: `${model} can't view images. Switch to a vision-capable model, then resend.`,
+      // Nothing was persisted, so there is no turn to point at — -1 routes
+      // the renderer's Retry down the plain-resend path (no edit).
+      turn: -1,
+    });
+    return;
+  }
+
+  store.addMessage(branchId, "user", message, undefined, undefined, images);
+  // Turn number of the user message this invocation is answering — threaded
+  // through every error event below so the renderer can mark specifically
+  // THIS message (not whichever one is currently last) as failed.
+  const userTurn = store.getMessageCount(branchId) - 1;
+
+  // Track the project this branch belongs to, for scoping memories.
+  setCurrentProjectId(branch.chatId ? (store.getChat(branch.chatId)?.projectId ?? "") : "");
+
+  const payload = await buildPayload(store, branch, graph, globalMem, message, {
+    nativePdf: supportsPdfInput(model),
+  });
+
+  // Capture what the model sees this turn for the right panel's context
+  // inspector. Persisted (survives restarts) and captured here as a side
+  // effect — deliberately never recomputed on demand, since a payload
+  // dry-run can spend tokens (ancestry compression, embeddings).
+  const contextStats: ContextStats = {
+    model,
+    tokenEstimate: payload.tokenEstimate,
+    contextLimit: getContextLimit(model),
+    tierAncestry: payload.tierAncestry,
+    tierWarm: payload.tierWarm,
+    tierRetrieved: payload.tierRetrieved,
+    tierHot: payload.tierHot,
+    artifactTokens: payload.artifactTokens,
+    capturedAt: Date.now(),
+  };
+  store.setMeta(`ctxstats:${branchId}`, JSON.stringify(contextStats));
+  // Org-level API keys override the globals: this chat runs on its org's router.
+  const chatRouter = routerFor(
+    currentProjectId ? store.getProject(currentProjectId)?.orgId : undefined,
+  );
+  // Per-agent lifecycle for this turn's subagent/delegate calls: forwarded
+  // to the renderer live and persisted with the assistant message on done.
+  // Runs group by runId in first-seen order, matched to subagent/delegate
+  // tool calls in invocation order at persist time. The trail itself is
+  // built by the same shared reducer the renderer uses (applySubagentEvent)
+  // so the live drawer and the persisted record can't drift.
+  const subagentRunOrder: string[] = [];
+  const subagentRuns = new Map<string, Map<string, SubagentRunRecord>>();
+  const subagentStartedAt = new Map<string, number>();
+  // Set at persist time when a background delegate is still running: the
+  // persisted agents arrays hold the SAME record objects the reducer keeps
+  // mutating, so a late terminal event only needs to re-serialize the row.
+  let lateWriteback: { messageId: string; toolCalls: MessageToolCall[] } | null = null;
+  createRuntime(chatRouter, registry, model, (ev) => {
+    let group = subagentRuns.get(ev.runId);
+    if (!group) { group = new Map(); subagentRuns.set(ev.runId, group); subagentRunOrder.push(ev.runId); }
+    let rec = group.get(ev.agentId);
+    if (!rec) { rec = newSubagentRecord(ev.agentId); group.set(ev.agentId, rec); }
+    applySubagentEvent(rec, ev);
+    const key = `${ev.runId}:${ev.agentId}`;
+    if (ev.status === "start" && !subagentStartedAt.has(key)) subagentStartedAt.set(key, Date.now());
+    if (ev.status === "done" || ev.status === "failed") {
+      const started = subagentStartedAt.get(key);
+      if (started) rec.durationMs = Date.now() - started;
+      if (rec.result && rec.result.length > 16_000) rec.result = `${rec.result.slice(0, 16_000)}\n…[truncated]`;
+      if (lateWriteback) {
+        try { store.updateMessageToolCalls(lateWriteback.messageId, lateWriteback.toolCalls); }
+        catch (e) { console.error("[delegate] late writeback failed:", (e as Error)?.message); }
+      }
+    }
+    mainWindow?.webContents.send("chat:stream", { type: "subagent", branchId, ...ev });
+  });
+
+  // Active persona for this branch (if any) layers its own system prompt
+  // ahead of the base instructions and restricts which tools it can see.
+  const activePersonaName = store.getMeta(`persona:${branchId}`) || "default";
+  const persona = personas.get(activePersonaName);
+
+  // Project-level custom instructions (set in project settings) sit between
+  // the app boilerplate and the per-conversation context.
+  const projectPrompt = (currentProjectId ? store.getProject(currentProjectId)?.systemPrompt : undefined)?.trim();
+  const baseSystem = buildBaseSystem(projectPrompt, payload.systemContext);
+  let system = persona && persona.name !== "default"
+    ? `${persona.systemPrompt}\n\n${baseSystem}`
+    : baseSystem;
+  // A slash-invoked skill binds this turn: its full body rides the system
+  // prompt (the persisted user message keeps the raw "/name …" text, so the
+  // transcript shows what was typed and forks inherit the invocation).
+  if (invokedSkill) {
+    system += `\n\n<invoked_skill name="${invokedSkill.name}">\nThe user invoked this skill for this request — its instructions are binding for this turn.\n${invokedSkill.content}\n(Supporting files for this skill live in ${dirname(invokedSkill.location)} — resolve relative paths against that directory.)\n</invoked_skill>`;
+  }
+  // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
+  const agent = new Agent(chatRouter, registry, { sessionId: branchId });
+
+  // Resolve image refs on hot-window messages into content the model gets.
+  // Vision models receive native image blocks (base64 read from the blob);
+  // this is only reached when the model supports vision (the current turn is
+  // gated above, and historical images degrade to a text note for safety).
+  const vision = supportsVision(model);
+  const agentMessages = payload.messages.map(m => {
+    if (!m.images?.length) return { role: m.role, content: m.content };
+    if (!vision) {
+      const names = m.images.map(im => im.filename).join(", ");
+      return { role: m.role, content: `${m.content}\n\n[Attached image(s): ${names} — the current model can't view images.]` };
+    }
+    const blocks: ContentBlock[] = m.content ? [{ type: "text", text: m.content }] : [];
+    for (const im of m.images) {
+      try {
+        const data = readFileSync(join(dataDirPath, im.blobPath)).toString("base64");
+        blocks.push({ type: "image", mediaType: im.mediaType, data });
+      } catch {
+        // Blob missing (swept or lost) — keep the turn, but tell the model
+        // an image was here rather than silently narrowing what it sees.
+        blocks.push({ type: "text", text: `\n[Attached image "${im.filename}" is no longer available.]` });
+      }
+    }
+    return { role: m.role, content: blocks };
+  });
+
+  // Selected PDFs the model reads natively ride the current turn as
+  // document blocks (before the text, per provider guidance). Re-attached
+  // each send while selected — same lifetime as the extracted-text path
+  // they replace. A missing blob degrades to a visible note.
+  if (payload.nativeDocuments.length && agentMessages.length) {
+    const last = agentMessages[agentMessages.length - 1]!;
+    if (last.role === "user") {
+      const docBlocks: ContentBlock[] = [];
+      for (const doc of payload.nativeDocuments) {
+        try {
+          const data = readFileSync(join(dataDirPath, doc.blobPath)).toString("base64");
+          docBlocks.push({ type: "document", mediaType: doc.mime, data, title: doc.title });
+        } catch {
+          docBlocks.push({ type: "text", text: `[Attached document "${doc.title}" is no longer available.]\n` });
+        }
+      }
+      const existing: ContentBlock[] = typeof last.content === "string"
+        ? (last.content ? [{ type: "text", text: last.content }] : [])
+        : last.content;
+      last.content = [...docBlocks, ...existing];
+    }
+  }
+
+  // Approval cards raised by subagents (sessionId "sub") route to this turn's branch.
+  setApprovalTurnBranch(branchId);
+  try {
+    for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
+      if (signal.aborted) {
+        // Only notify the renderer if this request was superseded by a
+        // newer message — an explicit user Stop already cleans up its own
+        // UI client-side and doesn't need (or want) an error toast here.
+        if (controller.supersededByNewMessage) {
+          mainWindow?.webContents.send("chat:stream", { type: "error", branchId, message: "Cancelled — a newer message was sent.", turn: userTurn });
+        }
+        break;
+      }
+      if (event.type === "text" || event.type === "thinking" || event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_call_streaming") {
+        mainWindow?.webContents.send("chat:stream", { ...event, branchId });
+      } else if (event.type === "done") {
+        if (!event.result.text && !event.result.toolCalls.length) {
+          mainWindow?.webContents.send("chat:stream", {
+            type: "error",
+            branchId,
+            message: `${model} returned an empty response. This can happen with free-tier models under load — try again or switch models.`,
+            turn: userTurn,
+          });
+          break;
+        }
+        const assistantText = event.result.text;
+        // Attach each subagent/delegate call's per-agent detail. A background
+        // delegate still running persists as "running" for now — the late
+        // writeback below re-serializes the row when it settles in-process,
+        // and the startup sweep fails whatever a restart orphans.
+        let runIdx = 0;
+        const persistedToolCalls = event.result.toolCalls.map((tc) => {
+          // Previews persist with the call so the UI can answer "what
+          // command ran" and prompt assembly can remind the model of its
+          // own actions on later turns (see withToolTrail in prompt-engine).
+          const base: MessageToolCall = {
+            name: tc.name,
+            success: tc.success,
+            argsPreview: toolCallPreview(tc.args, 300),
+            resultPreview: toolCallPreview(tc.result, 200),
+            // User-facing detail: the salient one-liner the row leads with
+            // plus the full (capped) args/result for the expandable panel.
+            summary: toolCallSummary(tc.name, tc.args),
+            args: toolCallArgsDetail(tc.name, tc.args),
+            result: toolCallResultDetail(tc.result),
+          };
+          if ((tc.name === "subagent" || tc.name === "delegate") && runIdx < subagentRunOrder.length) {
+            const group = subagentRuns.get(subagentRunOrder[runIdx++]!);
+            if (group?.size) base.agents = [...group.values()];
+          }
+          return base;
+        });
+        const assistantMsg = store.addMessage(
+          branchId, "assistant", assistantText, model, persistedToolCalls, undefined,
+          event.result.thinking ? clipText(event.result.thinking, 24_000) : undefined,
+        );
+        if (persistedToolCalls.some((tc) => tc.agents?.some((a) => a.status === "running"))) {
+          lateWriteback = { messageId: assistantMsg.id, toolCalls: persistedToolCalls };
+        }
+
+        // Cost tracking
+        costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });
+        const lastEntry = costTracker.lastCost();
+        const [inRate, outRate] = getCostRate(model);
+        const estOut = Math.ceil(assistantText.length / 4);
+        const costUsd = (payload.tokenEstimate * inRate + estOut * outRate) / 1_000_000;
+        store.recordCost(branchId, model, payload.tokenEstimate, estOut, costUsd);
+
+        mainWindow?.webContents.send("chat:stream", {
+          type: "done", branchId, text: assistantText, iterations: event.result.iterations, cost: lastEntry,
+        });
+
+        // Classify + index
+        const turnNum = store.getMessageCount(branchId) - 1;
+        classifyAndIndex(router, graph, nodeCounter, message, assistantText, branchId, turnNum);
+
+        // Deterministic memory capture — guarantees an explicit "remember X"
+        // request is persisted even if the model didn't call the remember tool.
+        try {
+          const calledRemember =
+            Array.isArray((event.result as any).toolCalls) &&
+            (event.result as any).toolCalls.some((tc: any) => tc.name === "remember");
+          if (!calledRemember) {
+            const fact = extractMemoryFact(message);
+            if (fact) globalMem.add(fact, memoryScope());
+          }
+        } catch { /* non-fatal */ }
+
+        // Auto-extract artifacts
+        if (branch.chatId) {
+          const chat = store.getChat(branch.chatId);
+          if (chat) {
+            extractAndPersistArtifacts(store, assistantText, branchId, chat.projectId);
+          }
+        }
+
+        scheduleSummarization(branchId);
+
+        // Auto-title: a chat created without a name titles itself off this
+        // exchange. Fire-and-forget — a failure just leaves the flag set,
+        // so the next completed turn retries.
+        autoTitleChat(branch.chatId, branchId, assistantText, chatRouter, model)
+          .catch((e) => console.error("[auto-title]", e?.message ?? e));
+      }
+    }
+  } catch (err: any) {
+    if (!signal.aborted) {
+      mainWindow?.webContents.send("chat:stream", {
+        type: "error",
+        branchId,
+        message: err.message,
+        turn: userTurn,
+        rateLimited: err instanceof ProviderRateLimitError,
+        retryAfterSeconds: err instanceof ProviderRateLimitError ? err.retryAfterSeconds : undefined,
+      });
+    }
+  } finally {
+    setApprovalTurnBranch(null);
+  }
 }
 
 // ── System prompt ─────────────────────────────────────────────────────────────

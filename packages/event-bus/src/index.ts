@@ -1,4 +1,4 @@
-import type { Branch, Organisation, Project, Space, Chat, MessageImage, MessageToolCall, SubagentRunRecord, SubagentStreamEvent } from "@squirl/shared";
+import type { Automation, Branch, Organisation, Project, Space, Chat, MessageImage, MessageToolCall, SubagentRunRecord, SubagentStreamEvent } from "@squirl/shared";
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
@@ -184,6 +184,11 @@ export interface IpcInvokeMap {
   /** Resolve a pending tool-approval request (approval_request stream event).
    * `always` persists an allow rule in the PermissionStore. */
   "chat:approval-decision": [{ id: string; allowed: boolean; always?: boolean }, void];
+
+  // Automations (created from chat via the create_automation tool; managed here)
+  "automation:list": [void, Automation[]];
+  "automation:toggle": [{ id: string; enabled: boolean }, void];
+  "automation:delete": [{ id: string }, void];
   /** Copy images into data/blobs (downscaling oversized PNG/JPEG to fit
    * provider limits) and return references to attach to the next message,
    * plus per-file reasons for anything skipped. With `paths` (drag-drop) the
@@ -485,6 +490,9 @@ export interface IpcEventMap {
   /** Fired when the installed skills change (import, remove, external edit),
    * so skill lists refetch without polling. */
   "skills:changed": void;
+  /** Pushed when an automation fires, is created/toggled/deleted, or
+   * auto-disables (target branch gone) — listeners refetch automation:list. */
+  "automations:changed": void;
   /** Pushed when the user clicks a native notification, so the renderer can
    * bring the originating chat into view. */
   "notify:activated": { branchId?: string; chatId?: string };

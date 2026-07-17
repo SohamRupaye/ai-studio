@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Branch, Message, MessageImage, Summary, Organisation, Project, Space, Chat } from "@squirl/shared";
+import type { Automation, Branch, Message, MessageImage, Summary, Organisation, Project, Space, Chat } from "@squirl/shared";
 import { SCHEMA, applyMigrations } from "./schema.js";
 import { OrganisationsRepository } from "./repositories/organisations.js";
 import { ProjectsRepository } from "./repositories/projects.js";
@@ -12,6 +12,7 @@ import { MessagesRepository } from "./repositories/messages.js";
 import { ArtifactsRepository } from "./repositories/artifacts.js";
 import { CostsRepository } from "./repositories/costs.js";
 import { MetaRepository } from "./repositories/meta.js";
+import { AutomationsRepository } from "./repositories/automations.js";
 
 /**
  * Facade over the SQLite workspace database. Owns the connection, schema and
@@ -29,6 +30,7 @@ export class Store {
   private artifacts: ArtifactsRepository;
   private costs: CostsRepository;
   private meta: MetaRepository;
+  private automations: AutomationsRepository;
 
   constructor(dbPath?: string) {
     const path = dbPath ?? join(process.cwd(), "data", "workspace.db");
@@ -46,6 +48,7 @@ export class Store {
     this.artifacts = new ArtifactsRepository(this.db);
     this.costs = new CostsRepository(this.db);
     this.meta = new MetaRepository(this.db);
+    this.automations = new AutomationsRepository(this.db);
     this.db.exec(SCHEMA);
     this.migrate();
   }
@@ -276,6 +279,36 @@ export class Store {
 
   messagesWithRunningAgents(): Array<{ id: string; toolCalls: NonNullable<Message["toolCalls"]> }> {
     return this.messages.messagesWithRunningAgents();
+  }
+
+  // ── Automations ─────────────────────────────────────────────────────────────
+
+  createAutomation(input: { branchId: string; projectId?: string; name: string; schedule: string; task: string; nextRunAt?: number }): Automation {
+    return this.automations.createAutomation(input);
+  }
+
+  listAutomations(opts?: { enabledOnly?: boolean }): Automation[] {
+    return this.automations.listAutomations(opts);
+  }
+
+  getAutomation(id: string): Automation | undefined {
+    return this.automations.getAutomation(id);
+  }
+
+  setAutomationEnabled(id: string, enabled: boolean): boolean {
+    return this.automations.setAutomationEnabled(id, enabled);
+  }
+
+  setAutomationNextRun(id: string, nextRunAt: number | null): void {
+    this.automations.setAutomationNextRun(id, nextRunAt);
+  }
+
+  recordAutomationRun(id: string, status: "ok" | "error", nextRunAt: number | null): void {
+    this.automations.recordAutomationRun(id, status, nextRunAt);
+  }
+
+  deleteAutomation(id: string): boolean {
+    return this.automations.deleteAutomation(id);
   }
 
   // ── Summaries ──────────────────────────────────────────────────────────────

@@ -2676,6 +2676,7 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     cmdk: "npm:^1.1.1"
+    croner: "npm:^10.0.1"
     electron: "npm:33.2.1"
     electron-liquid-glass: "npm:1.1.1"
     electron-squirrel-startup: "npm:1.0.1"
@@ -4384,6 +4385,13 @@ __metadata:
   version: 1.1.1
   resolution: "create-require@npm:1.1.1"
   checksum: 10c0/157cbc59b2430ae9a90034a5f3a1b398b6738bf510f713edc4d4e45e169bc514d3d99dd34d8d01ca7ae7830b5b8b537e46ae8f3c8f932371b0875c0151d7ec91
+  languageName: node
+  linkType: hard
+
+"croner@npm:^10.0.1":
+  version: 10.0.1
+  resolution: "croner@npm:10.0.1"
+  checksum: 10c0/b1a022f8c786b19799e662e0f11686937e97133e386efa2859e316ba64b7a9c2ecd0d1500cdbe3157625ff7e9af8584c7d6e41c9a17db892c731f83be464bc92
   languageName: node
   linkType: hard
 

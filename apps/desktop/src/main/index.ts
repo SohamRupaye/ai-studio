@@ -21,6 +21,8 @@ import {
 } from "./state.js";
 import { sweepOrphanBlobs } from "./images.js";
 import { needsApproval, requestApproval } from "./approvals.js";
+import { nextRunTime, rescheduleAutomations, scheduleError, startAutomationScheduler } from "./scheduler.js";
+import { registerAutomationHandlers } from "./ipc/automations.js";
 import { registerChatHandlers } from "./ipc/chat.js";
 import { registerArtifactHandlers } from "./ipc/artifacts.js";
 import { registerWorkspaceHandlers } from "./ipc/workspace.js";
@@ -182,6 +184,104 @@ async function initRuntime() {
     },
   );
 
+  // Automations: the agent schedules recurring work from chat ("every morning
+  // at 8, summarize…"). Each fire appends a real turn to the branch the
+  // automation was created on — the transcript is the run log. Management UI
+  // lives in Settings → Automations; the scheduler starts after createWindow.
+  registry.register(
+    {
+      name: "create_automation",
+      description:
+        "Schedule a recurring task on this conversation. The task runs as a full agent turn on this branch at the given cadence (only while the app is running). Use when the user asks for something on a schedule (\"every morning…\", \"each Friday…\"). Phrase `task` as the complete standalone instruction the future run should execute.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Short human-readable name, e.g. \"Morning calendar summary\"." },
+          schedule: { type: "string", description: "5-field cron expression, e.g. \"0 8 * * *\" for daily at 08:00 local time." },
+          task: { type: "string", description: "The full instruction to execute on each run, standalone (the run has no memory of this conversation's pending context)." },
+        },
+        required: ["name", "schedule", "task"],
+      },
+    },
+    (async (args: Record<string, unknown>, ctx: { sessionId?: string }) => {
+      const name = String(args["name"] ?? "").trim();
+      const schedule = String(args["schedule"] ?? "").trim();
+      const task = String(args["task"] ?? "").trim();
+      if (!name || !schedule || !task) return "create_automation needs name, schedule and task.";
+      const branchId = ctx?.sessionId;
+      if (!branchId || branchId === "sub") return "Automations can only be created from a chat turn (not from a delegated agent).";
+      const err = scheduleError(schedule);
+      if (err) return `${err} Use a 5-field cron expression like "0 8 * * *".`;
+      const a = store.createAutomation({
+        branchId,
+        projectId: currentProjectId || undefined,
+        name, schedule, task,
+        nextRunAt: nextRunTime(schedule) ?? undefined,
+      });
+      rescheduleAutomations();
+      mainWindow?.webContents.send("automations:changed", undefined);
+      return `✅ Scheduled "${a.name}" (${a.schedule}) — next run ${a.nextRunAt ? new Date(a.nextRunAt).toLocaleString() : "unknown"}. Runs only while the app is open; manage it in Settings → Automations.`;
+    }) as any,
+  );
+
+  registry.register(
+    {
+      name: "list_automations",
+      description: "List the scheduled automations, their cadence, next run and status.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    async () => {
+      const all = store.listAutomations();
+      if (!all.length) return "No automations scheduled.";
+      return all.map((a) =>
+        `• [${a.id}] "${a.name}" — ${a.schedule} — ${a.enabled ? `next ${a.nextRunAt ? new Date(a.nextRunAt).toLocaleString() : "?"}` : "disabled"}${a.lastStatus ? ` (last run: ${a.lastStatus})` : ""}`
+      ).join("\n");
+    },
+  );
+
+  registry.register(
+    {
+      name: "toggle_automation",
+      description: "Enable or disable a scheduled automation by id (see list_automations).",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          enabled: { type: "boolean" },
+        },
+        required: ["id", "enabled"],
+      },
+    },
+    async (args: Record<string, unknown>) => {
+      const id = String(args["id"] ?? "");
+      const enabled = Boolean(args["enabled"]);
+      const a = store.getAutomation(id);
+      if (!a) return `No automation with id ${id}.`;
+      store.setAutomationEnabled(id, enabled);
+      if (enabled) store.setAutomationNextRun(id, nextRunTime(a.schedule));
+      rescheduleAutomations();
+      mainWindow?.webContents.send("automations:changed", undefined);
+      return `"${a.name}" is now ${enabled ? "enabled" : "disabled"}.`;
+    },
+  );
+
+  registry.register(
+    {
+      name: "delete_automation",
+      description: "Delete a scheduled automation by id (see list_automations).",
+      parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+    async (args: Record<string, unknown>) => {
+      const id = String(args["id"] ?? "");
+      const a = store.getAutomation(id);
+      if (!a) return `No automation with id ${id}.`;
+      store.deleteAutomation(id);
+      rescheduleAutomations();
+      mainWindow?.webContents.send("automations:changed", undefined);
+      return `Deleted "${a.name}".`;
+    },
+  );
+
   createRuntime(router, registry, cfg.defaultModel);
 
   // Load node counter from persisted max ID (not graph.size)
@@ -263,6 +363,7 @@ function registerHandlers() {
   registerSystemHandlers();
   registerToolingHandlers();
   registerNotifyHandlers();
+  registerAutomationHandlers();
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -276,6 +377,9 @@ app.whenReady().then(async () => {
   await initRuntime();
   registerHandlers();
   createWindow();
+  // After createWindow: a scheduled turn needs a window to stream to, and an
+  // overdue catch-up run fires immediately on boot.
+  startAutomationScheduler();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

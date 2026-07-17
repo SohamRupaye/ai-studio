@@ -133,7 +133,22 @@ CREATE TABLE IF NOT EXISTS costs (
   timestamp    REAL
 );
 
+CREATE TABLE IF NOT EXISTS automations (
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT REFERENCES projects(id),
+  branch_id   TEXT NOT NULL REFERENCES branches(id),
+  name        TEXT NOT NULL,
+  schedule    TEXT NOT NULL,
+  task        TEXT NOT NULL,
+  enabled     INTEGER DEFAULT 1,
+  next_run_at REAL,
+  last_run_at REAL,
+  last_status TEXT,
+  created_at  REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_branch_turn ON messages(branch_id, turn);
+CREATE INDEX IF NOT EXISTS idx_automations_branch ON automations(branch_id);
 CREATE INDEX IF NOT EXISTS idx_branches_chat ON branches(chat_id);
 CREATE INDEX IF NOT EXISTS idx_branches_parent ON branches(parent_id);
 CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(org_id);

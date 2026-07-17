@@ -7,6 +7,7 @@ import { GeneralSettings } from "./settings/general";
 import { ProviderModelsPage, ProvidersSettings } from "./settings/providers";
 import { MCPSettings } from "./settings/mcp";
 import { SkillsSettings } from "./settings/skills";
+import { AutomationsSettings } from "./settings/automations";
 import { OrganizationSettings } from "./settings/organization";
 import { ProjectSettings } from "./settings/project";
 
@@ -44,7 +45,9 @@ export function SettingsPage() {
             ? "mcp"
             : pathname.endsWith("/skills")
               ? "skills"
-              : "general";
+              : pathname.endsWith("/automations")
+                ? "automations"
+                : "general";
   const navOrgId = orgId ?? project?.orgId ?? activeOrgId;
   const { data: projects = [] } = useProjects(navOrgId);
 
@@ -60,6 +63,7 @@ export function SettingsPage() {
           {scope === "provider-models" && <ProviderModelsPage key={provider} provider={provider!} />}
           {scope === "mcp" && <MCPSettings />}
           {scope === "skills" && <SkillsSettings />}
+          {scope === "automations" && <AutomationsSettings />}
           {scope === "organization" && (
             <OrganizationSettings
               key={orgId}

@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   BuildingsIcon,
+  ClockCountdownIcon,
   FolderSimpleIcon,
   LightningIcon,
   PlugsConnectedIcon,
@@ -44,6 +45,10 @@ export function SettingsNav({
           <SettingsNavLink to="/settings/skills">
             <LightningIcon size={16} className="shrink-0 text-fg-subtle" />
             <span className="truncate">Skills</span>
+          </SettingsNavLink>
+          <SettingsNavLink to="/settings/automations">
+            <ClockCountdownIcon size={16} className="shrink-0 text-fg-subtle" />
+            <span className="truncate">Automations</span>
           </SettingsNavLink>
         </SettingsNavGroup>
 

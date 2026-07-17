@@ -669,6 +669,30 @@ describe("Messages", () => {
     expect(reread.toolCalls![0]!.agents![0]).toMatchObject({ status: "failed", error: "Interrupted — app was restarted" });
   });
 
+  it("automations: create/list/toggle/run-record/delete round-trip", () => {
+    const a = store.createAutomation({
+      branchId, name: "Morning summary", schedule: "0 8 * * *",
+      task: "Summarize my calendar", nextRunAt: 1_900_000_000_000,
+    });
+    expect(store.listAutomations()).toHaveLength(1);
+    expect(store.getAutomation(a.id)).toMatchObject({
+      name: "Morning summary", schedule: "0 8 * * *", enabled: true, nextRunAt: 1_900_000_000_000,
+    });
+
+    store.setAutomationEnabled(a.id, false);
+    expect(store.getAutomation(a.id)!.enabled).toBe(false);
+    expect(store.listAutomations({ enabledOnly: true })).toHaveLength(0);
+
+    store.recordAutomationRun(a.id, "error", null);
+    const after = store.getAutomation(a.id)!;
+    expect(after.lastStatus).toBe("error");
+    expect(after.nextRunAt).toBeUndefined();
+    expect(typeof after.lastRunAt).toBe("number");
+
+    expect(store.deleteAutomation(a.id)).toBe(true);
+    expect(store.listAutomations()).toHaveLength(0);
+  });
+
   it("tool_calls round-trip summary/args/result detail and messages round-trip thinking", () => {
     // The expandable tool rows and the Thinking block read these back from
     // the persisted message — live view and reopen must show the same thing.

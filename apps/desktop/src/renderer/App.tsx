@@ -82,6 +82,7 @@ export default function App() {
               <Route path="/settings/providers/:provider" element={<SettingsPage />} />
               <Route path="/settings/mcp" element={<SettingsPage />} />
               <Route path="/settings/skills" element={<SettingsPage />} />
+              <Route path="/settings/automations" element={<SettingsPage />} />
               <Route path="/settings/organization/:orgId" element={<SettingsPage />} />
               <Route path="/settings/project/:projectId" element={<SettingsPage />} />
               <Route path="/settings/project" element={<ProjectSettingsRedirect />} />

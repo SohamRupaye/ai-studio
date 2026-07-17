@@ -123,6 +123,24 @@ export interface Chat {
   autoName?: boolean;
 }
 
+/** A scheduled recurring agent task. Each fire appends a real turn to its
+ * target branch — the transcript IS the run log. Created from chat via the
+ * create_automation tool; managed in Settings → Automations. */
+export interface Automation {
+  id: string;
+  projectId?: string;
+  branchId: string;
+  name: string;
+  /** 5-field cron expression (croner syntax). */
+  schedule: string;
+  task: string;
+  enabled: boolean;
+  nextRunAt?: number;
+  lastRunAt?: number;
+  lastStatus?: "ok" | "error";
+  createdAt: number;
+}
+
 export interface Branch {
   id: string;
   chatId?: string;
