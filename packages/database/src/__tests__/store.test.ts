@@ -630,6 +630,45 @@ describe("Messages", () => {
     expect(msgs[0]!.toolCalls![0]!.agents).toBeUndefined();
   });
 
+  it("updateMessageToolCalls rewrites a persisted row; messagesWithRunningAgents finds only genuinely-running agents", () => {
+    // The orphan sweep and the delegate late-writeback both depend on these:
+    // a "running" record must be findable and rewritable after the fact.
+    const running = [
+      {
+        name: "delegate",
+        success: true,
+        agents: [{ agentId: "bg", task: "long job", model: "gpt-4", status: "running" as const, steps: [] }],
+      },
+    ];
+    const msg = store.addMessage(branchId, "assistant", "kicked off", "gpt-4", running);
+    // Decoy: the LIKE prefilter must not trust a substring match inside a
+    // step preview — this row has no running agent.
+    store.addMessage(branchId, "assistant", "done reply", "gpt-4", [
+      {
+        name: "subagent",
+        success: true,
+        agents: [{
+          agentId: "a", task: "t", model: "gpt-4", status: "done" as const,
+          steps: [{ type: "text" as const, text: 'the payload was {"status":"running"}' }],
+        }],
+      },
+    ]);
+
+    const hits = store.messagesWithRunningAgents();
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.id).toBe(msg.id);
+
+    // Sweep-style rewrite: fail the running agent and persist it back.
+    const agent = hits[0]!.toolCalls[0]!.agents![0]!;
+    agent.status = "failed";
+    agent.error = "Interrupted — app was restarted";
+    store.updateMessageToolCalls(msg.id, hits[0]!.toolCalls);
+
+    expect(store.messagesWithRunningAgents()).toHaveLength(0);
+    const reread = store.getMessages(branchId).find((m) => m.id === msg.id)!;
+    expect(reread.toolCalls![0]!.agents![0]).toMatchObject({ status: "failed", error: "Interrupted — app was restarted" });
+  });
+
   it("tool_calls round-trip summary/args/result detail and messages round-trip thinking", () => {
     // The expandable tool rows and the Thinking block read these back from
     // the persisted message — live view and reopen must show the same thing.

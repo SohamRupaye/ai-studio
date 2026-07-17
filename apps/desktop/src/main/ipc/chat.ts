@@ -143,6 +143,10 @@ export function registerChatHandlers() {
     const subagentRunOrder: string[] = [];
     const subagentRuns = new Map<string, Map<string, SubagentRunRecord>>();
     const subagentStartedAt = new Map<string, number>();
+    // Set at persist time when a background delegate is still running: the
+    // persisted agents arrays hold the SAME record objects the reducer keeps
+    // mutating, so a late terminal event only needs to re-serialize the row.
+    let lateWriteback: { messageId: string; toolCalls: MessageToolCall[] } | null = null;
     createRuntime(chatRouter, registry, model, (ev) => {
       let group = subagentRuns.get(ev.runId);
       if (!group) { group = new Map(); subagentRuns.set(ev.runId, group); subagentRunOrder.push(ev.runId); }
@@ -155,6 +159,10 @@ export function registerChatHandlers() {
         const started = subagentStartedAt.get(key);
         if (started) rec.durationMs = Date.now() - started;
         if (rec.result && rec.result.length > 16_000) rec.result = `${rec.result.slice(0, 16_000)}\n…[truncated]`;
+        if (lateWriteback) {
+          try { store.updateMessageToolCalls(lateWriteback.messageId, lateWriteback.toolCalls); }
+          catch (e) { console.error("[delegate] late writeback failed:", (e as Error)?.message); }
+        }
       }
       mainWindow?.webContents.send("chat:stream", { type: "subagent", branchId, ...ev });
     });
@@ -254,9 +262,10 @@ export function registerChatHandlers() {
             break;
           }
           const assistantText = event.result.text;
-          // Attach each subagent/delegate call's per-agent detail (background
-          // delegate jobs still running persist as "running" — live status
-          // keeps streaming, and delegate_result stays the model-facing check).
+          // Attach each subagent/delegate call's per-agent detail. A background
+          // delegate still running persists as "running" for now — the late
+          // writeback below re-serializes the row when it settles in-process,
+          // and the startup sweep fails whatever a restart orphans.
           let runIdx = 0;
           const persistedToolCalls = event.result.toolCalls.map((tc) => {
             // Previews persist with the call so the UI can answer "what
@@ -279,10 +288,13 @@ export function registerChatHandlers() {
             }
             return base;
           });
-          store.addMessage(
+          const assistantMsg = store.addMessage(
             branchId, "assistant", assistantText, model, persistedToolCalls, undefined,
             event.result.thinking ? clipText(event.result.thinking, 24_000) : undefined,
           );
+          if (persistedToolCalls.some((tc) => tc.agents?.some((a) => a.status === "running"))) {
+            lateWriteback = { messageId: assistantMsg.id, toolCalls: persistedToolCalls };
+          }
 
           // Cost tracking
           costTracker.record(model, { input_tokens: payload.tokenEstimate, output_tokens: assistantText.length / 4 });

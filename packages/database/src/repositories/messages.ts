@@ -106,6 +106,38 @@ export class MessagesRepository {
     return removed;
   }
 
+  /**
+   * Rewrite a message's persisted tool_calls in place. Used to keep delegated-
+   * agent records honest: a background delegate job that settles after its
+   * turn was persisted (or that an app restart orphaned) gets its terminal
+   * status written back onto the transcript row.
+   */
+  updateMessageToolCalls(messageId: string, toolCalls: Message["toolCalls"]): void {
+    this.db.prepare("UPDATE messages SET tool_calls = ? WHERE id = ?")
+      .run(toolCalls?.length ? JSON.stringify(toolCalls) : null, messageId);
+  }
+
+  /**
+   * Messages whose tool_calls contain an agent record still marked "running".
+   * SQL LIKE prefilter, JSON verify in JS (the substring can also match a
+   * step preview, so parse before trusting).
+   */
+  messagesWithRunningAgents(): Array<{ id: string; toolCalls: NonNullable<Message["toolCalls"]> }> {
+    const rows = this.db.prepare(
+      `SELECT id, tool_calls FROM messages WHERE tool_calls LIKE '%"status":"running"%'`
+    ).all() as any[];
+    const hits: Array<{ id: string; toolCalls: NonNullable<Message["toolCalls"]> }> = [];
+    for (const r of rows) {
+      try {
+        const toolCalls = JSON.parse(r.tool_calls) as NonNullable<Message["toolCalls"]>;
+        if (toolCalls.some(tc => tc.agents?.some(a => a.status === "running"))) {
+          hits.push({ id: r.id, toolCalls });
+        }
+      } catch { /* corrupt row — leave it alone */ }
+    }
+    return hits;
+  }
+
   // ── Summaries ──────────────────────────────────────────────────────────────
 
   addSummary(branchId: string, fromTurn: number, toTurn: number, content: string): Summary {

@@ -270,6 +270,14 @@ export class Store {
     return this.messages.undoLastTurn(branchId);
   }
 
+  updateMessageToolCalls(messageId: string, toolCalls: Message["toolCalls"]): void {
+    this.messages.updateMessageToolCalls(messageId, toolCalls);
+  }
+
+  messagesWithRunningAgents(): Array<{ id: string; toolCalls: NonNullable<Message["toolCalls"]> }> {
+    return this.messages.messagesWithRunningAgents();
+  }
+
   // ── Summaries ──────────────────────────────────────────────────────────────
 
   addSummary(branchId: string, fromTurn: number, toTurn: number, content: string): Summary {

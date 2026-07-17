@@ -61,6 +61,26 @@ function createWindow() {
   win.on("closed", () => { setMainWindow(null); });
 }
 
+/**
+ * Delegated-agent records live only in process memory while running; an app
+ * restart orphans any persisted "running" record forever (the job is gone).
+ * Rewrite them to failed on boot so transcripts never show eternal spinners.
+ * (Jobs that settle late but in-process are handled by chat.ts's writeback.)
+ */
+function sweepOrphanAgentRuns() {
+  for (const { id, toolCalls } of store.messagesWithRunningAgents()) {
+    for (const tc of toolCalls) {
+      for (const agent of tc.agents ?? []) {
+        if (agent.status === "running") {
+          agent.status = "failed";
+          agent.error = "Interrupted — app was restarted";
+        }
+      }
+    }
+    store.updateMessageToolCalls(id, toolCalls);
+  }
+}
+
 // ── Runtime init ──────────────────────────────────────────────────────────────
 
 async function initRuntime() {
@@ -76,6 +96,7 @@ async function initRuntime() {
   // path into it. Kept out of SQLite so a 20MB PDF doesn't bloat the .db.
   mkdirSync(join(dataDir, "blobs"), { recursive: true });
   sweepOrphanBlobs();
+  sweepOrphanAgentRuns();
   setRouter(Router.fromEnv());
   refreshModelsInBackground(router);
   setGraph(new MetaGraph(join(dataDir, "graphs")));
