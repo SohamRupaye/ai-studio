@@ -34,6 +34,44 @@ describe("GlobalMemory", () => {
     expect(fact.scope).toBe("project:p1");
   });
 
+  describe("dedup on add", () => {
+    it("normalized-exact duplicate in the same scope returns the existing fact, no insert", () => {
+      const first = memory.add("The user prefers TypeScript.");
+      const dup = memory.addWithStatus("  the user   prefers typescript ");
+      expect(dup.added).toBe(false);
+      expect(dup.fact.id).toBe(first.id);
+      expect(memory.list()).toHaveLength(1);
+    });
+
+    it("near-duplicate phrasing (Jaccard ≥ 0.85) is skipped", () => {
+      memory.add("The user's favorite editor is VS Code with the vim extension enabled");
+      const dup = memory.addWithStatus("The user's favorite editor is VS Code with the vim extension");
+      expect(dup.added).toBe(false);
+      expect(memory.list()).toHaveLength(1);
+    });
+
+    it("same text in a DIFFERENT scope is a separate fact", () => {
+      memory.add("Prefers dark mode", "project:p1");
+      const other = memory.addWithStatus("Prefers dark mode", "project:p2");
+      expect(other.added).toBe(true);
+      expect(memory.list()).toHaveLength(2);
+    });
+
+    it("genuinely different facts are unaffected", () => {
+      memory.add("Likes tea");
+      const other = memory.addWithStatus("Likes team retrospectives on Fridays");
+      expect(other.added).toBe(true);
+      expect(memory.list()).toHaveLength(2);
+    });
+
+    it("dedup survives reload from disk", () => {
+      memory.add("The user ships on Fridays");
+      const reloaded = new GlobalMemory(tmpDir);
+      expect(reloaded.addWithStatus("The user ships on Fridays.").added).toBe(false);
+      expect(reloaded.list()).toHaveLength(1);
+    });
+  });
+
   it("list() returns all facts", () => {
     memory.add("fact1");
     memory.add("fact2", "project:p1");

@@ -160,8 +160,9 @@ async function initRuntime() {
     async (args: Record<string, unknown>) => {
       const text = String(args["text"] ?? "").trim();
       if (!text) return "No fact provided to remember.";
-      const fact = globalMem.add(text, memoryScope());
+      const { fact, added } = globalMem.addWithStatus(text, memoryScope());
       const where = currentProjectId ? "this project's memory" : "long-term memory";
+      if (!added) return `Already remembered (id=${fact.id}): "${fact.text}" — not saved again.`;
       return `✅ Saved to ${where} (id=${fact.id}): "${fact.text}"`;
     },
   );

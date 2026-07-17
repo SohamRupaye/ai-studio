@@ -10,6 +10,14 @@ export interface MemoryFact {
   createdAt: number;
 }
 
+function normalizeFact(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").replace(/[.!?…]+$/g, "").trim();
+}
+
+function factTokens(text: string): Set<string> {
+  return new Set(normalizeFact(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+}
+
 export class GlobalMemory {
   private facts: MemoryFact[] = [];
   private filePath: string;
@@ -39,11 +47,40 @@ export class GlobalMemory {
     writeFileSync(this.filePath, JSON.stringify({ facts: this.facts }, null, 2));
   }
 
+  /** Add a fact, deduplicating within its scope: an (effectively) identical
+   * fact returns the existing entry instead of inserting a copy. Both the
+   * remember tool and chat's deterministic auto-capture funnel through here,
+   * so "remember X" twice can't double the memory panel. */
   add(text: string, scope: MemoryScope = "global"): MemoryFact {
+    return this.addWithStatus(text, scope).fact;
+  }
+
+  /** add(), plus whether a new fact was actually inserted — lets the
+   * remember tool answer "Already remembered" honestly. */
+  addWithStatus(text: string, scope: MemoryScope = "global"): { fact: MemoryFact; added: boolean } {
+    const existing = this.findDuplicate(text, scope);
+    if (existing) return { fact: existing, added: false };
     const fact: MemoryFact = { id: this.nextId++, text, scope, createdAt: Date.now() };
     this.facts.push(fact);
     this.save();
-    return fact;
+    return { fact, added: true };
+  }
+
+  /** Same-scope duplicate: normalized-exact match, or token-set Jaccard
+   * ≥ 0.85 (near-identical phrasing). Deterministic only — no embeddings. */
+  private findDuplicate(text: string, scope: MemoryScope): MemoryFact | undefined {
+    const norm = normalizeFact(text);
+    const toks = factTokens(text);
+    for (const f of this.facts) {
+      if (f.scope !== scope) continue;
+      if (normalizeFact(f.text) === norm) return f;
+      const fToks = factTokens(f.text);
+      let inter = 0;
+      for (const t of toks) if (fToks.has(t)) inter++;
+      const union = toks.size + fToks.size - inter;
+      if (union > 0 && inter / union >= 0.85) return f;
+    }
+    return undefined;
   }
 
   remove(id: number): boolean {
