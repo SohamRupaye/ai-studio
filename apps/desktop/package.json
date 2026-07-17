@@ -1,8 +1,9 @@
 {
   "name": "@squirl/desktop",
+  "productName": "Squirl",
   "version": "0.1.0",
   "private": true,
-  "description": "AI Studio Desktop Application",
+  "description": "Squirl Desktop Application",
   "main": ".vite/build/index.js",
   "scripts": {
     "postinstall": "electron-rebuild -f -w better-sqlite3",

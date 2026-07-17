@@ -229,6 +229,11 @@ function registerHandlers() {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Packaged builds get the icon from forge.config.ts (icon.icns); in dev the
+  // dock would otherwise show the stock Electron atom.
+  if (process.platform === "darwin" && !app.isPackaged) {
+    app.dock?.setIcon(join(app.getAppPath(), "assets", "icon.png"));
+  }
   await initRuntime();
   registerHandlers();
   createWindow();

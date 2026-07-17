@@ -11,8 +11,10 @@ const config: ForgeConfig = {
     asar: {
       unpack: "**/*.node",
     },
-    name: "AI Studio",
-    executableName: "ai-studio",
+    name: "Squirl",
+    executableName: "squirl",
+    // Path without extension: Forge picks icon.icns (macOS) / icon.ico (Windows).
+    icon: "./assets/icon",
   },
   makers: [
     new MakerSquirrel({}),
