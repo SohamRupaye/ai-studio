@@ -149,7 +149,14 @@ export async function buildPayload(
 
   if (globalMem) {
     const projectId = branch.chatId ? store.getChat(branch.chatId)?.projectId : undefined;
-    const memBlock = globalMem.asContextBlock(branch.id, branch.chatId, projectId);
+    // Branch ancestry (this branch + all parents) makes memory supersession
+    // branch-aware: a fact superseded on a sibling fork stays current here.
+    const ancestry = new Set<string>();
+    for (let b: typeof branch | undefined = branch; b; b = b.parentId ? store.getBranch(b.parentId) : undefined) {
+      if (ancestry.has(b.id)) break; // guard against a cyclic parent chain
+      ancestry.add(b.id);
+    }
+    const memBlock = globalMem.asContextBlock(branch.id, branch.chatId, projectId, ancestry);
     if (memBlock) {
       systemContextBlocks.push(`<global_memory>\nDurable facts saved about the user, grouped by scope (global → project → chat → branch; narrower scopes are more specific). Treat them as true unless the user says otherwise.\n${memBlock}\n</global_memory>`);
     }

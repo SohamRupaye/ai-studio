@@ -84,6 +84,7 @@ export function registerSystemHandlers() {
       mcpServers: cfg.mcpServers,
       disabledModels: cfg.disabledModels,
       browserToolEnabled: cfg.browserToolEnabled,
+      memoryInference: cfg.memoryInference,
     };
   });
 

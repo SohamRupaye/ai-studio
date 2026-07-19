@@ -165,7 +165,9 @@ export const useArtifact = (id: string | undefined) =>
 export const useMemory = (scope?: string) => useQuery("memory:list", { scope });
 
 export const useBranchMemories = (branchId: string | undefined) =>
-  useQuery("memory:for-branch", { branchId: branchId! }, { enabled: !!branchId });
+  // includeSuperseded: the panel shows active facts plus superseded ones as
+  // history (git-for-facts — nothing is destroyed, supersession is visible).
+  useQuery("memory:for-branch", { branchId: branchId!, includeSuperseded: true }, { enabled: !!branchId });
 
 export const useContextStats = (branchId: string | undefined) =>
   useQuery("context:stats", { branchId: branchId! }, { enabled: !!branchId });
@@ -226,6 +228,20 @@ export function useMCPChangedListener(): void {
 export function useSkillsChangedListener(): void {
   useEffect(() => {
     const off = window.ipc.on("skills:changed", () => {
+      invalidateQueries();
+    });
+    return off;
+  }, []);
+}
+
+/**
+ * Subscribes once (mount in App.tsx) to "memory:changed" — pushed when memory
+ * relationship detection supersedes/links facts after a turn — and refetches
+ * so the right panel shows the evolution live.
+ */
+export function useMemoryChangedListener(): void {
+  useEffect(() => {
+    const off = window.ipc.on("memory:changed", () => {
       invalidateQueries();
     });
     return off;

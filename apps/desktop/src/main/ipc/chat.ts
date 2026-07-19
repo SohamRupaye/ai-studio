@@ -17,6 +17,7 @@ import {
   nodeCounter, dataDirPath, currentProjectId, setCurrentProjectId, memoryScope, routerFor,
 } from "../state.js";
 import { cancelPendingApprovals, finishApproval, setApprovalTurnBranch } from "../approvals.js";
+import { detectMemoryRelationships } from "../memory-detect.js";
 
 /** AbortController tagged with why it was aborted, so a superseded request
  * can tell the renderer (an explicit user Stop already handles its own UI). */
@@ -140,6 +141,9 @@ export async function executeTurn({ branchId, message, images, controller }: {
     return;
   }
 
+  // Facts added during this turn (createdAt >= this) get relationship
+  // detection run over them once the turn completes.
+  const turnStartMs = Date.now();
   store.addMessage(branchId, "user", message, undefined, undefined, images);
   // Turn number of the user message this invocation is answering — threaded
   // through every error event below so the renderer can mark specifically
@@ -148,6 +152,10 @@ export async function executeTurn({ branchId, message, images, controller }: {
 
   // Track the project this branch belongs to, for scoping memories.
   setCurrentProjectId(branch.chatId ? (store.getChat(branch.chatId)?.projectId ?? "") : "");
+
+  // Expire time-bound episodes before assembling context, so a just-passed
+  // "meeting at 3pm today" never reaches the model this turn.
+  globalMem.sweepExpired();
 
   const payload = await buildPayload(store, branch, graph, globalMem, message, {
     nativePdf: supportsPdfInput(model),
@@ -364,9 +372,15 @@ export async function executeTurn({ branchId, message, images, controller }: {
             (event.result as any).toolCalls.some((tc: any) => tc.name === "remember");
           if (!calledRemember) {
             const fact = extractMemoryFact(message);
-            if (fact) globalMem.add(fact, memoryScope());
+            if (fact) globalMem.addWithStatus(fact, memoryScope(), branchId);
           }
         } catch { /* non-fatal */ }
+
+        // Living memory: automatically detect how facts added this turn relate
+        // to existing ones (updates → supersede, extends → link). Fire-and-forget
+        // on the org router, like the classifier; degrades to relates-only.
+        detectMemoryRelationships(chatRouter, model, memoryScope(), turnStartMs, branchId)
+          .catch((e) => console.error("[memory-detect]", e?.message ?? e));
 
         // Auto-extract artifacts
         if (branch.chatId) {

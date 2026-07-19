@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useTheme } from "./hooks/use-theme";
-import { useChatTitledListener, useMCPChangedListener, useModelsRefreshListener, useNotifyActivatedListener, useSkillsChangedListener } from "./hooks/use-ipc-data";
+import { useChatTitledListener, useMCPChangedListener, useMemoryChangedListener, useModelsRefreshListener, useNotifyActivatedListener, useSkillsChangedListener } from "./hooks/use-ipc-data";
 import { AuthProvider } from "./components/auth-provider";
 import { WorkspaceProvider } from "./components/workspace-provider";
 import { UiPrefsProvider } from "./components/ui-prefs";
@@ -35,6 +35,7 @@ export default function App() {
   useChatTitledListener();
   useMCPChangedListener();
   useSkillsChangedListener();
+  useMemoryChangedListener();
   useNotifyActivatedListener();
 
   const applied =

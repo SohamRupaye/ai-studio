@@ -50,6 +50,8 @@ export function GeneralSettings() {
 
       <ToolPermissionsSection />
 
+      <MemorySection />
+
       <LocalBrowserSection />
 
       <SettingsSection
@@ -87,6 +89,40 @@ export function GeneralSettings() {
         servers.
       </p>
     </>
+  );
+}
+
+/**
+ * Living-memory inference toggle. Off by default — inferred facts are a
+ * lower-confidence, quarantined memory type (labeled "inferred", never
+ * override a stated fact). Supersession/enrichment/forgetting all work
+ * without this; it only enables the model deriving new facts from patterns.
+ */
+function MemorySection() {
+  const { data: cfg } = useQuery("config:get", undefined);
+  const setCfg = useMutation("config:set");
+  const enabled = Boolean(cfg?.memoryInference);
+
+  return (
+    <SettingsSection title="Memory">
+      <div className="mt-2 divide-y divide-line">
+        <FieldRow
+          label="Infer new facts"
+          hint="Let Squirl derive likely facts from patterns across your memories. Inferences are marked and never replace things you actually told it. Off by default."
+          htmlFor="memory-inference"
+        >
+          <Switch
+            id="memory-inference"
+            checked={enabled}
+            onCheckedChange={(v) =>
+              setCfg
+                .mutate({ memoryInference: v })
+                .catch(() => toast.error("Couldn't update the memory setting"))
+            }
+          />
+        </FieldRow>
+      </div>
+    </SettingsSection>
   );
 }
 

@@ -103,6 +103,9 @@ async function initRuntime() {
   refreshModelsInBackground(router);
   setGraph(new MetaGraph(join(dataDir, "graphs")));
   setGlobalMem(new GlobalMemory(dataDir));
+  // Forget episodes that expired while the app was closed (soft — they become
+  // history, not deleted). Per-turn sweeps in executeTurn keep it fresh live.
+  globalMem.sweepExpired();
   setCostTracker(new CostTracker());
   setPermissions(new PermissionStore(dataDir));
   setPersonas(new PersonaRegistry([dataDir]));
@@ -150,37 +153,56 @@ async function initRuntime() {
     {
       name: "remember",
       description:
-        "Persist a durable fact about the user to long-term memory so it is available in every future conversation. Call this when the user explicitly asks you to remember, save, note, or store something, or states a clearly durable fact about themselves (stable preferences, standing constraints, personal details). Do NOT store transient details of the current task — those live in the conversation. Phrase the fact as a standalone statement.",
+        "Persist a durable fact about the user to long-term memory so it is available in every future conversation. Call this when the user explicitly asks you to remember, save, note, or store something, or states a clearly durable fact about themselves (stable preferences, standing constraints, personal details). Do NOT store transient details of the current task — those live in the conversation. Phrase the fact as a standalone statement.\n\nIf this fact CHANGES or replaces one you already remember (memories are shown with a #id, e.g. \"(#12) works at Google\"), pass that id as `supersedes` — the old fact becomes history and stops being shown, so you never carry contradictory facts. Use this for genuine updates (job change, moved city, changed preference), NOT for merely related facts.\n\nSet `type`: \"fact\" (default, persists), \"preference\" (a taste/habit — strengthens if restated), or \"episode\" (a time-bound event like an appointment or deadline; for episodes set `expiresInHours` so it's forgotten once it's past).",
       parameters: {
         type: "object",
         properties: {
           text: { type: "string", description: "The fact to remember, as a standalone statement." },
+          supersedes: { type: "number", description: "Optional #id of an existing memory this fact replaces/updates." },
+          type: { type: "string", enum: ["fact", "preference", "episode"], description: "Memory kind (default fact)." },
+          expiresInHours: { type: "number", description: "For episodes: forget this fact this many hours from now." },
         },
         required: ["text"],
       },
     },
-    async (args: Record<string, unknown>) => {
+    (async (args: Record<string, unknown>, ctx: { sessionId?: string }) => {
       const text = String(args["text"] ?? "").trim();
       if (!text) return "No fact provided to remember.";
-      const { fact, added } = globalMem.addWithStatus(text, memoryScope());
+      const branch = ctx?.sessionId && ctx.sessionId !== "sub" ? ctx.sessionId : undefined;
+      const type = ["fact", "preference", "episode"].includes(String(args["type"]))
+        ? (args["type"] as "fact" | "preference" | "episode") : "fact";
+      const hours = typeof args["expiresInHours"] === "number" ? (args["expiresInHours"] as number) : undefined;
+      const expiresAt = type === "episode" && hours && hours > 0 ? Date.now() + hours * 3_600_000 : undefined;
+      const { fact, added } = globalMem.addWithStatus(text, memoryScope(), branch, { type, expiresAt });
       const where = currentProjectId ? "this project's memory" : "long-term memory";
-      if (!added) return `Already remembered (id=${fact.id}): "${fact.text}" — not saved again.`;
-      return `✅ Saved to ${where} (id=${fact.id}): "${fact.text}"`;
-    },
+      let note = added
+        ? `✅ Saved to ${where} (#${fact.id}, ${type}): "${fact.text}"${expiresAt ? ` — expires ${new Date(expiresAt).toLocaleString()}` : ""}`
+        : fact.type === "preference"
+          ? `Reinforced existing preference (#${fact.id}): "${fact.text}".`
+          : `Already remembered (#${fact.id}): "${fact.text}" — not saved again.`;
+      // Supersession: the new fact replaces an old one, which becomes history.
+      const supersedes = typeof args["supersedes"] === "number" ? (args["supersedes"] as number) : undefined;
+      if (supersedes !== undefined && supersedes !== fact.id) {
+        if (globalMem.supersede(supersedes, fact.id, branch)) {
+          note += ` (replaces #${supersedes}, now archived as history)`;
+        }
+      }
+      return note;
+    }) as any,
   );
 
   registry.register(
     {
       name: "recall_memories",
       description:
-        "List all durable facts stored about the user in long-term memory. Use this when the user asks what you remember or know about them.",
+        "List all durable facts stored about the user in long-term memory (with their #id). Use this when the user asks what you remember, or when you need a fact's id to supersede it.",
       parameters: { type: "object", properties: {}, required: [] },
     },
     async () => {
       const scope = memoryScope();
       const facts = globalMem.list().filter((f) => f.scope === "global" || f.scope === scope);
       if (!facts.length) return "No long-term memories stored yet.";
-      return "Long-term memories:\n" + facts.map((f) => `• ${f.text}`).join("\n");
+      return "Long-term memories:\n" + facts.map((f) => `• (#${f.id}) ${f.text}`).join("\n");
     },
   );
 

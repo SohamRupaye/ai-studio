@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { TrashIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon, TrashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { MemoryFact, SelectableArtifact } from "@squirl/event-bus";
 import {
@@ -107,7 +107,7 @@ export function RightPanel({ branchId }: { branchId: string }) {
 
       <Separator />
 
-      <Section title="Memories" summary={`${memories.data?.length ?? 0}`}>
+      <Section title="Memories" summary={`${(memories.data ?? []).filter((f) => f.status === undefined || f.status === "active").length}`}>
         {memories.error ? (
           <ErrorNote label="Couldn't load memories" onRetry={memories.refetch} />
         ) : !memories.data?.length ? (
@@ -374,6 +374,7 @@ const SCOPE_ORDER: Array<[string, (scope: string) => boolean]> = [
 
 function MemoriesView({ facts, onRemoved }: { facts: MemoryFact[]; onRemoved: () => void }) {
   const removeMemory = useMutation("memory:remove");
+  const restoreMemory = useMutation("memory:restore");
 
   const remove = async (id: number) => {
     try {
@@ -384,10 +385,24 @@ function MemoriesView({ facts, onRemoved }: { facts: MemoryFact[]; onRemoved: ()
     }
   };
 
+  const restore = async (id: number) => {
+    try {
+      await restoreMemory.mutate({ id });
+      onRemoved();
+    } catch {
+      toast.error("Couldn't restore that memory");
+    }
+  };
+
+  const active = facts.filter((f) => f.status === undefined || f.status === "active");
+  // History — the model no longer sees these, but they're kept and shown so
+  // supersession/expiry is visible and reversible (git-for-facts).
+  const history = facts.filter((f) => f.status === "superseded" || f.status === "expired");
+
   return (
     <div className="space-y-3">
       {SCOPE_ORDER.map(([label, match]) => {
-        const group = facts.filter((f) => match(f.scope));
+        const group = active.filter((f) => match(f.scope));
         if (!group.length) return null;
         return (
           <div key={label}>
@@ -396,6 +411,7 @@ function MemoriesView({ facts, onRemoved }: { facts: MemoryFact[]; onRemoved: ()
               {group.map((f) => (
                 <li key={f.id} className="group/memory flex items-start gap-2">
                   <span className="min-w-0 flex-1 text-body-sm leading-relaxed text-fg-muted [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                    <MemoryTypeBadge type={f.type} />
                     {f.text}
                   </span>
                   <button
@@ -412,7 +428,43 @@ function MemoriesView({ facts, onRemoved }: { facts: MemoryFact[]; onRemoved: ()
           </div>
         );
       })}
+
+      {history.length > 0 && (
+        <div>
+          <p className="pb-1 text-label-sm text-fg-subtle">History</p>
+          <ul className="space-y-1.5">
+            {history.map((f) => (
+              <li key={f.id} className="group/memory flex items-start gap-2">
+                <span className="min-w-0 flex-1 text-body-sm leading-relaxed text-fg-subtle line-through [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">
+                  <span className="mr-1 no-underline">{f.status === "expired" ? "⏱" : "↑"}</span>
+                  {f.text}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Restore memory"
+                  title="Restore — the model will see this fact again"
+                  onClick={() => restore(f.id)}
+                  className="pressable mt-0.5 shrink-0 rounded-sm p-0.5 text-fg-subtle opacity-0 hover:text-fg focus-visible:opacity-100 group-hover/memory:opacity-100"
+                >
+                  <ArrowCounterClockwiseIcon size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Small tone tag for non-plain memory kinds (facts get none). */
+function MemoryTypeBadge({ type }: { type?: MemoryFact["type"] }) {
+  if (!type || type === "fact") return null;
+  const label = type === "preference" ? "pref" : type === "episode" ? "episode" : "inferred";
+  return (
+    <span className="mr-1.5 rounded-xs bg-surface-2 px-1 py-px align-middle font-mono text-[10px] uppercase tracking-wide text-fg-subtle">
+      {label}
+    </span>
   );
 }
 

@@ -8,6 +8,7 @@ export { runAgentCooperative } from "./worker.js";
 export { CostTracker } from "./costs.js";
 export { detectImages, encodeImage, buildMultimodalContent, stripImagePaths } from "./images.js";
 export { classifyAndIndex, loadPending, resumeQueue, loadNodeCounter } from "./classifier.js";
+export { zeroShotClassify } from "./local-nli.js";
 export type { ClassifierResult } from "./classifier.js";
 export { detectArtifacts, extractAndPersistArtifacts } from "./artifacts.js";
 export { PersonaRegistry } from "./personas.js";

@@ -8,13 +8,25 @@ export function registerMemoryHandlers() {
   handle("memory:list", ({ scope }) => globalMem.list(scope as any));
   handle("memory:add", ({ text, scope }) => globalMem.add(text, scope as any));
   handle("memory:remove", ({ id }) => globalMem.remove(id));
+  handle("memory:restore", ({ id }) => globalMem.restore(id));
   // The exact fact set prompt assembly resolves for this branch — the right
-  // panel shows memories the way the model receives them.
-  handle("memory:for-branch", ({ branchId }) => {
+  // panel shows memories the way the model receives them. includeSuperseded
+  // adds the history (superseded facts) so the panel can show what changed.
+  handle("memory:for-branch", ({ branchId, includeSuperseded }) => {
     const branch = store.getBranch(branchId);
     if (!branch) return [];
     const chat = branch.chatId ? store.getChat(branch.chatId) : undefined;
-    return globalMem.forBranch(branchId, branch.chatId, chat?.projectId);
+    // Branch ancestry (this branch + all parents) so supersession status is
+    // reported relative to THIS branch: a fact superseded on a sibling fork
+    // reads active here, matching what the model actually sees.
+    const ancestry = new Set<string>();
+    for (let b: typeof branch | undefined = branch; b; b = b.parentId ? store.getBranch(b.parentId) : undefined) {
+      if (ancestry.has(b.id)) break;
+      ancestry.add(b.id);
+    }
+    return globalMem
+      .forBranch(branchId, branch.chatId, chat?.projectId, { includeSuperseded, ancestry })
+      .map((f) => ({ ...f, status: globalMem.branchStatus(f, ancestry) }));
   });
 
   // ── Context inspector (right panel) ─────────────────────────────────────────

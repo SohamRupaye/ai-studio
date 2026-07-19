@@ -2,11 +2,28 @@ import type { Automation, Branch, Organisation, Project, Space, Chat, MessageIma
 
 // ── Types used in IPC (defined here to avoid circular deps) ──────────────────
 
+export interface MemoryEdge {
+  to: number;
+  type: "updates" | "extends" | "relates" | "derives";
+  weight?: number;
+}
+
 export interface MemoryFact {
   id: number;
   text: string;
   scope: string;
   createdAt: number;
+  // Living-memory lifecycle (mirror of the @squirl/database shape for IPC).
+  type?: "fact" | "preference" | "episode" | "derived";
+  status?: "active" | "superseded" | "expired" | "archived";
+  supersededById?: number;
+  supersededAt?: number;
+  supersededOnBranch?: string;
+  originBranch?: string;
+  reinforceCount?: number;
+  lastSeenAt?: number;
+  expiresAt?: number;
+  edges?: MemoryEdge[];
 }
 
 export interface BranchDiff {
@@ -330,8 +347,12 @@ export interface IpcInvokeMap {
   "memory:list": [{ scope?: string }, MemoryFact[]];
   "memory:add": [{ text: string; scope: string }, MemoryFact];
   "memory:remove": [{ id: number }, boolean];
-  /** The exact fact set feeding this branch's prompt (same resolution as prompt assembly). */
-  "memory:for-branch": [{ branchId: string }, MemoryFact[]];
+  /** Bring a superseded fact back into the working set (undo a supersession). */
+  "memory:restore": [{ id: number }, boolean];
+  /** The exact fact set feeding this branch's prompt (same resolution as prompt
+   * assembly, active-only). With includeSuperseded, also returns superseded
+   * facts so the panel can show history. */
+  "memory:for-branch": [{ branchId: string; includeSuperseded?: boolean }, MemoryFact[]];
 
   // Context inspector (right panel)
   /** Last-turn context stats for a branch; null until a turn has run. */
@@ -493,6 +514,9 @@ export interface IpcEventMap {
   /** Pushed when an automation fires, is created/toggled/deleted, or
    * auto-disables (target branch gone) — listeners refetch automation:list. */
   "automations:changed": void;
+  /** Pushed when memory relationship detection supersedes/links facts after a
+   * turn — the right panel refetches so evolution shows without a reopen. */
+  "memory:changed": void;
   /** Pushed when the user clicks a native notification, so the renderer can
    * bring the originating chat into view. */
   "notify:activated": { branchId?: string; chatId?: string };

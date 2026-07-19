@@ -97,6 +97,10 @@ export interface Config {
    * the user's own profile). Off by default — it drives a real browser and
    * can act on logged-in sessions, so it stays dark until explicitly enabled. */
   browserToolEnabled: boolean;
+  /** Opt-in: let memory detection generate INFERRED facts (derives). Off by
+   * default — inferences stored as memory are a correctness risk (see
+   * context/memory-graph-redesign.md); they're labeled and never supersede. */
+  memoryInference: boolean;
   context: { hotWindow: number; hotTokenBudget: number; summaryEvery: number };
   classifier: { enabled: boolean };
   mcpServers: MCPServerConfigEntry[];
@@ -175,6 +179,7 @@ export function loadConfig(configPath?: string): Config {
     },
     classifier: { enabled: raw.classifier?.enabled !== false },
     browserToolEnabled: raw.browser_tool_enabled === true,
+    memoryInference: raw.memory_inference === true,
     mcpServers: Array.isArray(raw.mcp_servers)
       ? raw.mcp_servers.map((s: any) => ({ type: "stdio", ...s }))
       : [],
@@ -212,6 +217,7 @@ export function saveConfig(patch: {
   /** Whole-list replacement of the disabled-skill names; empty array clears it. */
   disabledSkills?: string[];
   browserToolEnabled?: boolean;
+  memoryInference?: boolean;
 }): Config {
   const path = _configPath || join(process.cwd(), "config.yaml");
   _configPath = path;
@@ -254,6 +260,11 @@ export function saveConfig(patch: {
   if (patch.browserToolEnabled !== undefined) {
     if (patch.browserToolEnabled) raw.browser_tool_enabled = true;
     else delete raw.browser_tool_enabled;
+  }
+
+  if (patch.memoryInference !== undefined) {
+    if (patch.memoryInference) raw.memory_inference = true;
+    else delete raw.memory_inference;
   }
 
   if (patch.apiKeys) {

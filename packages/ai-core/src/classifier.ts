@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Router } from "@squirl/providers";
 import type { MetaGraph } from "@squirl/graph-engine";
 import { getConfig } from "@squirl/providers";
+import { zeroShotClassify } from "./local-nli.js";
 
 export interface ClassifierResult {
   significant: boolean;
@@ -48,8 +49,6 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryDelay = 2000;
 let queuePath = "";
 let enrichPath = "";
-let localPipeline: any = null;
-let localModelFailed = false;
 let _nodeCounterRef: { current: number } | null = null;
 let _dataDir = "";
 
@@ -99,15 +98,10 @@ export function loadPending(dataDir?: string): PendingTurn[] {
 const SIGNIFICANCE_LABELS = ["significant decision", "trivial chatter"];
 
 async function classifyLocal(userMsg: string, assistantMsg: string): Promise<ClassifierResult> {
-  if (localModelFailed) throw new Error("local model unavailable");
-  if (!localPipeline) {
-    const { pipeline } = await import("@huggingface/transformers");
-    localPipeline = await pipeline("zero-shot-classification", "Xenova/mobilebert-uncased-mnli", { dtype: "fp32" });
-  }
   const text = `User: ${userMsg}\nAssistant: ${assistantMsg.slice(0, 300)}`;
-  const result = await localPipeline(text, SIGNIFICANCE_LABELS);
-  const topLabel = result.labels[0];
-  if (topLabel === "significant decision" && result.scores[0] > 0.6) {
+  const result = await zeroShotClassify(text, SIGNIFICANCE_LABELS);
+  if (!result) throw new Error("local model unavailable");
+  if (result.labels[0] === "significant decision" && result.scores[0]! > 0.6) {
     return { significant: true, topic: "unknown", intent: userMsg.slice(0, 80) };
   }
   return { significant: false };
@@ -185,7 +179,6 @@ async function drainQueue(router: Router, graph: MetaGraph, nodeCounter: { curre
           result = await classifyLocal(turn.userMsg, turn.assistantMsg);
           usedLocal = true;
         } catch {
-          localModelFailed = true;
           throw new Error("both failed");
         }
       }
