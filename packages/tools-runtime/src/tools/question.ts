@@ -3,8 +3,9 @@ import type { ToolHandler } from "../registry.js";
 
 export const questionDef: ToolDefinition = {
   name: "question",
-  description: "Ask the user a question for clarification or confirmation before proceeding.",
-  parameters: { type: "object", properties: { text: { type: "string", description: "The question to ask" }, options: { type: "string", description: "Comma-separated options (optional)" } }, required: ["text"] },
+  description:
+    "Ask the user a clarifying question and pause until they answer. Provide options when the choices are known — the user picks from them in the UI. Use only when you genuinely cannot proceed without the answer.",
+  parameters: { type: "object", properties: { text: { type: "string", description: "The question to ask" }, options: { type: "string", description: "Comma-separated options the user can pick from (optional)" } }, required: ["text"] },
 };
 
 let _askCallback: ((text: string, options: string) => Promise<string>) | null = null;

@@ -15,7 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { getMCPManager } from "@squirl/tools-runtime";
-import { toolCallSummary } from "@squirl/shared";
+import { toolCallSalient, humanizeToolAction, humanizeServerName } from "@squirl/shared";
 import { mainWindow, permissions, activeBranchId } from "./state.js";
 
 const APPROVAL_TIMEOUT_MS = 5 * 60_000;
@@ -43,20 +43,29 @@ export function setApprovalTurnBranch(branchId: string | null) {
   turnBranchId = branchId;
 }
 
-/** namespacedName → raw MCP tool name, or null if not an MCP tool.
+/** namespacedName → {server, raw MCP tool name}, or null if not an MCP tool.
  * Scanned live because servers connect/disconnect at runtime. */
-function mcpRawName(toolId: string): string | null {
+function mcpToolInfo(toolId: string): { server: string; raw: string } | null {
   for (const t of getMCPManager().getAllTools()) {
-    if (t.namespacedName === toolId) return t.name;
+    if (t.namespacedName === toolId) return { server: t.server, raw: t.name };
   }
   return null;
 }
 
 /** Does this tool call need user approval (before any always-allow rules)? */
 export function needsApproval(toolId: string): boolean {
-  const raw = mcpRawName(toolId);
-  if (raw === null) return false;
-  return !READ_VERBS.test(raw);
+  const info = mcpToolInfo(toolId);
+  if (info === null) return false;
+  return !READ_VERBS.test(info.raw);
+}
+
+/** The card's one human sentence: "Allow Notion to create pages?" — the
+ * trust decision in prose, never the namespaced id + JSON it used to be. */
+function approvalTitle(toolId: string): string {
+  const info = mcpToolInfo(toolId);
+  if (info) return `Allow ${humanizeServerName(info.server)} to ${humanizeToolAction(info.raw, info.server)}?`;
+  if (toolId === "bash") return "Run this command?";
+  return `Allow ${humanizeToolAction(toolId)}?`;
 }
 
 /**
@@ -78,8 +87,8 @@ export async function requestApproval(input: { name: string; args: unknown; bran
       type: "approval_request",
       branchId,
       id,
-      name: input.name,
-      summary: toolCallSummary(input.name, (input.args ?? {}) as Record<string, unknown>),
+      title: approvalTitle(input.name),
+      detail: toolCallSalient(input.name, (input.args ?? {}) as Record<string, unknown>),
     });
   });
 }

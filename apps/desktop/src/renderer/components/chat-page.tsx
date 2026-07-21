@@ -59,6 +59,8 @@ import {
 } from "./chat/message-parts";
 import { ApprovalCard } from "./chat/approval-card";
 import type { PendingApproval } from "./chat/approval-card";
+import { QuestionExchange, QuestionPanel, questionCallText } from "./chat/question-panel";
+import type { PendingQuestion } from "./chat/question-panel";
 import { SubagentDetailDrawer } from "./chat/subagents";
 import { ToolActivity, attachLiveAgents } from "./chat/tool-activity";
 import type { SubagentRun, ToolCallState } from "./chat/types";
@@ -132,6 +134,8 @@ export function ChatPage() {
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
   // A side-effecting tool call waiting on the user (main blocks the turn).
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
+  const [questionIndex, setQuestionIndex] = useState(0);
   // The just-sent user message, shown immediately — chat:send's IPC reply
   // doesn't resolve until the whole turn (including the assistant's reply)
   // finishes, so waiting for a real refetch would leave the user's own
@@ -254,15 +258,21 @@ export function ChatPage() {
           return { ...s, toolCalls };
         });
       } else if (event.type === "approval_request") {
-        setPendingApproval({ id: event.id, name: event.name, summary: event.summary });
+        setPendingApproval({ id: event.id, title: event.title, detail: event.detail });
       } else if (event.type === "approval_resolved") {
         // Fires on every resolution path (decision, timeout, abort).
         setPendingApproval((p) => (p && p.id === event.id ? null : p));
+      } else if (event.type === "question_request") {
+        setPendingQuestion({ id: event.id, text: event.text, options: event.options });
+      } else if (event.type === "question_resolved") {
+        // Fires on every resolution path (answer, skip, timeout, abort).
+        setPendingQuestion((q) => (q && q.id === event.id ? null : q));
       } else if (event.type === "done") {
         // done carries the authoritative full text — drop anything buffered.
         textBufRef.current = "";
         thinkingBufRef.current = "";
         setPendingApproval(null);
+        setPendingQuestion(null);
         if (flushFrameRef.current !== null) {
           cancelAnimationFrame(flushFrameRef.current);
           flushFrameRef.current = null;
@@ -282,6 +292,7 @@ export function ChatPage() {
         invalidateQueries();
       } else if (event.type === "error") {
         setPendingApproval(null);
+        setPendingQuestion(null);
         setErrorState({
           turn: event.turn ?? -1,
           message: event.message,
@@ -328,7 +339,28 @@ export function ChatPage() {
     }
   };
 
+  // Answer the question tool through the composer surface — picked option,
+  // typed reply, or skip all resolve the same pending tool call in main.
+  const answerQuestion = (id: string, answer: string) => {
+    // The question_resolved stream event clears the panel — no local unmount.
+    window.ipc
+      .invoke("chat:question-answer", { id, answer })
+      .catch(() => toast.error("Couldn't send the answer"));
+  };
+  const skipQuestion = (id: string) =>
+    answerQuestion(id, "(The user skipped the question — proceed with your best judgment.)");
+
   const submitDraft = (value: string) => {
+    // A pending question owns the composer: the draft is the free-text
+    // answer ("Or reply directly…"), not a new chat message — sending a new
+    // message here would abort the very turn that's asking.
+    if (pendingQuestion) {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      setDraft("");
+      answerQuestion(pendingQuestion.id, trimmed);
+      return;
+    }
     setDraft("");
     setSkillPickerOpen(false);
     setSlashDismissed(false);
@@ -452,6 +484,15 @@ export function ChatPage() {
     setSlashIndex(0);
   }, [slashToken, skillPickerOpen]);
 
+  // A new question resets the highlight and pulls focus into the composer so
+  // ↑/↓/Enter/typing answer it without a click.
+  const pendingQuestionId = pendingQuestion?.id;
+  useEffect(() => {
+    if (!pendingQuestionId) return;
+    setQuestionIndex(0);
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  }, [pendingQuestionId]);
+
   if (branches && !branch) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -542,6 +583,40 @@ export function ChatPage() {
   };
 
   const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Question panel drives first (it can't co-occur with the slash popup —
+    // that one is gated on !sending). Keys act on the panel only while the
+    // draft is empty enough that they can't be part of a typed answer.
+    if (pendingQuestion && pendingQuestion.options.length > 0) {
+      const opts = pendingQuestion.options;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setQuestionIndex((i) => (i + 1) % opts.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setQuestionIndex((i) => (i - 1 + opts.length) % opts.length);
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey && draft.trim() === "") {
+        e.preventDefault();
+        answerQuestion(pendingQuestion.id, opts[Math.min(questionIndex, opts.length - 1)]!);
+        return;
+      }
+      if (draft === "" && /^[1-9]$/.test(e.key)) {
+        const idx = Number(e.key) - 1;
+        if (idx < opts.length) {
+          e.preventDefault();
+          answerQuestion(pendingQuestion.id, opts[idx]!);
+          return;
+        }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skipQuestion(pendingQuestion.id);
+        return;
+      }
+    }
     if (!slashOpen) return;
     if (skillOptions.length > 0) {
       if (e.key === "ArrowDown") {
@@ -628,6 +703,17 @@ export function ChatPage() {
   const composer = (
     <div className="relative flex w-full flex-col gap-2">
       {slashPopup}
+      {pendingQuestion && (
+        <QuestionPanel
+          key={pendingQuestion.id}
+          question={pendingQuestion}
+          highlightIndex={questionIndex}
+          onHighlight={setQuestionIndex}
+          onPick={(opt) => answerQuestion(pendingQuestion.id, opt)}
+          onSkip={() => skipQuestion(pendingQuestion.id)}
+          onFreeText={() => composerInputRef.current?.focus()}
+        />
+      )}
       {imageChips}
     <Composer
       className="w-full"
@@ -641,9 +727,13 @@ export function ChatPage() {
       onKeyDown={handleComposerKeyDown}
       onSubmit={submitDraft}
       onPaste={handlePaste}
-      disabled={sending}
+      // A pending question re-enables the composer mid-turn — it's the
+      // free-text answer path while the turn is blocked on the tool call.
+      disabled={sending && !pendingQuestion}
       textareaRef={composerInputRef}
-      placeholder={editingTurn !== null ? "Edit message…" : "Ask anything…"}
+      placeholder={
+        pendingQuestion ? "Or reply directly…" : editingTurn !== null ? "Edit message…" : "Ask anything…"
+      }
       leading={
         <Menu>
           <MenuTrigger render={<ComposerButton aria-label="Attach" />}>
@@ -678,6 +768,11 @@ export function ChatPage() {
         </Menu>
       }
     />
+      {pendingQuestion && pendingQuestion.options.length > 0 && (
+        <p className="text-center text-label-sm text-fg-subtle">
+          ↑↓ to navigate · Enter to select · or type below
+        </p>
+      )}
     </div>
   );
 
@@ -711,13 +806,18 @@ export function ChatPage() {
                 // Divider where inherited ancestry ends and this branch's own
                 // conversation begins.
                 const forkPoint = m.inherited && !turns[i + 1]?.inherited;
+                // question calls render as conversation content (the Q&A
+                // exchange block), not as tool rows — split them out.
+                const toolCalls = m.role === "assistant" ? (m.toolCalls ?? []) : [];
+                const questionCalls = toolCalls.filter((tc) => tc.name === "question");
+                const activityCalls = toolCalls.filter((tc) => tc.name !== "question");
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id}>
                     <Message role={m.role as "user" | "assistant"}>
                       {m.role === "assistant" && m.thinking && <ThinkingBlock text={m.thinking} />}
-                      {m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0 && (
+                      {activityCalls.length > 0 && (
                         <ToolActivity
-                          calls={m.toolCalls!.map((tc) => ({
+                          calls={activityCalls.map((tc) => ({
                             name: tc.name,
                             status: tc.success ? "done" : "error",
                             // Rows persisted before summaries existed fall
@@ -732,6 +832,13 @@ export function ChatPage() {
                           onAgentClick={setAgentDetail}
                         />
                       )}
+                      {questionCalls.map((tc, qi) => (
+                        <QuestionExchange
+                          key={qi}
+                          question={questionCallText(tc)}
+                          answer={tc.result ?? tc.resultPreview ?? ""}
+                        />
+                      ))}
                       {m.images?.length ? (
                         <MessageImages images={m.images} onOpen={setViewerImage} />
                       ) : null}
@@ -871,12 +978,26 @@ export function ChatPage() {
                         live={!streaming.text}
                       />
                     )}
-                    {streaming.toolCalls.length > 0 && (
+                    {streaming.toolCalls.some((tc) => tc.name !== "question") && (
                       <ToolActivity
-                        calls={attachLiveAgents(streaming.toolCalls, streaming.subagentRuns)}
+                        calls={attachLiveAgents(
+                          streaming.toolCalls.filter((tc) => tc.name !== "question"),
+                          streaming.subagentRuns,
+                        )}
                         onAgentClick={setAgentDetail}
                       />
                     )}
+                    {streaming.toolCalls
+                      // Answered questions become exchange blocks live; a
+                      // pending one is represented by the panel below.
+                      .filter((tc) => tc.name === "question" && tc.result)
+                      .map((tc, qi) => (
+                        <QuestionExchange
+                          key={qi}
+                          question={questionCallText(tc)}
+                          answer={tc.result!}
+                        />
+                      ))}
                     {streaming.text ? (
                       <MessageContent>
                         <Markdown text={streaming.text} />

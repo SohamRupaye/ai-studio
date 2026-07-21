@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   toolCallSummary,
+  toolCallSalient,
   toolCallArgsDetail,
   toolCallResultDetail,
+  humanizeToolAction,
+  humanizeServerName,
   clipText,
   TOOL_SUMMARY_MAX,
   TOOL_ARGS_MAX,
@@ -40,6 +43,53 @@ describe("toolCallSummary", () => {
     const s = toolCallSummary("bash", { command: "x".repeat(500) })!;
     expect(s.length).toBe(TOOL_SUMMARY_MAX + 1); // +1 for the ellipsis
     expect(s.endsWith("…")).toBe(true);
+  });
+});
+
+describe("toolCallSalient", () => {
+  it("returns the salient arg like toolCallSummary", () => {
+    expect(toolCallSalient("bash", { command: "rm -rf build", cwd: "/x" })).toBe("rm -rf build");
+    expect(toolCallSalient("notion_notion-search", { query: "projects" })).toBe("projects");
+  });
+
+  it("finds preferred keys in nested args (the create-pages shape)", () => {
+    const args = {
+      pages: [{ properties: { title: "Demo Test Page" }, content: "# Demo Test Page\nbody" }],
+    };
+    // title outranks content even though content sits shallower in the tree
+    expect(toolCallSalient("notion_notion-create-pages", args)).toBe("Demo Test Page");
+  });
+
+  it("never falls back to JSON", () => {
+    expect(toolCallSalient("todo_write", { items: [1, 2] })).toBeUndefined();
+    expect(toolCallSalient("bash", {})).toBeUndefined();
+  });
+
+  it("stops at the depth cap", () => {
+    const deep = { a: { b: { c: { d: { title: "too deep" } } } } };
+    expect(toolCallSalient("x", deep)).toBeUndefined();
+  });
+});
+
+describe("humanizeToolAction / humanizeServerName", () => {
+  it("strips the server prefix and splits dashes", () => {
+    expect(humanizeToolAction("notion-create-pages", "notion")).toBe("create pages");
+    expect(humanizeToolAction("notion-fetch", "notion")).toBe("fetch");
+  });
+
+  it("handles underscores and camelCase, with or without a server", () => {
+    expect(humanizeToolAction("create_issue", "linear")).toBe("create issue");
+    expect(humanizeToolAction("createPage")).toBe("create page");
+    expect(humanizeToolAction("web_fetch")).toBe("web fetch");
+  });
+
+  it("leaves names without the prefix intact", () => {
+    expect(humanizeToolAction("update-page", "notion")).toBe("update page");
+  });
+
+  it("title-cases server ids", () => {
+    expect(humanizeServerName("notion")).toBe("Notion");
+    expect(humanizeServerName("google-drive")).toBe("Google Drive");
   });
 });
 

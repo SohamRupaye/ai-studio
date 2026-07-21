@@ -15,6 +15,13 @@ export interface SubagentRunMeta {
   agentId: string;
   /** Hard cap on the run — the runner aborts and fails the task past this. */
   timeoutMs?: number;
+  /** Stopping the turn (Stop button / a superseding message) also cancels
+   * this task immediately, instead of leaving it running until its own
+   * timeout. True for parallel `subagent` calls (they block the turn — the
+   * user is staring at "Stop" the whole time). Deliberately NOT set for
+   * `delegate` — background jobs are fire-and-forget by design and must
+   * keep running after the turn that started them ends. */
+  cascadeParentAbort?: boolean;
 }
 
 // Parallel subagents block the turn — keep them tight. Background delegate
@@ -105,7 +112,7 @@ export const subagent: ToolHandler = async (args) => {
       t.model || _defaultModel,
       t.system_prompt || "",
       t.tools,
-      { runId, agentId: t.id || `task-${i + 1}`, timeoutMs: SUBAGENT_TIMEOUT_MS },
+      { runId, agentId: t.id || `task-${i + 1}`, timeoutMs: SUBAGENT_TIMEOUT_MS, cascadeParentAbort: true },
     ))
   );
 

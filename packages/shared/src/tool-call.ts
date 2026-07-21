@@ -31,6 +31,12 @@ const SALIENT_ARG: Record<string, string> = {
   subagent: "task",
   delegate: "task",
   think: "reasoning",
+  browser_open: "url",
+  browser_click: "selector",
+  browser_fill: "selector",
+  browser_press: "key",
+  browser_scroll: "direction",
+  browser_text: "selector",
 };
 
 /** Fallback keys for tools we don't know (MCP servers, custom tools) — the
@@ -72,6 +78,75 @@ export function toolCallSummary(name: string, args: Record<string, unknown>): st
 
 function clip(text: string): string {
   return text.length > TOOL_SUMMARY_MAX ? `${text.slice(0, TOOL_SUMMARY_MAX)}…` : text;
+}
+
+/**
+ * Salient-only variant of toolCallSummary for the approval card: a string a
+ * human can weigh a trust decision on (the bash command, the page title) —
+ * or nothing. Never the JSON fallback; a JSON dump on an approval prompt
+ * reads as noise, not information. Searches nested args (depth-capped) so
+ * shapes like {pages:[{properties:{title}}]} still surface their title,
+ * picking the best PREFERRED_KEYS match across the whole tree rather than
+ * the shallowest one.
+ */
+export function toolCallSalient(name: string, args: Record<string, unknown>): string | undefined {
+  try {
+    const direct = args[SALIENT_ARG[name] ?? ""];
+    if (typeof direct === "string" && direct.trim()) return clip(firstLine(direct.trim()));
+    const found = new Map<string, string>();
+    collectPreferred(args, 3, found);
+    for (const key of PREFERRED_KEYS) {
+      const v = found.get(key);
+      if (v) return clip(firstLine(v));
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function collectPreferred(value: unknown, depth: number, out: Map<string, string>) {
+  if (!value || typeof value !== "object" || depth < 0) return;
+  if (!Array.isArray(value)) {
+    for (const [k, v] of Object.entries(value)) {
+      if (typeof v === "string" && v.trim() && PREFERRED_KEYS.includes(k) && !out.has(k)) {
+        out.set(k, v.trim());
+      }
+    }
+  }
+  for (const v of Object.values(value)) collectPreferred(v, depth - 1, out);
+}
+
+/**
+ * "notion-create-pages" (server "notion") → "create pages". Strips the
+ * server's own name prefix (Notion's tools all start "notion-"), then splits
+ * -/_/. and camelCase into lowercase words — mid-sentence prose, so the
+ * caller controls capitalization.
+ */
+export function humanizeToolAction(raw: string, server?: string): string {
+  let s = raw;
+  if (server) {
+    const prefix = new RegExp(`^${escapeRegExp(server)}[-_.]`, "i");
+    s = s.replace(prefix, "");
+  }
+  const words = s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[-_.\s]+/)
+    .filter(Boolean);
+  return words.join(" ").toLowerCase() || raw;
+}
+
+/** "google-drive" → "Google Drive" — display name for an MCP server id. */
+export function humanizeServerName(server: string): string {
+  return server
+    .split(/[-_.\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Full args for the detail panel: pretty JSON, capped with a marker. A

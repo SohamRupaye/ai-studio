@@ -10,13 +10,14 @@ import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } f
 import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
 import type { ContextStats } from "@squirl/event-bus";
 import type { SkillInfo } from "@squirl/tools-runtime";
-import { BROWSER_FILL_TOOL_ID } from "@squirl/tools-runtime";
+import { BROWSER_FILL_TOOL_ID, ToolRegistry } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
   mainWindow, store, router, graph, globalMem, registry, costTracker, personas, skills,
   nodeCounter, dataDirPath, currentProjectId, setCurrentProjectId, memoryScope, routerFor,
 } from "../state.js";
 import { cancelPendingApprovals, finishApproval, setApprovalTurnBranch } from "../approvals.js";
+import { cancelPendingQuestions, finishQuestion, setQuestionTurnBranch } from "../questions.js";
 import { detectMemoryRelationships } from "../memory-detect.js";
 
 /** AbortController tagged with why it was aborted, so a superseded request
@@ -34,6 +35,45 @@ function redactToolArgs(name: string, args: Record<string, unknown>): Record<str
     return { ...args, text: "•••" };
   }
   return args;
+}
+
+// ── Explicit-browser enforcement ─────────────────────────────────────────────
+// Prompt wording alone couldn't stop the model from quietly substituting
+// web_search/web_fetch when they happened to be faster (live-tested,
+// 2026-07-21: it opened a Google search in the local browser, then abandoned
+// it for web_search + web_fetch — which worked, since LinkedIn serves static
+// HTML to anonymous crawlers, but ignored the user's explicit "open browser"
+// instruction). No amount of wording removes a shortcut the model can take —
+// so when the user's message names the browser explicitly, web_search/
+// web_fetch are removed from the tool list for THIS TURN ONLY: no tool to
+// defect to means no defection, regardless of what the model would prefer.
+// Requires an action verb gating "browser" (with only filler connector words
+// between), not a bare mention of the word — "debug this in the browser
+// console" or "check your browser history" must NOT trigger this; "open the
+// browser"/"use the local browser"/"go to the browser" must.
+const EXPLICIT_BROWSER_INTENT = /\b(open|use|launch|go to)\b(?:\s+(?:up|the|a|local|your)){0,3}\s*\bbrowser\b/i;
+const WEB_FALLBACK_TOOL_IDS = new Set(["web_search", "web_fetch"]);
+
+/** Registry that mirrors `registry` but omits web_search/web_fetch, delegating
+ * every execution back to it (same technique ai-core's runTask uses to scope
+ * a sub-agent's tools) — so permissions, approvals, and side effects are
+ * identical, only the tool LIST offered to the model shrinks. */
+function withoutWebFallback(base: ToolRegistry): ToolRegistry {
+  const scoped = new ToolRegistry();
+  for (const def of base.getDefinitions()) {
+    if (WEB_FALLBACK_TOOL_IDS.has(def.name)) continue;
+    scoped.register(def, async (args: unknown, ctx: Parameters<ToolRegistry["execute"]>[2]) => base.execute(def.name, args, ctx));
+  }
+  return scoped;
+}
+
+/** The registry this turn's top-level agent should see: narrowed for the
+ * turn only when the user explicitly asked for the browser AND it's enabled
+ * (nothing to narrow to otherwise — don't strand the model with no web
+ * access if the feature is off or unavailable). */
+function registryForTurn(message: string, browserToolEnabled: boolean): ToolRegistry {
+  if (browserToolEnabled && EXPLICIT_BROWSER_INTENT.test(message)) return withoutWebFallback(registry);
+  return registry;
 }
 
 // ── Summarization ─────────────────────────────────────────────────────────────
@@ -60,8 +100,9 @@ export function registerChatHandlers() {
       abortController.supersededByNewMessage = true;
       abortController.abort();
     }
-    // A superseded turn's pending approval card must not outlive it.
+    // A superseded turn's pending approval/question cards must not outlive it.
     cancelPendingApprovals();
+    cancelPendingQuestions();
     const myController: ExtendedAbortController = new AbortController();
     abortController = myController;
     await executeTurn({ branchId, message, images, controller: myController });
@@ -70,12 +111,17 @@ export function registerChatHandlers() {
   handle("chat:abort", () => {
     abortController?.abort();
     abortController = null;
-    // Deny anything still waiting on the card — the turn it belongs to is gone.
+    // Deny anything still waiting on a card — the turn it belongs to is gone.
     cancelPendingApprovals();
+    cancelPendingQuestions();
   });
 
   handle("chat:approval-decision", ({ id, allowed, always }) => {
     finishApproval(id, { allowed, always });
+  });
+
+  handle("chat:question-answer", ({ id, answer }) => {
+    finishQuestion(id, answer);
   });
 }
 
@@ -194,6 +240,10 @@ export async function executeTurn({ branchId, message, images, controller }: {
   // persisted agents arrays hold the SAME record objects the reducer keeps
   // mutating, so a late terminal event only needs to re-serialize the row.
   let lateWriteback: { messageId: string; toolCalls: MessageToolCall[] } | null = null;
+  // The 5th arg (signal) is what makes Stop actually kill in-flight parallel
+  // `subagent` calls instead of leaving them running until their own 5-min
+  // timeout — see runtime.ts's cascadeParentAbort gate (delegate background
+  // jobs are deliberately excluded; they're fire-and-forget by design).
   createRuntime(chatRouter, registry, model, (ev) => {
     let group = subagentRuns.get(ev.runId);
     if (!group) { group = new Map(); subagentRuns.set(ev.runId, group); subagentRunOrder.push(ev.runId); }
@@ -212,7 +262,7 @@ export async function executeTurn({ branchId, message, images, controller }: {
       }
     }
     mainWindow?.webContents.send("chat:stream", { type: "subagent", branchId, ...ev });
-  });
+  }, signal);
 
   // Active persona for this branch (if any) layers its own system prompt
   // ahead of the base instructions and restricts which tools it can see.
@@ -233,7 +283,7 @@ export async function executeTurn({ branchId, message, images, controller }: {
     system += `\n\n<invoked_skill name="${invokedSkill.name}">\nThe user invoked this skill for this request — its instructions are binding for this turn.\n${invokedSkill.content}\n(Supporting files for this skill live in ${dirname(invokedSkill.location)} — resolve relative paths against that directory.)\n</invoked_skill>`;
   }
   // sessionId scopes snapshot tracking (write_file/edit_file/patch) to this branch.
-  const agent = new Agent(chatRouter, registry, { sessionId: branchId });
+  const agent = new Agent(chatRouter, registryForTurn(message, cfg.browserToolEnabled), { sessionId: branchId });
 
   // Resolve image refs on hot-window messages into content the model gets.
   // Vision models receive native image blocks (base64 read from the blob);
@@ -283,8 +333,10 @@ export async function executeTurn({ branchId, message, images, controller }: {
     }
   }
 
-  // Approval cards raised by subagents (sessionId "sub") route to this turn's branch.
+  // Approval/question cards raised by subagents (sessionId "sub") route to
+  // this turn's branch.
   setApprovalTurnBranch(branchId);
+  setQuestionTurnBranch(branchId);
   try {
     for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
       if (signal.aborted) {
@@ -412,6 +464,7 @@ export async function executeTurn({ branchId, message, images, controller }: {
     }
   } finally {
     setApprovalTurnBranch(null);
+    setQuestionTurnBranch(null);
   }
 }
 
@@ -446,7 +499,7 @@ function buildBaseSystem(projectPrompt?: string, systemContext?: string): string
 
   parts.push(
     `HOW TO ACT
-- When the user asks for something your tools can do, do it now — don't ask permission first and don't say you'll do it later. If a request is ambiguous in a way that changes what you'd do, either state your assumption and proceed or ask ONE focused question; never reply with only questions when a useful answer is possible.
+- When the user asks for something your tools can do, do it now — don't ask permission first, don't ask what to do if it fails before you've actually tried it, and don't say you'll do it later. Attempt the thing; if it genuinely fails, THEN explain what happened and ask if you're unsure how to proceed. If a request is ambiguous in a way that changes what you'd do, either state your assumption and proceed or ask ONE focused question; never reply with only questions when a useful answer is possible.
 - Never claim an action you didn't take (a file edit, a saved memory, a search). A claim of work requires the matching tool call.
 - If the same tool call fails twice, stop repeating it — say what's failing and try a different approach.`,
   );

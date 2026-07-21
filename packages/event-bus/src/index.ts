@@ -187,8 +187,16 @@ export type AgentStreamEvent =
   // A side-effecting tool call is paused awaiting user approval. The turn
   // blocks until chat:approval-decision resolves it (or the 5-min timeout
   // denies). approval_resolved clears the card on timeout/abort paths too.
-  | { type: "approval_request"; branchId: string; id: string; name: string; summary: string }
+  // title is a composed human sentence ("Allow Notion to create pages?");
+  // detail is a salient argument (page title, bash command) — never JSON.
+  | { type: "approval_request"; branchId: string; id: string; title: string; detail?: string }
   | { type: "approval_resolved"; branchId: string; id: string }
+  // The model asked the user something via the `question` tool. The tool call
+  // blocks until chat:question-answer resolves it (or the 5-min timeout
+  // answers with a no-answer note). question_resolved clears the card on
+  // timeout/abort paths too. options is already split ("a,b" → ["a","b"]).
+  | { type: "question_request"; branchId: string; id: string; text: string; options: string[] }
+  | { type: "question_resolved"; branchId: string; id: string }
   | { type: "done"; branchId: string; text: string; iterations: number; cost?: string }
   | { type: "error"; branchId: string; message: string; turn?: number; rateLimited?: boolean; retryAfterSeconds?: number };
 
@@ -201,6 +209,9 @@ export interface IpcInvokeMap {
   /** Resolve a pending tool-approval request (approval_request stream event).
    * `always` persists an allow rule in the PermissionStore. */
   "chat:approval-decision": [{ id: string; allowed: boolean; always?: boolean }, void];
+  /** Answer a pending question-tool request (question_request stream event).
+   * The answer string becomes the tool's result verbatim. */
+  "chat:question-answer": [{ id: string; answer: string }, void];
 
   // Automations (created from chat via the create_automation tool; managed here)
   "automation:list": [void, Automation[]];

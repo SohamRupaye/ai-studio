@@ -5,6 +5,7 @@ import type { MetaGraph } from "@squirl/graph-engine";
 import { estimateTokens, getContextLimit } from "@squirl/tokenizer";
 import { retrieveFromGraph } from "@squirl/context-engine";
 import { runSummarizeAncestry, runSummarizeMiddle } from "./summarizer.js";
+import { withToolTrail } from "./trail.js";
 
 export interface ContextPayload {
   messages: Array<{ role: string; content: string; images?: MessageImage[] }>;
@@ -89,12 +90,12 @@ export async function inlineAncestrySummary(
     const recent = unsummarized.slice(-hotWindow);
     for (const m of recent) {
       const prefix = m.role === "user" ? "User" : "Assistant";
-      parts.push(`${prefix} (turn ${m.turn}): ${m.content}`);
+      parts.push(`${prefix} (turn ${m.turn}): ${withToolTrail(m)}`);
     }
   } else {
     for (const m of unsummarized) {
       const prefix = m.role === "user" ? "User" : "Assistant";
-      parts.push(`${prefix} (turn ${m.turn}): ${m.content}`);
+      parts.push(`${prefix} (turn ${m.turn}): ${withToolTrail(m)}`);
     }
   }
 
@@ -104,26 +105,6 @@ export async function inlineAncestrySummary(
     return runSummarizeAncestry(messages, model);
   }
   return result;
-}
-
-/**
- * Reattach a turn's tool activity to the assistant text the model sees in the
- * hot window. The transcript stores tool calls OUTSIDE message content (the
- * UI renders them separately), so without this the model has no memory of its
- * own actions on later turns — "what commands did you run?" got "I didn't run
- * any". Previews are capped at persist time; the line count is capped here.
- */
-const TOOL_TRAIL_MAX_CALLS = 12;
-function withToolTrail(m: Message): string {
-  if (m.role !== "assistant" || !m.toolCalls?.length) return m.content;
-  const shown = m.toolCalls.slice(0, TOOL_TRAIL_MAX_CALLS);
-  const lines = shown.map((tc) => {
-    const args = tc.argsPreview ? `(${tc.argsPreview})` : "";
-    const out = tc.resultPreview ? ` → ${tc.resultPreview}` : "";
-    return `- ${tc.name}${args} ${tc.success ? "✓" : "✗ failed"}${out}`;
-  });
-  const more = m.toolCalls.length > shown.length ? `\n- …and ${m.toolCalls.length - shown.length} more calls` : "";
-  return `${m.content}\n\n[Tool calls you made during this turn (abbreviated):\n${lines.join("\n")}${more}]`;
 }
 
 export async function buildPayload(

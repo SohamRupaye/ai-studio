@@ -92,6 +92,10 @@ export type { SubagentRunMeta } from "./tools/subagent";
 // Bash warn-pattern confirmation (wired by the desktop app's approval flow)
 export { setBashConfirmCallback } from "./tools/bash";
 
+// question tool → interactive card (wired by the desktop app; unwired, the
+// tool answers "(no user interaction available)")
+export { setAskCallback } from "./tools/question";
+
 // Opt-in local browser tools (Patchright). Registered by the desktop app only
 // when browserToolEnabled; patchright is an optional dep, lazy-imported.
 export { registerBrowserTools, unregisterBrowserTools, setBrowserProfileDir, isBrowserOpen, BROWSER_FILL_TOOL_ID } from "./tools/browser";

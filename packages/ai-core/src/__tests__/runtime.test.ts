@@ -221,6 +221,74 @@ describe("createRuntime → per-agent lifecycle events", () => {
     expect(failed?.error).toMatch(/Timed out/);
   });
 
+  // Regression: runTask used to build its own AbortController with zero link
+  // to the turn that spawned it — the composer's Stop button killed the
+  // visible stream but left a parallel `subagent` task running invisibly,
+  // server-side, until its own 5-minute timeout.
+  it("cascades a parent-turn abort into a task opted in via cascadeParentAbort", async () => {
+    const registry = createDefaultRegistry();
+    const router = {
+      call: vi.fn(),
+      stream: vi.fn(function () {
+        return (async function* () {
+          for (;;) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            yield { type: "text", text: "still going" };
+          }
+        })();
+      }),
+    } as unknown as Router;
+    const events: SubagentEvent[] = [];
+    const parent = new AbortController();
+    const { runTask } = createRuntime(router, registry, "branch-model", (e) => events.push(e), parent.signal);
+
+    const task = runTask("never finish", "branch-model", "", undefined, {
+      runId: "r1",
+      agentId: "blocking",
+      timeoutMs: 10_000, // long — only the parent abort should end this
+      cascadeParentAbort: true,
+    });
+    setTimeout(() => parent.abort(), 30);
+
+    await expect(task).rejects.toThrow(/Cancelled — the turn was stopped/);
+    const failed = events.find((e) => e.status === "failed");
+    expect(failed?.error).toMatch(/Cancelled/);
+  });
+
+  it("does NOT cascade a parent-turn abort into a task without cascadeParentAbort (delegate)", async () => {
+    const registry = createDefaultRegistry();
+    const router = {
+      call: vi.fn(),
+      stream: vi.fn(function () {
+        return (async function* () {
+          for (;;) {
+            await new Promise((resolve) => setTimeout(resolve, 15));
+            yield { type: "text", text: "still going" };
+          }
+        })();
+      }),
+    } as unknown as Router;
+    const parent = new AbortController();
+    const { runTask } = createRuntime(router, registry, "branch-model", undefined, parent.signal);
+
+    const task = runTask("background job", "branch-model", "", undefined, {
+      runId: "r2",
+      agentId: "background",
+      timeoutMs: 150, // short own timeout — should be what actually ends this
+    });
+    parent.abort(); // fires immediately, before the task even starts looping
+
+    // Still running well past when a cascade would have killed it instantly.
+    const stillPending = await Promise.race([
+      task.then(() => "settled").catch(() => "settled"),
+      new Promise((resolve) => setTimeout(() => resolve("pending"), 60)),
+    ]);
+    expect(stillPending).toBe("pending");
+
+    // Its own timeout still applies — this isn't immune to ever stopping.
+    await expect(task).rejects.toThrow(/Timed out/);
+  });
+
   it("parallel tasks get distinct agentIds under one runId; failures emit failed", async () => {
     const registry = createDefaultRegistry();
     const events: SubagentEvent[] = [];

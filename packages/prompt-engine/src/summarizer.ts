@@ -2,6 +2,7 @@ import type { Store } from "@squirl/database";
 import { type Router } from "@squirl/providers";
 import type { Message, Summary } from "@squirl/shared";
 import { embed, cosineSim } from "@squirl/graph-engine";
+import { withToolTrail } from "./trail.js";
 
 /**
  * Configurable compaction settings - lets users tune when/how context gets compressed
@@ -29,6 +30,7 @@ export const DEFAULT_COMPACTION_CONFIG: Required<CompactionConfig> = {
 
 export const SUMMARY_SYSTEM = `You are a concise conversation summarizer. Summarize the given turns into 4-8 bullet points. Rules:
 • Preserve ALL specific names, references, and key terms verbatim
+• Preserve exact identifiers from tool calls verbatim (page/document IDs, URLs, file paths) — later turns need them to keep acting on the same objects
 • Clearly attribute: 'User decided X' vs 'AI suggested Y'
 • Keep decisions, constraints, and trade-offs with their reasoning
 • Preserve exact quotes or key details if discussed
@@ -186,7 +188,9 @@ export async function runSummary(store: Store, router: Router, branchId: string)
   let prompt = "Summarize these conversation turns:\n\n";
   for (const m of chunk) {
     const prefix = m.role === "user" ? "User" : "Assistant";
-    prompt += `${prefix}: ${m.content}\n\n`;
+    // withToolTrail: the summary must keep identifiers the turn's tool calls
+    // produced (page ids, URLs) — they only exist in the trail, not content.
+    prompt += `${prefix}: ${withToolTrail(m)}\n\n`;
   }
 
   try {
@@ -252,7 +256,7 @@ export async function runSummarizeMiddle(messages: Message[], model: string): Pr
   let prompt = "Summarize these conversation turns concisely, preserving key details:\n\n";
   for (const m of messages) {
     const prefix = m.role === "user" ? "User" : "Assistant";
-    prompt += `${prefix}: ${m.content}\n\n`;
+    prompt += `${prefix}: ${withToolTrail(m)}\n\n`;
   }
 
   try {
@@ -276,7 +280,7 @@ export async function runSummarizeAncestry(messages: Message[], model: string): 
   let prompt = "Summarize this parent branch conversation history:\n\n";
   for (const m of messages) {
     const prefix = m.role === "user" ? "User" : "Assistant";
-    prompt += `${prefix} (turn ${m.turn}): ${m.content}\n\n`;
+    prompt += `${prefix} (turn ${m.turn}): ${withToolTrail(m)}\n\n`;
   }
 
   try {

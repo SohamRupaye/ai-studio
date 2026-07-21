@@ -9,7 +9,7 @@ import {
 } from "@squirl/ai-core";
 import {
   createDefaultRegistry, loadMCPServers, getLSPClient, SkillsService, getMCPManager,
-  ToolVetoError, setBashConfirmCallback, registerBrowserTools, setBrowserProfileDir,
+  ToolVetoError, setBashConfirmCallback, setAskCallback, registerBrowserTools, setBrowserProfileDir,
 } from "@squirl/tools-runtime";
 import { MetaGraph } from "@squirl/graph-engine";
 import {
@@ -21,6 +21,7 @@ import {
 } from "./state.js";
 import { sweepOrphanBlobs } from "./images.js";
 import { needsApproval, requestApproval } from "./approvals.js";
+import { requestQuestion } from "./questions.js";
 import { nextRunTime, rescheduleAutomations, scheduleError, startAutomationScheduler } from "./scheduler.js";
 import { registerAutomationHandlers } from "./ipc/automations.js";
 import { registerChatHandlers } from "./ipc/chat.js";
@@ -145,6 +146,10 @@ async function initRuntime() {
   // bash's warn-pattern commands (rm, git push, DROP TABLE…) route through
   // the same card; a denial returns bash's own "Command cancelled by user."
   setBashConfirmCallback((command) => requestApproval({ name: "bash", args: { command } }));
+  // The question tool pauses on an interactive card (options → checkboxes).
+  // Unwired it answered "(no user interaction available)", which derailed
+  // turns — the model read it as "the user is unreachable" and gave up.
+  setAskCallback((text, options) => requestQuestion({ text, options }));
 
   // App-level memory tools wired to the SAME GlobalMemory the UI reads from.
   // (The built-in kb_* tools write to a separate JSON store, so the agent's

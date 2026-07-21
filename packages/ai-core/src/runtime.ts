@@ -23,6 +23,13 @@ export function createRuntime(
   registry: ToolRegistry,
   defaultModel: string,
   onSubagentEvent?: SubagentEventHandler,
+  // The top-level turn's abort signal (Stop button / a superseding message).
+  // Without this, a running subagent/delegate had NO link to the turn that
+  // spawned it — Stop killed the visible stream but left the task running
+  // server-side, invisibly, until its own 5/10-min timeout. Optional so
+  // ad-hoc runTask callers (tests, future one-off uses) aren't forced to
+  // have one.
+  parentSignal?: AbortSignal,
 ) {
   const BLOCKED = new Set(["subagent", "delegate", "delegate_result", "delegate_list"]);
   const emit = (event: SubagentEvent) => {
@@ -46,8 +53,20 @@ export function createRuntime(
     const ids = meta ? { runId: meta.runId, agentId: meta.agentId } : { runId: "adhoc", agentId: "task" };
     const timeoutMs = meta?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
+    // Cascade the parent turn's Stop/supersede into this task's own signal —
+    // ONLY when the caller opted in (parallel `subagent` calls block the
+    // turn, so Stop should kill them; `delegate` background jobs must NOT
+    // be cascaded — they're fire-and-forget by design and outlive the turn).
+    // Distinct from an expired timer so the error reads honestly either way.
+    let stoppedByParent = false;
+    const onParentAbort = () => { stoppedByParent = true; controller.abort(); };
+    if (parentSignal && meta?.cascadeParentAbort) {
+      if (parentSignal.aborted) onParentAbort();
+      else parentSignal.addEventListener("abort", onParentAbort, { once: true });
+    }
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const timedOut = () => new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s`);
+    const abortedError = () =>
+      stoppedByParent ? new Error("Cancelled — the turn was stopped.") : new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s`);
 
     const runOnce = async (onModel: string): Promise<string> => {
       const agent = new Agent(router, subReg, { maxIterations: 15 });
@@ -55,7 +74,7 @@ export function createRuntime(
       for await (const event of agent.run(onModel, [{ role: "user", content: task }], system, controller.signal)) {
         // Providers get the signal too; this check is the backstop for ones
         // that ignore it — the run dies at the next event either way.
-        if (controller.signal.aborted) throw timedOut();
+        if (controller.signal.aborted) throw abortedError();
         if (event.type === "text" && event.text) emit({ ...ids, status: "text", text: event.text });
         else if (event.type === "tool_start") emit({ ...ids, status: "tool", tool: event.name, args: preview(event.args) });
         else if (event.type === "tool_end") emit({ ...ids, status: "tool_end", tool: event.name, success: event.success, resultPreview: preview(event.result) });
@@ -70,7 +89,7 @@ export function createRuntime(
       try {
         text = await runOnce(model);
       } catch (err) {
-        if (controller.signal.aborted) throw timedOut();
+        if (controller.signal.aborted) throw abortedError();
         // The delegating model routinely invents model ids ("current",
         // "gpt-4.1-mini"); an unknown model must degrade to the chat's own
         // model, not kill the delegation. Caught at run level (not a
@@ -89,6 +108,7 @@ export function createRuntime(
       throw err;
     } finally {
       clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onParentAbort);
     }
   };
 

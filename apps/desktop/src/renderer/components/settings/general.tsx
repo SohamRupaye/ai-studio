@@ -141,7 +141,7 @@ function LocalBrowserSection() {
       <div className="mt-2 divide-y divide-line">
         <FieldRow
           label="Let agents use a local browser"
-          hint="Agents can drive a separate Chrome window using your own logged-in profile — for pages that need a real browser, sign-in, or block automation. Sessions stay on this machine; typed values are never saved to the transcript."
+          hint="Agents can drive a separate Chrome window using your own logged-in profile — for pages that need a real browser, sign-in, or block automation. A banner in the window shows when the agent is working, and it closes itself after 5 minutes of inactivity. Sessions stay on this machine; typed values are never saved to the transcript."
           htmlFor="browser-tool"
         >
           <Switch
