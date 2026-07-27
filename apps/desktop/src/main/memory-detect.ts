@@ -29,7 +29,7 @@
  * of new facts, a handful of candidates each, one batched LLM call per new fact.
  */
 import type { Router } from "@squirl/providers";
-import { getConfig } from "@squirl/providers";
+import { getConfig, isClaudeSubscriptionModel } from "@squirl/providers";
 import { embed, cosineSim } from "@squirl/graph-engine";
 import { zeroShotClassify } from "@squirl/ai-core";
 import type { GlobalMemory, MemoryFact, MemoryScope } from "@squirl/database";
@@ -126,7 +126,12 @@ async function cloudClassify(
   prompt: string,
   system: string,
 ): Promise<string | null> {
-  const models = [getConfig().classifierModel, chatModel].filter((m, i, a) => m && a.indexOf(m) === i);
+  // The chat model is only a fallback for an unroutable classifier model. A
+  // Claude subscription id is excluded outright: memory detection is background
+  // work and must not spend subscription quota.
+  const models = [getConfig().classifierModel, chatModel]
+    .filter((m, i, a) => m && a.indexOf(m) === i)
+    .filter((m) => !isClaudeSubscriptionModel(m));
   for (const model of models) {
     try {
       const result = await router.call(model, [{ role: "user" as const, content: prompt }], system);

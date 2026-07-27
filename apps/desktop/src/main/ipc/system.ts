@@ -1,5 +1,5 @@
 import { Router, API_KEY_PROVIDERS, getConfig, saveConfig } from "@squirl/providers";
-import { createRuntime } from "@squirl/ai-core";
+import { createRuntime, detectLocalClaudeSession } from "@squirl/ai-core";
 import { registerBrowserTools, unregisterBrowserTools } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
@@ -74,6 +74,16 @@ export function registerSystemHandlers() {
     return codex.getStatus();
   });
 
+  // ── Local Claude Code session ────────────────────────────────────────────────
+
+  // Status only. No login/logout counterpart on purpose: Squirl neither performs
+  // the sign-in nor holds the credential — `claude /login` does, and the Agent
+  // SDK resolves it. See packages/ai-core/src/engines/local-session.ts.
+  handle("claude-session:status", () => ({
+    ...detectLocalClaudeSession(),
+    engineEnabled: getConfig().claudeSubscriptionEngine,
+  }));
+
   // ── Config ──────────────────────────────────────────────────────────────────
 
   handle("config:get", () => {
@@ -84,6 +94,7 @@ export function registerSystemHandlers() {
       mcpServers: cfg.mcpServers,
       disabledModels: cfg.disabledModels,
       browserToolEnabled: cfg.browserToolEnabled,
+      claudeSubscriptionEngine: cfg.claudeSubscriptionEngine,
       memoryInference: cfg.memoryInference,
     };
   });

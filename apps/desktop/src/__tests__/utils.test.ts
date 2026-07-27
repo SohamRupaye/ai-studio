@@ -1,5 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { cn } from "../renderer/lib/utils.js";
+import { cn, modelLabel, providerLogoKey } from "../renderer/lib/utils.js";
+
+describe("modelLabel", () => {
+  it("splits a subscription id into a bare name plus a billing hint", () => {
+    // The raw id truncates to an indistinguishable "claude_subscription/clau…"
+    // in the model menu, which is the bug this exists to prevent.
+    expect(modelLabel("claude_subscription/claude-opus-4-8")).toEqual({
+      label: "claude-opus-4-8",
+      hint: "subscription",
+    });
+  });
+
+  it("leaves ordinary ids untouched and adds no hint", () => {
+    expect(modelLabel("claude-opus-4-8")).toEqual({ label: "claude-opus-4-8" });
+    expect(modelLabel("gpt-5.4-mini")).toEqual({ label: "gpt-5.4-mini" });
+    expect(modelLabel("bedrock/claude-opus-4-8")).toEqual({ label: "bedrock/claude-opus-4-8" });
+  });
+});
+
+describe("providerLogoKey", () => {
+  it("maps router entry names to their brand logo key", () => {
+    expect(providerLogoKey("claude_subscription")).toBe("anthropic");
+    expect(providerLogoKey("codex_oauth")).toBe("codex");
+  });
+
+  it("passes through entries already named after the brand", () => {
+    expect(providerLogoKey("anthropic")).toBe("anthropic");
+    expect(providerLogoKey("groq")).toBe("groq");
+  });
+});
 
 describe("cn (clsx + tailwind-merge)", () => {
   describe("basic class merging", () => {

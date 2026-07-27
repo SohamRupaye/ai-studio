@@ -1,8 +1,9 @@
+import { app } from "electron";
 import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
-import { Router, getConfig, ProviderRateLimitError } from "@squirl/providers";
+import { Router, getConfig, ProviderRateLimitError, utilityModelFor } from "@squirl/providers";
 import type { ContentBlock } from "@squirl/providers";
-import { Agent, createRuntime, classifyAndIndex, extractAndPersistArtifacts, runAgentCooperative } from "@squirl/ai-core";
+import { Agent, createRuntime, classifyAndIndex, extractAndPersistArtifacts, runTurn } from "@squirl/ai-core";
 import { buildPayload, runPendingSummaries, shouldSummarize } from "@squirl/prompt-engine";
 import { getContextLimit, supportsPdfInput, supportsVision } from "@squirl/tokenizer";
 import type { MessageImage, MessageToolCall, SubagentRunRecord } from "@squirl/shared";
@@ -338,7 +339,16 @@ export async function executeTurn({ branchId, message, images, controller }: {
   setApprovalTurnBranch(branchId);
   setQuestionTurnBranch(branchId);
   try {
-    for await (const event of runAgentCooperative(agent, model, agentMessages, system, signal)) {
+    // Engine dispatch: the native loop is the default for every provider. The
+    // Claude subscription engine only takes over when explicitly enabled AND a
+    // local Claude Code session exists — see packages/ai-core/src/engine.ts.
+    for await (const event of runTurn(agent, model, agentMessages, system, signal, {
+      subscriptionEngineEnabled: cfg.claudeSubscriptionEngine,
+      clientApp: `squirl/${app.getVersion()}`,
+      onEngineSelected: (sel) => {
+        if (sel.engine !== "native") console.log(`[engine] ${model} → ${sel.engine} (${sel.reason})`);
+      },
+    })) {
       if (signal.aborted) {
         // Only notify the renderer if this request was superseded by a
         // newer message — an explicit user Stop already cleans up its own
@@ -565,7 +575,13 @@ async function autoTitleChat(
   const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s);
   const prompt = `User: ${clip(firstUserMessage, 2000)}\n\nAssistant: ${clip(assistantText, 2000)}`;
 
-  const result = await chatRouter.call(model, [{ role: "user", content: prompt }], TITLE_SYSTEM);
+  // Auto-naming is background work: a branch pinned to a Claude subscription
+  // model must not spend that quota on titles.
+  const result = await chatRouter.call(
+    utilityModelFor(model, getConfig().classifierModel),
+    [{ role: "user", content: prompt }],
+    TITLE_SYSTEM,
+  );
   // Defensive cleanup: first line only, unquoted, no trailing punctuation.
   const title = (result.text ?? "")
     .trim()

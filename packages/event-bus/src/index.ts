@@ -402,6 +402,22 @@ export interface IpcInvokeMap {
   "codex:logout": [void, void];
   "codex:switch-account": [void, { connected: boolean; accountId?: string; email?: string }];
 
+  /**
+   * Local Claude Code session — read-only. There is deliberately no
+   * `claude-session:login`: Squirl runs no OAuth flow and stores no token; the
+   * user signs into Anthropic's own Claude Code and the Agent SDK picks that up.
+   */
+  "claude-session:status": [
+    void,
+    {
+      signedIn: boolean;
+      detectedVia: string;
+      apiKeyInEnv: boolean;
+      /** Config opt-in state, so the row renders from one round trip. */
+      engineEnabled: boolean;
+    },
+  ];
+
   // User
   "user:get": [void, { id: string; name: string } | null];
   "user:set": [{ name: string; email?: string }, { id: string; name: string }];

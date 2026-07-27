@@ -276,6 +276,9 @@ export function useIsFullscreen(): boolean {
 
 export const useCodexStatus = () => useQuery("codex:status", undefined);
 
+/** Read-only: whether a local Claude Code login exists. Squirl performs no sign-in. */
+export const useClaudeSession = () => useQuery("claude-session:status", undefined);
+
 export const useUser = () => useQuery("user:get", undefined);
 
 export const useConfig = () => useQuery("config:get", undefined);

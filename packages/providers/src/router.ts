@@ -3,6 +3,12 @@ import { AnthropicProvider } from "./anthropic.js";
 import { OpenAIProvider } from "./openai.js";
 import { GoogleProvider } from "./google.js";
 import { CodexOAuthProvider } from "./codex_oauth.js";
+import {
+  CLAUDE_SUBSCRIPTION_ENTRY,
+  CLAUDE_SUBSCRIPTION_MODELS,
+  ClaudeSubscriptionProvider,
+} from "./claude_subscription.js";
+import { detectLocalClaudeSession } from "./local-session.js";
 import { OpenRouterProvider } from "./openrouter.js";
 import {
   createGroqProvider,
@@ -247,6 +253,27 @@ export class Router {
     router.register("codex_oauth", ["gpt-5", "codex"], codex, [
       "gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2", "gpt-5.5",
     ]);
+
+    // Claude subscription — no key required; served by the user's own local
+    // Claude Code login through the Agent SDK engine (see @squirl/ai-core's
+    // runTurn, which intercepts these ids before the Router). Registered BEFORE
+    // the `anthropic` entry on purpose: entries match first-wins on prefix, and
+    // `claude_subscription/…` also startsWith `claude`, so the API-key entry
+    // would otherwise shadow it. Opt-in and gated on a detected login, so
+    // toggling it on without `claude /login` doesn't list dead models.
+    if (cfg.claudeSubscriptionEngine && detectLocalClaudeSession().signedIn) {
+      router.register(
+        CLAUDE_SUBSCRIPTION_ENTRY,
+        [`${CLAUDE_SUBSCRIPTION_ENTRY}/`],
+        new ClaudeSubscriptionProvider(),
+        // Already namespaced: register() uses this list verbatim, and applyModels
+        // only namespaces on a later refresh. Passing bare ids would list
+        // `claude-opus-4-8` until that landed — colliding with the API-key entry
+        // and reading as a non-subscription model to selectEngine.
+        CLAUDE_SUBSCRIPTION_MODELS.map(id => `${CLAUDE_SUBSCRIPTION_ENTRY}/${id}`),
+        { namespaced: true },
+      );
+    }
 
     // ── Direct providers (native model-id prefixes) ─────────────────────────
 

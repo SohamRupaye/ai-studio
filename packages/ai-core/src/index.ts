@@ -5,6 +5,12 @@ export type { OrchestratorConfig, RunOptions } from "./orchestrator.js";
 export { createRuntime } from "./runtime.js";
 export type { SubagentEvent, SubagentEventHandler } from "./runtime.js";
 export { runAgentCooperative } from "./worker.js";
+export { runTurn, selectEngine } from "./engine.js";
+export type { EngineName, EngineSelection, RunTurnOptions } from "./engine.js";
+// Session detection lives in @squirl/providers so Router.fromEnv can gate the
+// subscription catalogue entry on it; re-exported here for the desktop IPC.
+export { detectLocalClaudeSession } from "@squirl/providers";
+export type { LocalClaudeSession, SessionSignal } from "@squirl/providers";
 export { CostTracker } from "./costs.js";
 export { detectImages, encodeImage, buildMultimodalContent, stripImagePaths } from "./images.js";
 export { classifyAndIndex, loadPending, resumeQueue, loadNodeCounter } from "./classifier.js";

@@ -31,19 +31,63 @@ Known gaps we chose not to build yet, each with the context to decide later and 
 
 **Composio evaluated as an alternative (2026-07-18) — rejected as a replacement.** Composio's managed auth (they register the OAuth apps, store/refresh user tokens in their cloud) would clear this debt on paper, but: (1) it needs an org-level Composio API key, which in a distributed no-server desktop app must ship in the binary — anyone extracting it can hit any `user_id`'s connected accounts; their model assumes a backend we deliberately don't have. (2) Whitelabeling the consent screen ("Composio wants to access…") requires bringing your own OAuth apps — i.e. exactly this debt, plus a vendor. (3) Per-tool-call pricing (20K/mo free, then $29/mo+) for something we do free, and it breaks the "your tokens never leave your machine" story. It DOES work today with zero code as a power-user path: paste a Composio MCP server URL into Add custom server (`x-api-key` via config.yaml headers, same trust boundary as PATs). Revisit as a connector-long-tail buy option only if/when the multi-user server phase gives us a backend to hold the key.
 
-## "Sign in with Claude" — Claude subscription engine via the Agent SDK — parked 2026-07-18
+## Claude subscription engine via the Agent SDK — BUILT 2026-07-25, ship-gated on Anthropic approval
 
-**Current state:** the Anthropic provider is BYOK raw API (`packages/providers/src/anthropic.ts`, no `@anthropic-ai/*` deps anywhere); `codex_oauth.ts` already gives ChatGPT subscribers subscription-authenticated inference. Claude subscribers pay per token — the asymmetry is real and visible.
+**Status: implemented behind an off-by-default config flag. Do NOT enable in a shipped build until the policy gate below clears.** The code is complete and tested; the blocker is permission, not engineering.
 
-**Why it's possible (verified 2026-07-18):** plain subscription OAuth passthrough is banned for third-party apps (Anthropic Commercial Terms, Feb 2026), BUT June 2026 introduced an **Agent SDK credit**: Pro/Max/Team subscribers claim a separate monthly credit covering "third-party apps built on the Agent SDK". The sanctioned shape is therefore an engine built on `@anthropic-ai/claude-agent-sdk` — NOT a codex_oauth-style raw-API clone.
+### The policy state (verified 2026-07-25 — supersedes the 2026-07-18 note)
 
-**Reference implementation: [raroque/boop-agent](https://github.com/raroque/boop-agent)** (read 2026-07-18, clone was in scratchpad). Its `server/runtimes/` (~800 lines) demotes both Claude Code and Codex to subscription-authenticated inference+tool-loop engines: common `RuntimeRunRequest` (prompt/systemPrompt/tools/streaming callbacks), Claude adapter is 122 lines — Agent SDK `query()` with **app tools injected via `createSdkMcpServer` (in-process MCP)**, built-ins suppressed, `permissionMode: bypassPermissions`, identity overlay in the system prompt. Proves the shape works and the adapter is small.
+The 2026-07-18 entry claimed an **Agent SDK credit** made this sanctioned. That was written against an announced change which has since been pulled. Two primary sources, both checked directly:
 
-**The work if picked up (~1.5–2.5 weeks, not a rewrite):** engine seam where `chat:send` invokes `agent.run` (native loop stays the default for every provider; Codex needs nothing — codex_oauth already covers it); SDK event mapping onto `AgentStreamEvent` (text/thinking/tool_start/tool_end/usage) so the whole transparency stack rides unchanged; tool bridge from our registry (already function-shaped); per-turn one-shot `query()` with our prompt-engine payload serialized in (bypass SDK session management deliberately — branches/memories/artifacts are our product); disable the SDK's own Task/subagents in v1; "Sign in with Claude" row in `/settings/providers` mirroring Codex. Costs: the SDK bundles a native Claude Code binary (app size + forge packaging), and SDK turns weaken the right panel's "what will the model see" honesty + skip the hallucination guard unless re-mapped.
+1. **The credit programme is paused.** Anthropic's help centre article "Use the Claude Agent SDK with your Claude plan" opens with: *"We're pausing the changes to Claude Agent SDK usage described below. For now, nothing has changed."* No active implementation date. (Announced amounts, for when/if it lands: Pro $20, Max 5x $100, Max 20x $200, Team standard $20 per month; on exhaustion, requests stop unless the user enabled pay-as-you-go.)
+2. **The standing rule still requires prior approval.** The Agent SDK docs say verbatim: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login **or rate limits** for their products, including agents built on the Claude Agent SDK. Please use the API key authentication methods described in this document instead."*
 
-**Why parked:** permanent two-loop drift tax on the differentiating layer (tool transparency, thinking, subagent transcripts, timeouts — each re-built or silently different on SDK turns); policy ground moved twice in six months and the credit mechanics for third-party apps are unverified by us; the validated pilot user is an org already covered by org-level API-key overrides — subscription auth serves the post-launch individual funnel, which doesn't exist yet. Deliberately do NOT pre-build the engine seam — cut it when the second engine actually lands (boop shows it's cheap to cut then).
+Note the "**or rate limits**" clause — it plausibly covers consuming a user's subscription quota on behalf of your product even when you never render a login. Read that as: we are the case the rule is aimed at.
 
-**Pickup trigger:** post-launch, individual (non-org) users demonstrably bouncing off BYOK, AND a hands-on verification that the Agent SDK credit works for a third-party desktop app (claim flow + auth handshake in packaged Electron).
+**Today's economics, if it were permitted:** Agent SDK usage on a local Claude Code login draws the user's *normal* Claude Code subscription limits, not a $20 credit. The credit is the future *restriction*, not the present state. So the value proposition is currently better than the paused-programme numbers suggest, and the ceiling is a risk to design around rather than a limitation to live with.
+
+### Why boop is not precedent
+
+[raroque/boop-agent](https://github.com/raroque/boop-agent) (re-read 2026-07-25) does this in the open and is unaffected — but it is not a transferable comparison:
+
+- **It implements no auth at all.** `server/runtimes/claude.ts` has zero credential code: no OAuth, no token storage, no key, no credential-file reads. It calls `query()` and lets the SDK resolve whatever Claude Code wrote. Its README: *"Install the matching CLI, sign in once, Boop uses your local session."*
+- **It is a self-hosted template, not a distributed product** — MIT source you clone and run, bring-your-own Sendblue/Composio keys, ngrok. Its own README draws our line for us: *"If you'd prefer Claude API-key billing (e.g. for a deployed server), set `ANTHROPIC_API_KEY`."*
+- **It is unenforceable-against, not blessed.** Its SDK requests are indistinguishable from Claude Code's own; there is no binary, listing, or service to act on. Squirl is a signed, packaged, forge-built app — identifiable and enforceable in a way a template repo is not. Risk scales with distribution, and we have the thing boop lacks.
+
+### What was built (the local-session model, not "Sign in with Claude")
+
+The key design change from the 2026-07-18 plan: **we do not implement sign-in.** No OAuth flow, no registered client id, no token storage, no refresh — the deleted half of the original plan. The user signs into Anthropic's own Claude Code; the SDK picks that up. This drops the entire mirror of `CodexOAuthProvider` (`login`/`logout`/`switchAccount`/`auth.json`/refresh mutex/JWT parsing) and is a materially easier thing to ask approval for.
+
+- `packages/ai-core/src/engines/claude-sdk.ts` — the engine. One `query()` per turn, our payload serialized in, SDK session management bypassed. Maps SDK messages → `AgentStreamEvent`.
+- `packages/ai-core/src/engines/json-schema-to-zod.ts` — **required, not incidental.** `tool()` accepts only a Zod raw shape (`AnyZodRawShape`), while all ~60 registry tools are JSON Schema. That shape is what the model sees, so a permissive passthrough would blind it to every parameter.
+- `packages/ai-core/src/engines/local-session.ts` — existence-only login detection. Never reads a credential value; never passes `-g` to `security find-generic-password` (that flag prints the secret).
+- `packages/ai-core/src/engine.ts` — `runTurn` dispatcher. Native loop stays the default; SDK engine requires enabled flag **and** a bare `claude*` model id **and** a detected session, else falls back to native with a stated reason.
+- `apps/desktop/src/main/ipc/chat.ts` — single call-site swap (`runAgentCooperative` → `runTurn`).
+- Config `claude_subscription_engine` (off by default), `claude-session:status` IPC (status only — deliberately no `login` counterpart), and a toggle row in `/settings/providers` → Accounts.
+- Tests: `json-schema-to-zod.test.ts` (12), `claude-sdk-engine.test.ts` (8).
+
+**Non-obvious decisions worth keeping:**
+- `tools: []` disables every SDK built-in. Without it the model can Bash/Write outside Squirl's tool system, bypassing approval cards and snapshots entirely — a safety hole, not a cosmetic one.
+- `settingSources: []` is the SDK's isolation mode. Without it the CLI's defaults apply and the *user's* `~/.claude/CLAUDE.md` and skills leak into Squirl turns, corrupting what the prompt engine assembled.
+- `env` **replaces** the subprocess environment rather than merging, so `process.env` is spread explicitly — and `ANTHROPIC_API_KEY` is stripped on purpose, so a key on the machine can't silently get billed when the user asked for subscription auth.
+- `apiKeySource` on the SDK's `system`/`init` message is the authoritative auth signal, but it describes where an API **key** came from — under a local Claude Code login there is no key and the SDK reports **`"none"`** (verified against SDK 0.3.220: a `"none"` turn completes normally; `"none"` isn't in the declared `ApiKeySource` union). The guard is therefore a **deny-list** on `user`/`project`/`org`/`temporary` — the sources that mean a real key is billed. An allow-list on `"oauth"` was the first implementation and it rejected every genuine subscription turn. Filesystem detection is only a UI heuristic.
+- `CLAUDE_AGENT_SDK_CLIENT_APP` is set to `squirl/<version>` — the SDK's sanctioned way to identify a third-party consumer, and the opposite of what `codex_oauth.ts` does (see below).
+- Tool names are stripped of the `mcp__squirl__` prefix before any event escapes the engine; the renderer, `redactToolArgs`, persisted rows and `validateResponse`'s write-tool list all key on bare ids.
+
+### Known gaps (accepted, not fixed)
+
+- **The hallucination guard does not run on SDK turns.** `validateResponse` works by pushing a rejected draft plus a correction into `history` and re-entering the loop; the SDK owns its loop and exposes no such seam. Structural, not an oversight.
+- **ContextStats become a claim.** They're captured pre-flight in `chat.ts`, so the right panel still renders numbers — but they describe what Squirl *sent*, not what the model saw. The SDK may compact or inject on its own.
+- **History images degrade.** The SDK prompt is a single user message, so only the latest turn keeps native image/document blocks; earlier turns serialize to text via `contentToText` and their images become `[image]`.
+- **No per-turn cost.** `AgentResult.cost` is left unset: on subscription auth nothing is billed per token, so surfacing the SDK's `total_cost_usd` as a charge would be a lie. Token usage is consequently not surfaced either.
+- **App size: +249 MiB** measured on install (`@anthropic-ai/claude-agent-sdk` 0.3.220 plus its per-platform native binary). Forge packaging impact is real and unaddressed.
+- SDK subagents/Task are not used; Squirl's own `runtime.ts` delegates stay on the native loop.
+
+### Ship gate
+
+**Do not enable by default, and do not market it, until Anthropic grants the "previously approved" exemption.** Ask about *this* shape specifically — a toggle over a user's existing local Claude Code login, with no login surface of our own — not about an OAuth flow. That is a much easier yes and is the shape boop demonstrates works technically.
+
+Related: `codex_oauth.ts` sends `originator: "opencode"` and `User-Agent: opencode/latest` — it authenticates as a different client. Whether that violates OpenAI's terms is unverified, but it is the same category of unsanctioned subscription passthrough and it already ships. A public subscription-auth push invites scrutiny of that pattern; review it rather than treating it as precedent.
 
 ## Boop steals we deliberately skipped — parked 2026-07-18
 

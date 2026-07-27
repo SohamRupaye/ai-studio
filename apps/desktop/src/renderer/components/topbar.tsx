@@ -3,7 +3,7 @@ import { Link, matchPath, useLocation } from "react-router-dom";
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import type { Branch } from "@squirl/shared";
-import { cn } from "../lib/utils";
+import { cn, modelLabel, providerLogoKey } from "../lib/utils";
 import { useUiPrefs } from "./ui-prefs";
 import { useWorkspace } from "./workspace-provider";
 import {
@@ -90,7 +90,7 @@ export function Topbar({
     const items: ComboboxItem[] = [];
     const seen = new Set<string>();
     for (const [entry, ids] of Object.entries(modelCatalogue ?? {})) {
-      const logoKey = entry === "codex_oauth" ? "codex" : entry;
+      const logoKey = providerLogoKey(entry);
       const icon = hasProviderLogo(logoKey) ? (
         <ProviderTile
           provider={logoKey}
@@ -102,7 +102,9 @@ export function Topbar({
       for (const id of ids) {
         if (seen.has(id)) continue;
         seen.add(id);
-        items.push({ value: id, label: id, icon });
+        // The value stays the full namespaced id (that's the routing key); only
+        // the display is split, so a long namespace can't crowd out the name.
+        items.push({ value: id, ...modelLabel(id), icon });
       }
     }
     return items;

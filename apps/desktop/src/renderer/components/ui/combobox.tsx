@@ -12,6 +12,8 @@ interface ComboboxItem {
   label: string;
   /** Small leading mark (e.g. a provider mono icon) shown in the trigger and the item row. */
   icon?: React.ReactNode;
+  /** Muted trailing qualifier (e.g. how a model is billed) — truncates before the label does. */
+  hint?: string;
 }
 
 interface ComboboxProps {
@@ -69,6 +71,9 @@ function Combobox({
         <span className="flex min-w-0 items-center gap-1.5 truncate">
           {selected?.icon}
           {selected?.label ?? placeholder}
+          {selected?.hint ? (
+            <span className="shrink truncate text-label-sm text-fg-subtle">{selected.hint}</span>
+          ) : null}
         </span>
         <span className="flex shrink-0 text-fg-subtle transition-transform duration-200 ease-(--ease-standard) in-data-[popup-open]:rotate-180">
           <CaretDownIcon size={12} weight="bold" />
@@ -82,7 +87,7 @@ function Combobox({
           sideOffset={sideOffset}
         >
           <BaseCombobox.Popup
-            className={cn(popupClasses, "w-(--anchor-width) min-w-52 p-0")}
+            className={cn(popupClasses, "w-(--anchor-width) min-w-64 p-0")}
           >
             <div className="flex items-center gap-2 border-b border-line px-3">
               <MagnifyingGlassIcon size={14} className="shrink-0 text-fg-subtle" />
@@ -101,10 +106,15 @@ function Combobox({
                   value={item}
                   className={cn(itemClasses, "relative pr-8")}
                 >
-                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
                     {item.icon}
                     {item.label}
                   </span>
+                  {item.hint ? (
+                    <span className="ml-2 shrink truncate text-label-sm text-fg-subtle">
+                      {item.hint}
+                    </span>
+                  ) : null}
                   <BaseCombobox.ItemIndicator className="absolute right-2.5 flex">
                     <CheckIcon size={14} weight="bold" />
                   </BaseCombobox.ItemIndicator>

@@ -36,3 +36,27 @@ export function cn(...inputs: ClassValue[]) {
 export function counted(n: number, singular: string, plural = `${singular}s`) {
   return `${n} ${n === 1 ? singular : plural}`;
 }
+
+// Duplicated from @squirl/providers rather than imported: that package reaches
+// for node:fs, so the renderer can't load it.
+const CLAUDE_SUBSCRIPTION_PREFIX = "claude_subscription/";
+
+/**
+ * Split a model id into what to show and how it's billed.
+ *
+ * Subscription-billed models carry a router namespace, and the raw id truncates
+ * to an indistinguishable `claude_subscription/clau…` in a narrow menu — so show
+ * the bare model name and move the billing path into a hint.
+ */
+export function modelLabel(id: string): { label: string; hint?: string } {
+  return id.startsWith(CLAUDE_SUBSCRIPTION_PREFIX)
+    ? { label: id.slice(CLAUDE_SUBSCRIPTION_PREFIX.length), hint: "subscription" }
+    : { label: id };
+}
+
+/** Router entry name → provider logo key, for entries whose name isn't the brand. */
+export function providerLogoKey(entry: string): string {
+  if (entry === "codex_oauth") return "codex";
+  if (entry === "claude_subscription") return "anthropic";
+  return entry;
+}

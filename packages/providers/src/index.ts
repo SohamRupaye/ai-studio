@@ -1,5 +1,15 @@
 export type { Provider, ProviderMessage, StreamEvent, ContentBlock, TextContent, ImageContent, DocumentContent } from "./base.js";
-export { ProviderRateLimitError, contentToText, imageBlocks } from "./base.js";
+export { ProviderRateLimitError, contentToText, imageBlocks, toAnthropicContent } from "./base.js";
+export {
+  CLAUDE_SUBSCRIPTION_ENTRY,
+  CLAUDE_SUBSCRIPTION_MODELS,
+  ClaudeSubscriptionProvider,
+  bareClaudeModel,
+  isClaudeSubscriptionModel,
+  utilityModelFor,
+} from "./claude_subscription.js";
+export { detectLocalClaudeSession } from "./local-session.js";
+export type { LocalClaudeSession, SessionSignal } from "./local-session.js";
 
 // Core providers
 export { AnthropicProvider } from "./anthropic.js";

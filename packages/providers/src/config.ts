@@ -97,6 +97,16 @@ export interface Config {
    * the user's own profile). Off by default — it drives a real browser and
    * can act on logged-in sessions, so it stays dark until explicitly enabled. */
   browserToolEnabled: boolean;
+  /**
+   * Opt-in: run Claude turns through the Agent SDK against the user's own local
+   * Claude Code login instead of a billed API key. Off by default and never
+   * inferred — Squirl implements no sign-in for this (see
+   * `packages/ai-core/src/engines/claude-sdk.ts`), and Anthropic's Agent SDK
+   * terms currently require prior approval for third-party apps that offer
+   * claude.ai login or consume subscription rate limits. Keep it opt-in until
+   * that approval exists; see `context/debt.md`.
+   */
+  claudeSubscriptionEngine: boolean;
   /** Opt-in: let memory detection generate INFERRED facts (derives). Off by
    * default — inferences stored as memory are a correctness risk (see
    * context/memory-graph-redesign.md); they're labeled and never supersede. */
@@ -179,6 +189,7 @@ export function loadConfig(configPath?: string): Config {
     },
     classifier: { enabled: raw.classifier?.enabled !== false },
     browserToolEnabled: raw.browser_tool_enabled === true,
+    claudeSubscriptionEngine: raw.claude_subscription_engine === true,
     memoryInference: raw.memory_inference === true,
     mcpServers: Array.isArray(raw.mcp_servers)
       ? raw.mcp_servers.map((s: any) => ({ type: "stdio", ...s }))
@@ -217,6 +228,7 @@ export function saveConfig(patch: {
   /** Whole-list replacement of the disabled-skill names; empty array clears it. */
   disabledSkills?: string[];
   browserToolEnabled?: boolean;
+  claudeSubscriptionEngine?: boolean;
   memoryInference?: boolean;
 }): Config {
   const path = _configPath || join(process.cwd(), "config.yaml");
@@ -260,6 +272,11 @@ export function saveConfig(patch: {
   if (patch.browserToolEnabled !== undefined) {
     if (patch.browserToolEnabled) raw.browser_tool_enabled = true;
     else delete raw.browser_tool_enabled;
+  }
+
+  if (patch.claudeSubscriptionEngine !== undefined) {
+    if (patch.claudeSubscriptionEngine) raw.claude_subscription_engine = true;
+    else delete raw.claude_subscription_engine;
   }
 
   if (patch.memoryInference !== undefined) {

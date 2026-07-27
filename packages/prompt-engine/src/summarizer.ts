@@ -1,8 +1,17 @@
 import type { Store } from "@squirl/database";
-import { type Router } from "@squirl/providers";
+import { type Router, getConfig, utilityModelFor } from "@squirl/providers";
 import type { Message, Summary } from "@squirl/shared";
 import { embed, cosineSim } from "@squirl/graph-engine";
 import { withToolTrail } from "./trail.js";
+
+/**
+ * Summarisation inherits a branch's pinned model, which would silently spend
+ * Claude subscription quota on background chores. The subscription is opted in
+ * for chat turns only, so subscription ids fall back to the utility model.
+ */
+function summaryModel(model: string): string {
+  return utilityModelFor(model, getConfig().classifierModel);
+}
 
 /**
  * Configurable compaction settings - lets users tune when/how context gets compressed
@@ -194,7 +203,7 @@ export async function runSummary(store: Store, router: Router, branchId: string)
   }
 
   try {
-    const result = await router.call(branch.model, [{ role: "user", content: prompt }], SUMMARY_SYSTEM);
+    const result = await router.call(summaryModel(branch.model), [{ role: "user", content: prompt }], SUMMARY_SYSTEM);
     if (result.text) {
       return store.addSummary(branchId, actualFrom, actualTo, result.text.trim());
     }
@@ -232,7 +241,7 @@ export async function runProgressive(store: Store, router: Router, branchId: str
   }
 
   try {
-    const result = await router.call(branch.model, [{ role: "user", content: prompt }], META_SUMMARY_SYSTEM);
+    const result = await router.call(summaryModel(branch.model), [{ role: "user", content: prompt }], META_SUMMARY_SYSTEM);
     if (result.text) {
       const meta: Summary = {
         branchId,
@@ -262,7 +271,7 @@ export async function runSummarizeMiddle(messages: Message[], model: string): Pr
   try {
     const { Router } = await import("@squirl/providers");
     const router = Router.fromEnv();
-    const result = await router.call(model, [{ role: "user", content: prompt }], SUMMARY_SYSTEM);
+    const result = await router.call(summaryModel(model), [{ role: "user", content: prompt }], SUMMARY_SYSTEM);
     return result.text.trim();
   } catch {
     const lines: string[] = [];
@@ -286,7 +295,7 @@ export async function runSummarizeAncestry(messages: Message[], model: string): 
   try {
     const { Router } = await import("@squirl/providers");
     const router = Router.fromEnv();
-    const result = await router.call(model, [{ role: "user", content: prompt }], ANCESTRY_SUMMARY_SYSTEM);
+    const result = await router.call(summaryModel(model), [{ role: "user", content: prompt }], ANCESTRY_SUMMARY_SYSTEM);
     return result.text.trim();
   } catch {
     const lines: string[] = [];

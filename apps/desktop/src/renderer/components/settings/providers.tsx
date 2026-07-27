@@ -2,8 +2,9 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
-import { cn, counted } from "../../lib/utils";
+import { cn, counted, modelLabel } from "../../lib/utils";
 import {
+  useClaudeSession,
   useCodexStatus,
   useConfig,
   useModels,
@@ -16,6 +17,7 @@ import { Button } from "../ui/button";
 import { Combobox } from "../ui/combobox";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
+import { Switch } from "../ui/switch";
 import { FieldRow, ScopeHeader, SettingsSection } from "./shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,6 +35,7 @@ export function ProvidersSettings() {
   const navigate = useNavigate();
   const { data: keys } = useQuery("config:keys", undefined);
   const { data: codex } = useCodexStatus();
+  const { data: claudeSession } = useClaudeSession();
   const { data: config } = useConfig();
   const { data: models } = useModels();
   const setConfig = useMutation("config:set");
@@ -61,7 +64,7 @@ export function ProvidersSettings() {
 
   const modelItems = [...new Set(Object.values(models ?? {}).flat())].map((id) => ({
     value: id,
-    label: id,
+    ...modelLabel(id),
   }));
   const defaultModel = (config?.defaultModel as string | undefined) ?? null;
 
@@ -128,6 +131,42 @@ export function ProvidersSettings() {
                 {codexLogin.loading ? "Connecting…" : "Connect"}
               </Button>
             )}
+          </ProviderRow>
+
+          {/*
+            Claude subscription — deliberately NOT a sign-in row. Squirl runs no
+            OAuth flow and holds no token; the user signs into Anthropic's own
+            Claude Code and the Agent SDK picks that up. So this is a toggle over
+            a detected session, not a "Connect" button.
+          */}
+          <ProviderRow
+            provider="anthropic"
+            monogram="A"
+            active={Boolean(claudeSession?.signedIn && claudeSession?.engineEnabled)}
+            name="Claude subscription"
+            badge="Active"
+            hint={
+              !claudeSession?.signedIn
+                ? "Sign in to Claude Code on this machine, then enable this to run Claude models on your subscription instead of a billed API key."
+                : claudeSession.engineEnabled
+                  ? `Claude models run through your local Claude Code session${
+                      claudeSession.apiKeyInEnv
+                        ? " — your ANTHROPIC_API_KEY is ignored on these turns"
+                        : ""
+                    }. Squirl never sees your login. Note: the context inspector and the hallucination guard behave differently on these turns.`
+                  : "Local Claude Code session found. Enable to run Claude models through it instead of a billed API key."
+            }
+          >
+            <Switch
+              id="claude-subscription-engine"
+              checked={Boolean(claudeSession?.engineEnabled)}
+              disabled={!claudeSession?.signedIn}
+              onCheckedChange={(v) =>
+                setConfig
+                  .mutate({ claudeSubscriptionEngine: v })
+                  .catch(() => toast.error("Couldn't update the Claude subscription setting"))
+              }
+            />
           </ProviderRow>
         </div>
       </SettingsSection>
