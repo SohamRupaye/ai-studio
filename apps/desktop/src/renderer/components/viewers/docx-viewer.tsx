@@ -81,10 +81,11 @@ export function DocxViewer({ id, fallback }: { id: string; fallback: ReactNode }
 
   return (
     <div className="h-full overflow-y-auto px-8 py-8">
-      {/* eslint-disable-next-line react/no-danger -- mammoth output, see header comment */}
       <div
         className={cn("mx-auto max-w-3xl", DOCX_PROSE)}
         onClick={onClick}
+        // mammoth output, see header comment — not user-controlled at render time.
+        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

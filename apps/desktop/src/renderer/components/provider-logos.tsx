@@ -103,6 +103,7 @@ function Svg({ svg, className }: { svg: string; className?: string }) {
       aria-hidden
       className={cn("items-center justify-center [&>svg]:size-4", className)}
       // Static, bundled, first-party SVGs — no user content flows through here.
+      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

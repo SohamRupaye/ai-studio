@@ -1,6 +1,7 @@
 import { Router, API_KEY_PROVIDERS, getConfig, saveConfig } from "@squirl/providers";
 import { createRuntime, detectLocalClaudeSession } from "@squirl/ai-core";
 import { registerBrowserTools, unregisterBrowserTools } from "@squirl/tools-runtime";
+import { randomUUID } from "node:crypto";
 import { handle } from "./handle.js";
 import {
   store, router, registry, orgRouters, currentUserId,
@@ -28,7 +29,6 @@ export function registerSystemHandlers() {
 
   handle("user:set", ({ name, email }) => {
     if (!currentUserId) {
-      const { randomUUID } = require("node:crypto");
       setCurrentUserId(randomUUID());
       store.setMeta("current_user_id", currentUserId);
     }

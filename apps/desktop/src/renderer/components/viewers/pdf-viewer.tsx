@@ -127,7 +127,7 @@ export function PdfViewer({ id }: { id: string }) {
   if (failed) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1.5 px-8">
-        <p className="text-body-md text-fg-subtle">Couldn't load the PDF.</p>
+        <p className="text-body-md text-fg-subtle">Couldn&apos;t load the PDF.</p>
         <p className="max-w-md text-center text-body-sm text-fg-subtle">{failed}</p>
       </div>
     );

@@ -1,17 +1,25 @@
 name: CodeQL
 
 on:
-  workflow_dispatch:  # manual trigger only until code scanning is enabled in repo settings
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
-  schedule:
-    # Weekly scan on Monday at 6am UTC
-    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # See ci.yml: avoids an install-time 404 downloading onnxruntime-node's (unused) CUDA binaries on Linux.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: read

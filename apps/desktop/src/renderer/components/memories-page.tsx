@@ -128,7 +128,7 @@ function MemoryScope({
           </div>
         ) : error ? (
           <div className="flex flex-col items-start gap-2">
-            <p className="text-body-sm text-danger-text">Couldn't load memories.</p>
+            <p className="text-body-sm text-danger-text">Couldn&apos;t load memories.</p>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Try again
             </Button>

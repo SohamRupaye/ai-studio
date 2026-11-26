@@ -8,6 +8,11 @@
       "outputs": ["dist/**"],
       "cache": true
     },
+    "@squirl/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".vite/**", "out/**"],
+      "cache": true
+    },
     "dev": {
       "dependsOn": ["^build"],
       "persistent": true,
