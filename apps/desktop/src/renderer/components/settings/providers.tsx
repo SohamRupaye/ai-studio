@@ -261,9 +261,14 @@ export function ProviderModelsPage({ provider }: { provider: string }) {
   const setConfig = useMutation("config:set");
   const [query, setQuery] = useState("");
 
-  const models = catalogue?.[entry] ?? [];
+  const validEntry = Object.keys(catalogue ?? {}).find((k) => k === entry);
+  const models = validEntry ? (catalogue?.[validEntry] ?? []) : [];
+  const disabledMap = config?.disabledModels as Record<string, string[]> | undefined;
   const disabled = new Set(
-    ((config?.disabledModels as Record<string, string[]> | undefined)?.[entry] ?? []).filter(
+    (validEntry && disabledMap && Object.prototype.hasOwnProperty.call(disabledMap, validEntry)
+      ? disabledMap[validEntry] ?? []
+      : []
+    ).filter(
       (m) => models.includes(m), // ignore stale entries for models that no longer exist
     ),
   );
@@ -273,8 +278,9 @@ export function ProviderModelsPage({ provider }: { provider: string }) {
     : models;
 
   const saveDisabled = async (next: Set<string>) => {
+    if (!validEntry) return;
     try {
-      await setConfig.mutate({ disabledModels: { [entry]: [...next] } });
+      await setConfig.mutate({ disabledModels: { [validEntry]: [...next] } });
     } catch {
       toast.error("Couldn't update models");
     }

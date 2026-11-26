@@ -19,10 +19,10 @@
   },
   "dependencies": {
     "@squirl/shared": "workspace:*",
-    "yaml": "2.7.1"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "typescript": "5.7.2",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.12"
   }
 }

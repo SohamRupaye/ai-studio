@@ -5,7 +5,7 @@
  * Checkpoints are stored as unified diffs in .ai-studio/checkpoints/.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { ToolDefinition } from "../types.js";
 import type { ToolHandler } from "../registry.js";
@@ -53,13 +53,20 @@ class CheckpointStore {
     const snapshotted: string[] = [];
     for (const relPath of files) {
       const absPath = resolve(root, relPath);
-      if (!existsSync(absPath)) continue;
-      const stat = statSync(absPath);
-      if (!stat.isFile() || stat.size > 2 * 1024 * 1024) continue;
-
-      const snapPath = join(snapDir, relPath.replace(/\//g, "__"));
-      writeFileSync(snapPath, readFileSync(absPath));
-      snapshotted.push(relPath);
+      let fd: number | undefined;
+      try {
+        fd = openSync(absPath, "r");
+        const st = fstatSync(fd);
+        if (!st.isFile() || st.size > 2 * 1024 * 1024) continue;
+        const content = readFileSync(fd);
+        const snapPath = join(snapDir, relPath.replace(/\//g, "__"));
+        writeFileSync(snapPath, content);
+        snapshotted.push(relPath);
+      } catch {
+        continue;
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+      }
     }
 
     const meta: CheckpointMeta = { id, label, files: snapshotted, createdAt: Date.now(), description };

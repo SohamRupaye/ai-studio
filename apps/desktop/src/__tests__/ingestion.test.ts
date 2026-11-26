@@ -135,7 +135,7 @@ describe("ingestion.extractText", () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["name", "qty"], ["apples", 3]]), "Inventory");
     const p = join(dir, "data.xlsx");
-    XLSX.writeFile(wb, p);
+    writeFileSync(p, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 
     const r = await extractText(p);
     expect(r.ok).toBe(true);

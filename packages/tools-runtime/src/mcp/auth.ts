@@ -9,7 +9,7 @@ import type { OAuthEntry, OAuthTokens, OAuthClientInfo } from "./types";
 const AUTH_FILE = path.join(homedir(), ".ai-studio", "mcp-auth.json");
 
 export class MCPAuth {
-  private data: Record<string, OAuthEntry> = {};
+  private data = new Map<string, OAuthEntry>();
   private loaded = false;
   private file: string;
 
@@ -18,14 +18,17 @@ export class MCPAuth {
     this.file = file;
   }
 
-  private async load(): Promise<Record<string, OAuthEntry>> {
+  private async load(): Promise<Map<string, OAuthEntry>> {
     if (this.loaded) return this.data;
     try {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const raw = await fs.readFile(this.file, "utf-8");
-      this.data = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as Record<string, OAuthEntry>;
+      this.data = new Map(
+        parsed && typeof parsed === "object" ? Object.entries(parsed) : [],
+      );
     } catch {
-      this.data = {};
+      this.data = new Map();
     }
     this.loaded = true;
     return this.data;
@@ -33,12 +36,12 @@ export class MCPAuth {
 
   private async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.file), { recursive: true });
-    await fs.writeFile(this.file, JSON.stringify(this.data, null, 2), { mode: 0o600 });
+    await fs.writeFile(this.file, JSON.stringify(Object.fromEntries(this.data), null, 2), { mode: 0o600 });
   }
 
   async get(name: string): Promise<OAuthEntry | undefined> {
     const data = await this.load();
-    return data[name];
+    return data.get(name);
   }
 
   async getForUrl(name: string, serverUrl: string): Promise<OAuthEntry | undefined> {
@@ -49,39 +52,39 @@ export class MCPAuth {
 
   async set(name: string, entry: OAuthEntry): Promise<void> {
     await this.load();
-    this.data[name] = entry;
+    this.data.set(name, entry);
     await this.save();
   }
 
   async remove(name: string): Promise<void> {
     await this.load();
-    delete this.data[name];
+    this.data.delete(name);
     await this.save();
   }
 
   async updateTokens(name: string, tokens: OAuthTokens, serverUrl?: string): Promise<void> {
     await this.load();
-    const entry = this.data[name] ?? {};
+    const entry = this.data.get(name) ?? {};
     entry.tokens = tokens;
     if (serverUrl) entry.serverUrl = serverUrl;
-    this.data[name] = entry;
+    this.data.set(name, entry);
     await this.save();
   }
 
   async updateClientInfo(name: string, info: OAuthClientInfo, serverUrl?: string): Promise<void> {
     await this.load();
-    const entry = this.data[name] ?? {};
+    const entry = this.data.get(name) ?? {};
     entry.clientInfo = info;
     if (serverUrl) entry.serverUrl = serverUrl;
-    this.data[name] = entry;
+    this.data.set(name, entry);
     await this.save();
   }
 
   async setCodeVerifier(name: string, verifier: string): Promise<void> {
     await this.load();
-    const entry = this.data[name] ?? {};
+    const entry = this.data.get(name) ?? {};
     entry.codeVerifier = verifier;
-    this.data[name] = entry;
+    this.data.set(name, entry);
     await this.save();
   }
 
@@ -92,16 +95,16 @@ export class MCPAuth {
 
   async clearCodeVerifier(name: string): Promise<void> {
     await this.load();
-    const entry = this.data[name];
+    const entry = this.data.get(name);
     if (entry) delete entry.codeVerifier;
     await this.save();
   }
 
   async setState(name: string, state: string): Promise<void> {
     await this.load();
-    const entry = this.data[name] ?? {};
+    const entry = this.data.get(name) ?? {};
     entry.oauthState = state;
-    this.data[name] = entry;
+    this.data.set(name, entry);
     await this.save();
   }
 
