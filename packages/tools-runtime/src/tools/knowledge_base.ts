@@ -1,7 +1,7 @@
 /**
  * knowledge_base.ts — Persistent project knowledge base tool.
  * Stores architecture notes, style decisions, API contracts, gotchas.
- * Backed by the GlobalMemory store (JSON on disk), with tag filtering and search.
+ * Backed by its own JSON file per project root, with tag filtering and search.
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -100,6 +100,20 @@ function getStore(root: string): KnowledgeStore {
   return stores.get(root)!;
 }
 
+// The desktop app has its own Project concept (a UUID, not a filesystem
+// path) — main sets this to the current turn's project directory before
+// running the agent loop, so kb_write/kb_read default to the SAME store the
+// Knowledge base page reads, instead of an unrelated process.cwd(). A model
+// that explicitly passes project_root still wins (kept for the coding-agent
+// use case this tool originated from).
+let turnRoot: string | null = null;
+export function setKnowledgeBaseRoot(root: string | null): void {
+  turnRoot = root;
+}
+function resolveRoot(argRoot: string | undefined): string {
+  return argRoot || turnRoot || process.cwd();
+}
+
 // ── IPC-friendly wrappers (used by the desktop app's main process) ──────────
 // These operate on a single KnowledgeStore rooted at the app's data directory,
 // independent of the agent tool's per-call `project_root` argument.
@@ -163,7 +177,7 @@ export const kbWriteDef: ToolDefinition = {
 };
 
 export const kbWrite: ToolHandler = async (args) => {
-  const root = (args["project_root"] as string) || process.cwd();
+  const root = resolveRoot(args["project_root"] as string | undefined);
   const store = getStore(root);
 
   const entry = store.add({
@@ -194,7 +208,7 @@ export const kbReadDef: ToolDefinition = {
 };
 
 export const kbRead: ToolHandler = async (args) => {
-  const root = (args["project_root"] as string) || process.cwd();
+  const root = resolveRoot(args["project_root"] as string | undefined);
   const store = getStore(root);
 
   if (args["id"] !== undefined) {
@@ -232,7 +246,7 @@ export const kbSearchDef: ToolDefinition = {
 };
 
 export const kbSearch: ToolHandler = async (args) => {
-  const root = (args["project_root"] as string) || process.cwd();
+  const root = resolveRoot(args["project_root"] as string | undefined);
   const store = getStore(root);
 
   const results = store.search(
@@ -266,7 +280,7 @@ export const kbDeleteDef: ToolDefinition = {
 };
 
 export const kbDelete: ToolHandler = async (args) => {
-  const root = (args["project_root"] as string) || process.cwd();
+  const root = resolveRoot(args["project_root"] as string | undefined);
   const store = getStore(root);
   const ok = store.remove(args["id"] as number);
   return ok ? `✅ Deleted knowledge entry ${args["id"]}.` : `No entry with id=${args["id"]}.`;

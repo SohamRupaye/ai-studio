@@ -101,5 +101,5 @@ export { setAskCallback } from "./tools/question";
 export { registerBrowserTools, unregisterBrowserTools, setBrowserProfileDir, isBrowserOpen, BROWSER_FILL_TOOL_ID } from "./tools/browser";
 
 // Knowledge base (IPC-friendly wrappers)
-export { kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry } from "./tools/knowledge_base";
+export { kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry, setKnowledgeBaseRoot } from "./tools/knowledge_base";
 export type { KnowledgeEntry } from "./tools/knowledge_base";

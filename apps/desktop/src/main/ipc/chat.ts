@@ -11,7 +11,7 @@ import { toolCallSummary, toolCallArgsDetail, toolCallResultDetail, clipText } f
 import { applySubagentEvent, newSubagentRecord } from "@squirl/shared";
 import type { ContextStats } from "@squirl/event-bus";
 import type { SkillInfo } from "@squirl/tools-runtime";
-import { BROWSER_FILL_TOOL_ID, ToolRegistry } from "@squirl/tools-runtime";
+import { BROWSER_FILL_TOOL_ID, ToolRegistry, setKnowledgeBaseRoot } from "@squirl/tools-runtime";
 import { handle } from "./handle.js";
 import {
   mainWindow, store, router, graph, globalMem, registry, costTracker, personas, skills,
@@ -199,6 +199,10 @@ export async function executeTurn({ branchId, message, images, controller }: {
 
   // Track the project this branch belongs to, for scoping memories.
   setCurrentProjectId(branch.chatId ? (store.getChat(branch.chatId)?.projectId ?? "") : "");
+  // kb_write/kb_read default here when the model omits project_root, so the
+  // agent's notes land in the same per-project store the Knowledge base page
+  // reads (see registerKnowledgeHandlers) instead of an unrelated cwd.
+  setKnowledgeBaseRoot(currentProjectId ? join(dataDirPath, "kb", currentProjectId) : null);
 
   // Expire time-bound episodes before assembling context, so a just-passed
   // "meeting at 3pm today" never reaches the model this turn.

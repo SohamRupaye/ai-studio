@@ -126,6 +126,23 @@ export interface KnowledgeEntryInfo {
   updatedAt: number;
 }
 
+// ── Knowledge graph ────────────────────────────────────────────────────────────
+
+export interface GraphNodeInfo {
+  id: number;
+  text: string;
+  domain: string;
+  subtopic: string;
+  meta: Record<string, unknown>;
+  history: Array<{ turn?: number; decision?: string; constraint?: string }>;
+}
+
+export interface GraphEdgeInfo {
+  source: number;
+  target: number;
+  weight: number;
+}
+
 // ── Context inspector (right panel) ───────────────────────────────────────────
 
 /** What the model saw on this branch's last completed turn. Captured by
@@ -511,11 +528,18 @@ export interface IpcInvokeMap {
     void,
   ];
 
-  // Knowledge base
-  "kb:list": [{ category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
-  "kb:search": [{ query: string; category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
-  "kb:add": [{ title: string; content: string; category?: KnowledgeEntryInfo["category"]; tags?: string[] }, KnowledgeEntryInfo];
-  "kb:remove": [{ id: number }, boolean];
+  // Knowledge base — per-project manually-authored notes (architecture,
+  // gotchas, decisions). Distinct from Memory (auto-detected facts) and the
+  // knowledge graph (auto-extracted, embedding-linked) below.
+  "kb:list": [{ projectId: string; category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
+  "kb:search": [{ projectId: string; query: string; category?: string; tags?: string[] }, KnowledgeEntryInfo[]];
+  "kb:add": [{ projectId: string; title: string; content: string; category?: KnowledgeEntryInfo["category"]; tags?: string[] }, KnowledgeEntryInfo];
+  "kb:remove": [{ projectId: string; id: number }, boolean];
+
+  // Knowledge graph — the classifier's auto-extracted, embedding-linked
+  // decisions/constraints. Scoped to the active project via branch
+  // membership (a node's meta._branch says which branch wrote it).
+  "graph:for-project": [{ projectId: string }, { nodes: GraphNodeInfo[]; edges: GraphEdgeInfo[] }];
 }
 
 // ── IPC event channels: main → renderer (one-way push) ───────────────────────

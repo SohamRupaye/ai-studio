@@ -6,8 +6,11 @@ import { WorkspaceProvider } from "./components/workspace-provider";
 import { UiPrefsProvider } from "./components/ui-prefs";
 import { AppShell } from "./components/app-shell";
 import { ChatPage } from "./components/chat-page";
+import { HomePage } from "./components/home-page";
 import { ArtifactsPage } from "./components/artifacts-page";
 import { MemoriesPage } from "./components/memories-page";
+import { KnowledgeBasePage } from "./components/knowledge-base-page";
+import { GraphPage } from "./components/graph-page";
 import { ProjectSettingsRedirect, SettingsPage } from "./components/settings-page";
 import { UiGallery } from "./components/ui-gallery";
 import { Toaster } from "./components/ui/sonner";
@@ -63,9 +66,9 @@ export default function App() {
             />
 
             <Route element={<AppShell />}>
-              <Route index element={<Placeholder title="Home" />} />
-              <Route path="/knowledge-base" element={<Placeholder title="Knowledge base" />} />
-              <Route path="/graph" element={<Placeholder title="Knowledge graph" />} />
+              <Route index element={<HomePage />} />
+              <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+              <Route path="/graph" element={<GraphPage />} />
               <Route path="/spaces/:spaceId/memories" element={<MemoriesPage />} />
               <Route path="/spaces/:spaceId/artifacts" element={<ArtifactsPage />} />
               <Route path="/chats/:chatId" element={<Placeholder title="Chat" />} />

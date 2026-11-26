@@ -1,219 +1,102 @@
-# AI Studio — Project Status Tracker
+# AI Studio (Squirl) — Project Status Tracker
 
-> Last updated: 2026-06-08
+> Last updated: 2026-07-28
+> Source of truth for detail: `context/ONBOARDING.md` (backend/session history), `DESIGN.md` (repo root, UI system + changelog), `context/debt.md` (deliberate deferrals), `context/plan.md` (in-flight feature tracker), `context/memory-graph-redesign.md` (living-memory design). This file is a map to those, not a replacement — when they disagree with this file, they win.
 
 ## Vision
 
-AI Studio is a model-agnostic organizational intelligence layer — like Git for AI-native work. Context is the primary object, not chat. The product accumulates knowledge, decisions, reasoning, and artifacts so teams never re-explain context to AI.
+Squirl (renamed from "AI Studio" 2026-07-14) is a model-agnostic organizational intelligence layer — like Git for AI-native work. Context is the primary object, not chat: branches/forks let you fork a conversation's context the way you'd fork code, and the product accumulates memory/decisions/artifacts across a project instead of re-explaining itself to a model every session. Electron + React (renderer) + Node (main), TypeScript throughout. Solo-built, pre-launch, validated against one 18-person startup pilot.
+
+**Domain hierarchy: Organisation → Project → Space → Chat → Branch.** Spaces (added 2026-07-06) are functional areas within a project (Design / Development / Business — the pilot customer's handoff boundaries); each owns memories, artifacts, and chats. A chat is a container; users always work *on a branch*. Every chat is born with a "main" trunk branch (invariant).
+
+**Product sequencing (decided, not up for relitigation):** ship the single-user "git for my own AI context" product first (local SQLite, no server, BYOK — what's built today); multi-user comes later as async push/pull/merge, explicitly not live real-time multiplayer.
 
 ---
 
 ## Architecture
 
 ```
-@squirl/shared          → Type definitions (Message, Branch, Org, Project, Chat)
-@squirl/tokenizer       → Token counting + model context limits
-@squirl/event-bus       → Typed IPC contracts (40+ channels)
-@squirl/database        → SQLite store (users, orgs, projects, chats, branches, messages, artifacts, costs)
-@squirl/graph-engine    → SQLite-backed knowledge graph with local MiniLM-L6 embeddings
-@squirl/providers       → Anthropic, OpenAI, Google, CodexOAuth + Router with retry/fallback
+@squirl/shared          → Type definitions, tool-call summary/detail helpers, subagent event reducer
+@squirl/tokenizer       → Token counting + model context limits + capability predicates (vision/PDF input)
+@squirl/event-bus       → Typed IPC contracts (100+ channels)
+@squirl/database        → SQLite store — repositories split by domain (chats/branches/artifacts/memory/…)
+@squirl/graph-engine     → SQLite-backed knowledge graph with local MiniLM-L6 embeddings
+@squirl/providers       → Anthropic, OpenAI, Google, Bedrock, OpenRouter, Cloudflare, CodexOAuth + Router with retry/fallback
 @squirl/context-engine  → RAG retrieval with MMR reranking, cross-branch knowledge sharing
-@squirl/tools-runtime   → 50+ tools, MCP client, LSP client, Skills system
-@squirl/prompt-engine   → Tiered context builder + progressive summarization + branch diff
-@squirl/ai-core         → Agent loop, classifier, cost tracker, artifact extractor
-@squirl/ui              → React hooks (minimal — UI not yet built)
-@squirl/desktop         → Electron app (main process + basic renderer)
+@squirl/tools-runtime   → 50+ tools, MCP client (OAuth 2.1 + Streamable HTTP), LSP client, Skills system, local browser (Patchright)
+@squirl/prompt-engine   → Tiered context builder + progressive summarization + branch diff + tool-trail memory
+@squirl/ai-core         → Agent loop, classifier, cost tracker, artifact extractor, subagent runtime, Claude Agent SDK engine (gated)
+@squirl/ui              → Shared React hooks
+@squirl/desktop         → Electron app — full UI (app shell, chat, settings, artifacts, memories)
 ```
 
 ---
 
 ## Backend Status
 
-### ✅ Complete
+### ✅ Complete and hardened
 
-| Feature | Package | Notes |
-|---------|---------|-------|
-| Multi-provider BYOK | `providers` | Anthropic, OpenAI, Google, CodexOAuth (zero-config GPT-5 via PKCE) |
-| Retry/fallback routing | `providers` | Exponential backoff on 429/5xx/network errors |
-| Config validation + hot reload | `providers` | YAML config with `watchConfig()` |
-| OAuth token refresh mutex | `providers` | Prevents race condition on concurrent calls |
-| Stream JSON parsing safety | `providers` | try/catch on all SSE parsers |
-| SQLite persistence | `database` | WAL mode, indexed, proper transactions |
-| Org → Project → Chat → Branch hierarchy | `database` | Full CRUD with soft delete |
-| User/team model (sync-ready) | `database` | users, team_members tables, updated_at columns |
-| Artifacts table (versioned) | `database` | Type, title, content, version, branch/project scoped |
-| Cost tracking (persisted) | `database` | Per-message recording, per-branch and per-project aggregation |
-| Full UUIDs | `database` | No collision risk |
-| Soft delete + child reassignment | `database` | Branches never truly lost |
-| Turn number correctness | `database` | MAX(turn)+1, not COUNT(*) |
-| Scoped memory (global/project/chat/branch) | `database` | Hierarchical fact layering |
-| Knowledge graph (SQLite-backed) | `graph-engine` | Embeddings as BLOBs, indexed edges, concurrent-safe |
-| Local embeddings | `graph-engine` | Xenova/all-MiniLM-L6-v2 (384-dim) |
-| Cross-branch RAG retrieval | `context-engine` | MMR reranking, locality boost, no branch isolation |
-| Tiered context builder | `prompt-engine` | Ancestry + summaries + RAG + pins + memory → system prompt |
-| Progressive summarization | `prompt-engine` | Semantic chunking → summarize → meta-collapse |
-| Iterative ancestry traversal | `prompt-engine` | 30-depth cap, no stack overflow |
-| Branch comparison/diff | `prompt-engine` | Finds unique and conflicting decisions between branches |
-| Agent loop with self-correction | `ai-core` | Validates responses, forces tool use, max 10 iterations |
-| Cooperative yielding | `ai-core` | setImmediate between tool calls to keep UI responsive |
-| Structured knowledge extraction | `ai-core` | Classifier extracts decisions, constraints, artifacts, relationships |
-| Artifact auto-extraction | `ai-core` | Detects code, PRDs, plans, architecture, research from agent output |
-| Node counter persistence | `ai-core` | No ID collisions on restart |
-| 50+ tools | `tools-runtime` | File, bash, git, web, code intel, testing, packages, terminal, etc. |
-| MCP client | `tools-runtime` | JSON-RPC 2.0 stdio transport, auto-registers tools |
-| LSP client | `tools-runtime` | Definition, references, hover, diagnostics, rename |
-| Skills system | `tools-runtime` | Markdown-defined reusable workflows |
-| Subagent delegation | `tools-runtime` | Parallel (up to 4) + background fire-and-forget |
-| Typed IPC (40+ channels) | `event-bus` | Org/project/chat/branch/message/artifact/memory/user/costs/models/config |
-| Singleton tool registry | `desktop` | MCP tools persist across messages |
-| Full wiring | `desktop` | buildPayload, classifyAndIndex, extractArtifacts, summarization, costs all connected |
+Multi-provider BYOK (Anthropic/OpenAI/Google/Bedrock/OpenRouter/Cloudflare/CodexOAuth) with retry/fallback routing, org-level key overrides, live Codex model catalogue. SQLite persistence (WAL, indexed, transactional) with the full Org→Project→Space→Chat→Branch hierarchy, soft-delete cascades, a single **hard**-delete path (project delete, typed-challenge gated). Knowledge graph with local embeddings, cross-branch RAG (MMR), tiered context builder with progressive summarization and a tool-call-trail memory (the model can recall its own past tool calls). Agent loop with self-correction, cooperative yielding, hard timeouts, and cascading-abort semantics (Stop actually kills in-flight parallel subagents; background `delegate` jobs are deliberately immune). 50+ tools, real MCP OAuth 2.1 client (PKCE, DCR, token fallback for GitHub/Slack/Figma), LSP client, a real Skills system (GitHub-installable SKILL.md packages, model- and slash-invoked), tool-approval gating on side-effecting calls, memory dedup-on-add, automations (agent-scheduled recurring turns via croner), an opt-in local browser (Patchright — logged-in/bot-walled pages, scroll/self-verification tooling), full file/image/PDF/xlsx attachment handling (native PDF blocks for Claude/Gemini, scanned-PDF acceptance, paste/drag-drop, dedup, orphan sweep), thinking-block streaming, and per-tool-call expandable detail (args/result, redaction for sensitive fields like `browser_fill` text).
 
-### 🟡 Backend — Not Blocking but Could Improve Later
+See `context/ONBOARDING.md` for the full dated history of how each of these landed (each entry is a real session log with root causes and gotchas) — do not re-derive it here.
+
+### 🟡 In progress / gated
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Living memory graph (typed `updates`/`extends`/`relates` edges, branch-aware `isLatest`, gated `derives`) | **Built, phases 1–4 & 6 landed** (2026-07-19/20) | `context/memory-graph-redesign.md`. Phase 5 (full branch-merge conflict resolution) and phase 7 (UI: supersession chains, restore, typed-edge graph view) remain — land with the multi-user merge feature. |
+| Claude subscription engine (run turns on the user's local Claude Code login instead of an API key) | **Built and tested, OFF by default** | `context/debt.md`. Code is done; gated on Anthropic granting the "previously approved" exemption for consuming claude.ai login/rate limits in a distributed product. Do not enable in a shipped build or market it until that clears. |
+
+### 🟡 Not blocking, could improve later
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| ANN index for graph queries | Low | Brute-force cosine is fine up to ~2-3K nodes |
-| True worker thread for agent | Low | Cooperative yielding works; true isolation is better for heavy tool chains |
-| Typed graph edges (supersedes/contradicts) | Medium | Metadata is captured but edges are similarity-only |
-| Event bus for inter-subsystem reactivity | Medium | Classifier → UI notifications, summarization → graph |
-| Sync server | Later | Schema is sync-ready (updated_at, user IDs). Server comes after MVP |
-| Provider quality scoring / cost-aware routing | Later | Needs usage data accumulation first |
-| Batch embedding in summarizer | Low | Sequential is fine for typical workloads |
-| Graph partitioning by project | Medium | Single graph works for now; partition at scale |
+| Lint doesn't run anywhere (no ESLint 9 flat configs wired) | Medium | `context/debt.md` — ~20 min fix, do before relying on CI lint. |
+| OCR for scanned PDFs on non-Claude/Gemini models | Low | Escalation ladder agreed (page-rasterization → image blocks first); pickup trigger is a real user report. |
+| Register Squirl's own OAuth apps for GitHub/Slack/Figma/Google MCP presets | Medium | Administrative, not code — do before external users; Google's CASA verification has a multi-week lead time, start that first. |
+| Per-agent retry button for a failed/timed-out `delegate` job | Low | Parked with trigger: users actually hitting failed delegates. |
+| Browser screenshots + login-handoff prompt | Low | Browser tools are string-result only today. |
+| Proactive (event-driven, non-scheduled) triggers | Low | No webhook surface in a local-first app; would be a polling automation. |
+| Memory decay/soft-archive beyond dedup | Low | Superseded in scope by the living-memory design's lifecycle model; build alongside phase 2 if it becomes real. |
+| ANN index for graph queries | Low | Brute-force cosine fine to ~2-3K nodes. |
+| Sync server | Later | Schema is sync-ready; comes after MVP. |
 
 ---
 
 ## Frontend Status
 
-### ❌ Not Started — Needs Full Implementation
+**Design system, 31-component library, app shell, settings, chat page, artifacts/memories pages, and the right-panel context inspector are built and committed.** Read `DESIGN.md` (repo root) before touching any UI — it has the token system, every component, three hard-won gotchas, and a dated changelog with the reasoning behind each decision. Summary only, below.
 
-#### Layout (3-panel)
+### ✅ Built
 
-- [ ] Left sidebar — workspace tree
-  - [ ] Organisation selector
-  - [ ] Project list (collapsible)
-  - [ ] Chat list per project (collapsible)
-  - [ ] Branch tree per chat (git-like hierarchy, not flat list)
-  - [ ] Memories section
-  - [ ] Artifacts section
-  - [ ] Search (Cmd+K)
-  - [ ] Project graph link
-  - [ ] Project settings link
-- [ ] Center — chat area
-  - [ ] Message stream (markdown + code highlighting)
-  - [ ] Tool call visualization (collapsible)
-  - [ ] Streaming text with cursor indicator
-  - [ ] Chat breadcrumb (`Chat name > Branch`)
-  - [ ] Input bar with:
-    - [ ] `@ context` button (attach context/files)
-    - [ ] `⑂ fork` button (fork from current point)
-    - [ ] Model selector dropdown
-    - [ ] Send/Stop button
-  - [ ] Fork-from-message action on each message
-- [ ] Right panel — context/memory/artifacts/usage
-  - [ ] Context panel (active pins, retrieved knowledge)
-  - [ ] Memories panel (scoped facts — add/remove/list)
-  - [ ] Artifacts panel (list with checkboxes to include in context)
-  - [ ] Usage panel (cost per branch/project, token counts)
+- **App shell** — topbar (drag region, fullscreen-aware traffic-light gap, breadcrumb), project rail (drag-reorder, context menu), sidebar (org switcher, spaces tree with per-level context menus, ⌘K), name/confirm dialogs (typed-challenge variant for hard deletes).
+- **Chat page** (`/chats/:chatId/branches/:branchId`) — streaming (frame-batched), persistent + expandable tool activity, thinking blocks, markdown incl. tables, images render above the bubble with a lightbox, edit/retry/regenerate/branch-from-here/pin, inherited-ancestry transcript on forks, subagent detail drawer with live transcripts, tool-approval card, question-tool panel (composer-attached, keyboard-driven), slash-command skill autocomplete + transcript chips, auto-titling.
+- **Right panel** (context inspector, branch pages) — donut context meter + tier breakdown, persona select, selectable artifacts (feed the prompt, fork-inherited), memories by scope, per-model usage/cost. Progressive disclosure (collapsed = one-glance mono summary).
+- **Settings** (`/settings/*`) — General (theme, tool-call-detail toggle, tool-permission rules, local-browser toggle, memory-inference toggle), Providers (keys, per-provider model management, Codex account, Claude-subscription-engine toggle), MCP (quick-connect presets, OAuth/token auth, custom servers), Skills (install/enable/remove, GitHub discovery), Automations (list/toggle/delete), Organization (rename, hard-delete, API-key overrides, project moves), Project (rename, hard-delete with typed challenge, icon/description/system-prompt).
+- **Artifacts page** (`/artifacts`, `/spaces/:spaceId/artifacts`) — format-native viewers in `components/viewers/`: pdf.js for PDFs, mammoth for docx, table/sheet viewers for csv/tsv/xlsx (editable where the text IS the file).
+- **Memories page** (`/memories`, `/spaces/:spaceId/memories`).
 
-#### Screens / Views
+### ❌ Still placeholders
 
-- [ ] Chat view (main)
-- [ ] Settings page (API keys, model defaults, MCP servers)
-- [ ] Project graph visualization (SVG force-directed from graph-engine)
-- [ ] Branch comparison view (side-by-side diff of decisions)
-- [ ] Artifact detail view (versioned content with edit)
-- [ ] Onboarding / first-run (user name, API key setup)
+- **Home** (`/`) — landing/dashboard.
+- **Knowledge base** (`/knowledge-base`) and **Knowledge graph** (`/graph`) — visualization of the living memory graph (typed edges) is spec'd in `memory-graph-redesign.md` phase 7, not built.
+- **Branch comparison** (`/branches/compare`) — backend diff logic already exists in `prompt-engine` (finds unique/conflicting decisions between branches); needs a UI.
+- **Costs** (`/costs`) — project-level cost view; per-branch costs already ship in the right panel.
+- **Bare chat route** (`/chats/:chatId`) — chats always resolve to a branch in practice; this route is effectively dead.
+- `ui-gallery.tsx` (`/gallery`) is a dev scratchpad, not a shipping screen — delete once the above are covered.
 
-#### Component Library
+### Known frontend gaps (see DESIGN.md/ONBOARDING.md for detail)
 
-- [ ] Choose and setup design system (shadcn/ui + Tailwind recommended)
-- [ ] Theme system (light/dark)
-- [ ] Typography scale
-- [ ] Shared components: Button, Input, Modal, Dropdown, Tree, Panel, Tabs
-
-#### Data Flow
-
-- [ ] Wire `branch:switch` IPC on sidebar click
-- [ ] Load message history on branch switch (`message:list`)
-- [ ] Wire model selector to `branch:create` with model param
-- [ ] Wire fork button to `branch:create` with parentId + forkAtIndex
-- [ ] Display cost from `done` event
-- [ ] Wire right panel to `memory:list/add/remove`, `artifact:list/get`
-- [ ] Wire org/project/chat navigation to respective IPC channels
-- [ ] Wire settings to `config:set`
-- [ ] Wire user setup to `user:set`
-
-#### Electron App
-
-- [ ] React Router (or similar) for page navigation
-- [ ] Window controls (close/minimize/maximize)
-- [ ] Keyboard shortcuts (Cmd+K search, Cmd+N new chat, Cmd+B new branch)
-- [ ] Drag-and-drop file attachment
-- [ ] System tray / menu bar integration
-- [ ] Auto-update (electron-updater)
-- [ ] App icon + splash screen
+- Memories/artifacts aren't scoped to spaces in the data model yet (a space's "memories" count is really its chats' chat-/branch-scoped facts).
+- Mid-stream chat resume after navigating away isn't live (final reply lands via refetch, no resumed streaming view).
+- Composer attach menu is partially wired (files/skills real; some entries visual-only — check current state before assuming).
+- Per-turn cost isn't surfaced in message actions (only in the right panel's aggregate).
 
 ---
 
-## IPC Channels Available for Frontend
+## IPC Channels
 
-```typescript
-// Organisations
-"org:list"          → Organisation[]
-"org:create"        → Organisation
-
-// Projects
-"project:list"      → Project[]
-"project:create"    → Project
-
-// Chats
-"chat:list"         → Chat[]
-"chat:create"       → Chat
-
-// Branches
-"branch:list"       → Branch[]
-"branch:create"     → Branch
-"branch:delete"     → boolean
-"branch:switch"     → void
-"branch:rename"     → void
-"branch:pin-add"    → void
-"branch:pin-remove" → boolean
-"branch:compare"    → BranchDiff
-
-// Messages
-"message:list"      → Array<{role, content, turn}>
-"message:undo"      → number
-
-// Chat
-"chat:send"         → void (streams via chat:stream event)
-"chat:abort"        → void
-
-// Artifacts
-"artifact:list"     → Array<{id, type, title, version}>
-"artifact:get"      → {id, type, title, content, version}
-"artifact:update"   → void
-
-// Memory
-"memory:list"       → MemoryFact[]
-"memory:add"        → MemoryFact
-"memory:remove"     → boolean
-
-// User
-"user:get"          → {id, name} | null
-"user:set"          → {id, name}
-
-// Models
-"models:list"       → Record<string, string[]>
-
-// Config
-"config:get"        → Record<string, unknown>
-"config:set"        → void
-
-// Costs
-"costs:branch"      → Array<{model, inputTokens, outputTokens, costUsd, timestamp}>
-"costs:project"     → {totalCost, totalInput, totalOutput}
-```
+100+ typed channels across org/project/space/chat/branch/message/artifact/memory/user/costs/models/config/skills/automation/mcp/window/system. See `@squirl/event-bus` for the authoritative typed contract list — it grew substantially past the org/project/chat/branch/message/artifact/memory/user/models/config/costs set and is no longer worth hand-duplicating here; grep `packages/event-bus/src` for the current channel names when wiring a new consumer.
 
 ---
 
@@ -224,23 +107,23 @@ AI Studio is a model-agnostic organizational intelligence layer — like Git for
 | Runtime | Electron 33, Node 20+ |
 | Language | TypeScript 5.7 |
 | Build | Yarn 4 + Turborepo + Vite 6 |
-| Frontend | React 19 (+ design system TBD) |
-| Database | SQLite (better-sqlite3) + Drizzle (available, unused) |
-| Embeddings | HuggingFace Transformers.js (local, no network) |
-| LLM Providers | Anthropic, OpenAI, Google, CodexOAuth |
-| Packaging | Electron Forge |
+| Frontend | React 19, hand-written primitives + Base UI (`@base-ui-components/react`) for behavioral components — **Radix removed, don't reintroduce**; cmdk (command bar), sonner (toasts), `@shadcn/react` (message scroller), pdf.js (PDF viewer), mammoth (docx), SheetJS (xlsx) |
+| Database | SQLite (better-sqlite3), raw SQL — Drizzle removed as dead tooling (2026-07-05) |
+| Embeddings | HuggingFace Transformers.js (local, no network); local NLI (`mobilebert-uncased-mnli`) for memory-relation detection |
+| LLM Providers | Anthropic, OpenAI, Google, Bedrock, OpenRouter, Cloudflare, CodexOAuth; optional Claude Agent SDK engine (gated, off by default) |
+| Automation | croner (cron scheduling) |
+| Browser automation | Patchright (optional dep, opt-in local browser tool) |
+| Packaging | Electron Forge (productName "Squirl") |
 
 ---
 
-## Next Steps (Recommended Order)
+## Next Steps (recommended order)
 
-1. **Finalize Figma designs** → lock down component list + interactions
-2. **Setup design system** (shadcn/ui + Tailwind in `@squirl/ui`)
-3. **Build sidebar** → org/project/chat/branch tree with IPC wiring
-4. **Build chat view** → messages + streaming + model selector
-5. **Build right panel** → context/memory/artifacts/costs
-6. **Build settings** → API keys + config
-7. **Build branch actions** → fork, compare, rename, delete
-8. **Polish** → keyboard shortcuts, animations, onboarding
-9. **Package + distribute** → DMG/installer, auto-update
-10. **Sync server** → when ready for team features
+1. **Placeholder pages by priority**: Home, Costs, Branch comparison (backend diff logic is ready — this is the cheapest win), Knowledge graph.
+2. **Chat follow-ups**: mid-stream resume after navigating away, finish composer attach-menu wiring, per-turn cost in message actions.
+3. **Living memory graph phase 5 + 7**: branch-merge conflict resolution (lands with push/pull), supersession-chain UI.
+4. **MCP preset OAuth apps**: register Squirl's own GitHub/Slack/Figma/Google OAuth clients before onboarding external users (Google CASA review takes weeks — start first).
+5. **Lint**: wire ESLint 9 flat configs (~20 min, currently silently not running).
+6. **Claude subscription engine**: revisit once Anthropic's approval-gate status changes; do not enable/market before then.
+7. **Delete `ui-gallery.tsx`** once its remaining components (Home-style layouts) are covered by real pages.
+8. **Sync server** — when ready for team/multi-user features.

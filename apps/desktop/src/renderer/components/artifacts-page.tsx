@@ -65,7 +65,7 @@ function viewKindFor(a: { type: string; source: string; mime: string | null; blo
   return "markdown";
 }
 
-function listIcon(a: { type: string; mime: string | null }): Icon {
+export function listIcon(a: { type: string; mime: string | null }): Icon {
   if (a.mime === "application/pdf") return FilePdfIcon;
   if (a.mime?.includes("word")) return FileDocIcon;
   if (a.mime?.includes("sheet") || a.mime?.includes("excel")) return FileXlsIcon;
@@ -83,7 +83,7 @@ const TYPE_LABEL: Record<string, string> = {
   research: "Research",
   document: "Document",
 };
-const typeLabel = (t: string) => TYPE_LABEL[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
+export const typeLabel = (t: string) => TYPE_LABEL[t] ?? t.charAt(0).toUpperCase() + t.slice(1);
 
 function fmtWhen(ts: number): string {
   const d = new Date(ts);
@@ -131,7 +131,7 @@ export function ArtifactsPage() {
             </div>
           ) : error ? (
             <div className="flex flex-col items-start gap-2 px-2 py-2">
-              <p className="text-body-sm text-danger-text">Couldn't load artifacts.</p>
+              <p className="text-body-sm text-danger-text">Couldn&apos;t load artifacts.</p>
               <Button variant="outline" size="sm" onClick={() => refetch()}>
                 Try again
               </Button>
@@ -408,7 +408,7 @@ function ArtifactBody({
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-4 border-b border-line bg-surface-2 px-6 py-3">
         <p className="text-body-sm text-fg-muted">
-          This format can't be previewed here — showing extracted text. Open the original for full
+          This format can&apos;t be previewed here — showing extracted text. Open the original for full
           fidelity.
         </p>
         <div className="flex shrink-0 gap-1.5">

@@ -187,6 +187,24 @@ export class MetaGraph {
     return node;
   }
 
+  /** Every node, for the graph visualization — embeddings omitted (384 floats
+   * per node the UI never uses; skip the bandwidth). */
+  listNodes(): Array<Omit<GraphNode, "embedding">> {
+    const rows = this.db.prepare("SELECT id, text, domain, subtopic, meta, history FROM nodes").all() as any[];
+    return rows.map(r => ({
+      id: r.id,
+      text: r.text,
+      domain: r.domain,
+      subtopic: r.subtopic,
+      meta: JSON.parse(r.meta),
+      history: JSON.parse(r.history),
+    }));
+  }
+
+  listEdges(): GraphEdge[] {
+    return this.db.prepare("SELECT source, target, weight FROM edges").all() as GraphEdge[];
+  }
+
   getNeighbors(id: number): Array<{ id: number; weight: number }> {
     const rows = this.db.prepare(
       "SELECT target as id, weight FROM edges WHERE source = ? UNION SELECT source as id, weight FROM edges WHERE target = ?"

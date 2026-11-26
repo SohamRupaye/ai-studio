@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from "electron";
+import started from "electron-squirrel-startup";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
 import { Store, GlobalMemory } from "@squirl/database";
@@ -29,12 +30,13 @@ import { registerArtifactHandlers } from "./ipc/artifacts.js";
 import { registerWorkspaceHandlers } from "./ipc/workspace.js";
 import { registerBranchHandlers } from "./ipc/branches.js";
 import { registerMemoryHandlers } from "./ipc/memory.js";
+import { registerKnowledgeHandlers } from "./ipc/knowledge.js";
 import { registerWindowHandlers } from "./ipc/window.js";
 import { registerSystemHandlers } from "./ipc/system.js";
 import { registerToolingHandlers } from "./ipc/tools.js";
 import { registerNotifyHandlers } from "./ipc/notify.js";
 
-if (require("electron-squirrel-startup")) app.quit();
+if (started) app.quit();
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
@@ -391,6 +393,7 @@ function registerHandlers() {
   registerWindowHandlers();
   registerBranchHandlers();
   registerMemoryHandlers();
+  registerKnowledgeHandlers();
   registerSystemHandlers();
   registerToolingHandlers();
   registerNotifyHandlers();

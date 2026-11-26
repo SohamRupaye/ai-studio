@@ -303,5 +303,8 @@ export const usePersonas = () => useQuery("persona:list", undefined);
 export const useActivePersona = (branchId: string | undefined) =>
   useQuery("persona:get-active", { branchId: branchId! }, { enabled: !!branchId });
 
-export const useKnowledgeBase = (params?: { category?: string; tags?: string[] }) =>
-  useQuery("kb:list", params ?? {});
+export const useKnowledgeBase = (projectId: string | undefined, category?: string) =>
+  useQuery("kb:list", { projectId: projectId!, category }, { enabled: !!projectId });
+
+export const useGraph = (projectId: string | undefined) =>
+  useQuery("graph:for-project", { projectId: projectId! }, { enabled: !!projectId });

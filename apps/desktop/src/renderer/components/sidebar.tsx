@@ -17,6 +17,7 @@ import {
   GraphIcon,
   HouseIcon,
   MagnifyingGlassIcon,
+  NoteIcon,
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
@@ -63,6 +64,7 @@ export interface NavItem {
 
 export const PRIMARY_NAV: NavItem[] = [
   { to: "/", label: "Home", icon: HouseIcon, end: true },
+  { to: "/knowledge-base", label: "Knowledge base", icon: NoteIcon },
   { to: "/graph", label: "Knowledge graph", icon: GraphIcon },
 ];
 
@@ -269,7 +271,7 @@ function SpacesTree() {
         ) : error ? (
           // An IPC failure is not an empty project — say so, and offer a retry.
           <div className="flex flex-col items-start gap-2 px-2 py-1">
-            <p className="text-body-sm text-danger-text">Couldn't load spaces.</p>
+            <p className="text-body-sm text-danger-text">Couldn&apos;t load spaces.</p>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Try again
             </Button>

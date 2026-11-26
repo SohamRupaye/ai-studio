@@ -4,12 +4,11 @@ import { getConfig, saveConfig } from "@squirl/providers";
 import type { MCPServerConfigEntry } from "@squirl/providers";
 import {
   getMCPManager, addMCPServer, removeMCPServer, reconnectMCPServer, authenticateMCPServer,
-  kbListEntries, kbSearchEntries, kbAddEntry, kbRemoveEntry,
 } from "@squirl/tools-runtime";
 import type { SkillImportOutcome } from "@squirl/event-bus";
 import { handle } from "./handle.js";
 import {
-  mainWindow, registry, permissions, personas, snapshots, skills, store, dataDirPath,
+  mainWindow, registry, permissions, personas, snapshots, skills, store,
   toMCPServerEntry,
 } from "../state.js";
 
@@ -201,11 +200,4 @@ export function registerToolingHandlers() {
     if (!personas.get(name)) throw new Error(`Unknown persona: ${name}`);
     store.setMeta(`persona:${branchId}`, name);
   });
-
-  // ── Knowledge base ──────────────────────────────────────────────────────────
-
-  handle("kb:list", ({ category, tags }) => kbListEntries(dataDirPath, category, tags));
-  handle("kb:search", ({ query, category, tags }) => kbSearchEntries(dataDirPath, query, category, tags));
-  handle("kb:add", ({ title, content, category, tags }) => kbAddEntry(dataDirPath, { title, content, category, tags }));
-  handle("kb:remove", ({ id }) => kbRemoveEntry(dataDirPath, id));
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowsClockwiseIcon,
@@ -94,6 +94,7 @@ interface ErrorState {
 export function ChatPage() {
   const { branchId, chatId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: branches } = useBranches();
   const branch = branches?.find((b) => b.id === branchId);
   // Snapshot of what a finished-turn notification needs, refreshed every
@@ -338,6 +339,22 @@ export function ChatPage() {
       setPendingUserImages([]);
     }
   };
+
+  // Home's hero composer creates a fresh chat and hands the first message
+  // here via navigation state (chat:send can't fire until a branch exists).
+  // Fires once per mount, then scrubs the state so a refresh or back-nav
+  // can't resend it.
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    const initialMessage = (location.state as { initialMessage?: string } | null)?.initialMessage;
+    if (!initialMessage || autoSentRef.current) return;
+    autoSentRef.current = true;
+    navigate(location.pathname, { replace: true });
+    send(initialMessage);
+    // Only the branch's first mount should consume this — deliberately not
+    // depending on `send`/`location.pathname` (they're stable per render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Answer the question tool through the composer surface — picked option,
   // typed reply, or skip all resolve the same pending tool call in main.
