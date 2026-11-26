@@ -1,0 +1,4 @@
+# Code owners for ai-studio (Squirl).
+# Required as a reviewer on every pull request per branch protection on
+# main/dev — see repository settings.
+* @SohamRupaye
