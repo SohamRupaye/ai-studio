@@ -3,7 +3,7 @@
  */
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface FileSnapshot {
   path: string;
@@ -110,14 +110,14 @@ export class SnapshotManager {
   /** Use git stash as an alternative snapshot mechanism (if in a git repo) */
   static gitSnapshot(cwd: string, message?: string): string | null {
     try {
-      execSync("git add -A", { cwd, stdio: "pipe" });
-      execSync(`git stash push -m "${message ?? "ai-studio-snapshot"}"`, { cwd, stdio: "pipe" });
-      return execSync("git stash list --max-count=1 --format=%H", { cwd, encoding: "utf-8" }).trim();
+      execFileSync("git", ["add", "-A"], { cwd, stdio: "pipe" });
+      execFileSync("git", ["stash", "push", "-m", message ?? "ai-studio-snapshot"], { cwd, stdio: "pipe" });
+      return execFileSync("git", ["stash", "list", "--max-count=1", "--format=%H"], { cwd, encoding: "utf-8" }).trim();
     } catch { return null; }
   }
 
   /** Revert using git stash pop */
   static gitRevert(cwd: string): boolean {
-    try { execSync("git stash pop", { cwd, stdio: "pipe" }); return true; } catch { return false; }
+    try { execFileSync("git", ["stash", "pop"], { cwd, stdio: "pipe" }); return true; } catch { return false; }
   }
 }

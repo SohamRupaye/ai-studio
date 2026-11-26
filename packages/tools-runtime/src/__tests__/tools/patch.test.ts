@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { writeFileSync, readFileSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { patch, patchDef } from "../../tools/patch.js";
@@ -8,22 +8,20 @@ import { patch, patchDef } from "../../tools/patch.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TMP = tmpdir();
+let tempDir: string;
 
-let tempFiles: string[] = [];
+beforeEach(() => {
+  tempDir = mkdtempSync(join(tmpdir(), "patch-test-"));
+});
 
 function tmpFile(name: string, content: string): string {
-  const p = join(TMP, `patch-test-${process.pid}-${Date.now()}-${name}`);
+  const p = join(tempDir, name);
   writeFileSync(p, content, "utf-8");
-  tempFiles.push(p);
   return p;
 }
 
 afterEach(() => {
-  for (const f of tempFiles) {
-    try { rmSync(f, { force: true }); } catch {}
-  }
-  tempFiles = [];
+  try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
 });
 
 // ---------------------------------------------------------------------------

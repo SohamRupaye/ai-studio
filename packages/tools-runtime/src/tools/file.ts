@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import type { ToolDefinition } from "../types.js";
 import type { ToolHandler } from "../registry.js";
@@ -33,11 +33,16 @@ export const writeFile: ToolHandler = async (args) => {
 
   // Compute diff summary if file already exists
   let diffSummary = "";
-  if (existsSync(path)) {
-    const oldContent = readFileSync(path, "utf-8");
+  let oldContent: string | null = null;
+  try {
+    oldContent = readFileSync(path, "utf-8");
+  } catch {
+    oldContent = null;
+  }
+
+  if (oldContent !== null) {
     const oldLines = oldContent.split("\n");
     const newLines = newContent.split("\n");
-    const added = newLines.length - oldLines.length;
     const oldSet = new Set(oldLines);
     const newSet = new Set(newLines);
     const linesRemoved = oldLines.filter(l => !newSet.has(l)).length;
@@ -121,11 +126,11 @@ export const searchFiles: ToolHandler = async (args) => {
 
   function walk(p: string) {
     if (results.length > 50) return;
-    for (const entry of readdirSync(p)) {
-      if (entry.startsWith(".") || entry === "node_modules" || entry === "dist") continue;
-      const full = join(p, entry);
-      const stat = statSync(full);
-      if (stat.isDirectory()) { walk(full); continue; }
+    for (const entry of readdirSync(p, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "dist") continue;
+      const full = join(p, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.isFile()) continue;
       if (include && !full.endsWith(include)) continue;
       try {
         const content = readFileSync(full, "utf-8");

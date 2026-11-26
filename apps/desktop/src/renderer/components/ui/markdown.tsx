@@ -136,6 +136,22 @@ function parseBlocks(source: string): Block[] {
 // Inline tokens: code spans first (so ** inside `` isn't touched), then
 // bold, italic, links. No nesting — matches what LLM prose actually needs.
 const INLINE_PATTERN = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*|\[([^\]]+)\]\(([^)]+)\)/;
+const SAFE_LINK_PROTOCOL = /^(https?:|mailto:)/i;
+
+function safeHref(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!SAFE_LINK_PROTOCOL.test(trimmed)) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:") {
+      return parsed.href;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
 
 function renderInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
@@ -161,17 +177,22 @@ function renderInline(text: string): React.ReactNode[] {
     } else if (italic !== undefined) {
       nodes.push(<em key={key++}>{renderInline(italic)}</em>);
     } else if (linkText !== undefined) {
-      nodes.push(
-        <a
-          key={key++}
-          href={linkHref}
-          target="_blank"
-          rel="noreferrer"
-          className="underline-offset-2 hover:underline"
-        >
-          {linkText}
-        </a>,
-      );
+      const href = safeHref(linkHref);
+      if (href) {
+        nodes.push(
+          <a
+            key={key++}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="underline-offset-2 hover:underline"
+          >
+            {linkText}
+          </a>,
+        );
+      } else {
+        nodes.push(<span key={key++}>{linkText}</span>);
+      }
     }
     last = match.index + match[0].length;
   }

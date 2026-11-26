@@ -14,7 +14,7 @@
  *   - returns sorted list with file sizes
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join, relative, extname, basename } from "node:path";
 import type { ToolDefinition } from "../types.js";
 import type { ToolHandler } from "../registry.js";
@@ -124,33 +124,39 @@ function grepDir(
 ) {
   if (results.length >= maxMatches) return;
 
-  let entries: string[];
-  try { entries = readdirSync(dir); } catch { return; }
+  let entries: Dirent[];
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
 
   for (const entry of entries) {
     if (results.length >= maxMatches) break;
-    if (DEFAULT_SKIP.has(entry) || entry.startsWith(".")) continue;
+    if (DEFAULT_SKIP.has(entry.name) || entry.name.startsWith(".")) continue;
 
-    const full = join(dir, entry);
+    const full = join(dir, entry.name);
     const rel = relative(root, full).replace(/\\/g, "/");
 
-    let stat: ReturnType<typeof statSync>;
-    try { stat = statSync(full); } catch { continue; }
-
-    if (stat.isDirectory()) {
+    if (entry.isDirectory()) {
       if (exclude.length && matchesAnyGlob(rel, exclude)) continue;
       grepDir(root, full, pattern, include, exclude, contextLines, maxMatches, results, skipped);
       continue;
     }
+    if (!entry.isFile()) continue;
 
     // File filtering
     if (isBinary(full)) continue;
     if (include.length && !matchesAnyGlob(rel, include)) continue;
     if (exclude.length && matchesAnyGlob(rel, exclude)) continue;
-    if (stat.size > 2 * 1024 * 1024) continue; // skip >2MB
 
     let content: string;
-    try { content = readFileSync(full, "utf-8"); } catch { continue; }
+    let fd: number | undefined;
+    try {
+      fd = openSync(full, "r");
+      if (fstatSync(fd).size > 2 * 1024 * 1024) continue; // skip >2MB
+      content = readFileSync(fd, "utf-8");
+    } catch {
+      continue;
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
 
     const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
