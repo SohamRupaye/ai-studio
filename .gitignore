@@ -23,9 +23,10 @@ storage/*.db-shm
 .env.local
 .env.*.local
 
-# IDE
+# IDE & local agent settings
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 .DS_Store

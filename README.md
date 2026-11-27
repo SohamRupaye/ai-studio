@@ -19,7 +19,16 @@ Context is the primary object, not chat. Squirl accumulates knowledge, decisions
 - **Local-First Context & Knowledge Graph** — SQLite-backed knowledge graph with local MiniLM-L6 embeddings (`@huggingface/transformers`), MMR reranking, progressive summarization, and tiered prompt budgeting — zero external vector DB required.
 - **Model-Agnostic Provider Router** — Unified streaming interface across Anthropic, OpenAI, Google, OpenRouter, Codex OAuth (PKCE), and local Claude Code sessions with retry/fallback routing and cost tracking.
 - **Extensible Agent & Tools Runtime** — Multi-agent delegation, 50+ built-in tools, Model Context Protocol (MCP) client over stdio/SSE/Streamable HTTP with OAuth PKCE, Language Server Protocol (LSP) integration, and a hot-reloading Skills system.
-- **Production-Grade Engineering & CI/CD** — Strict TypeScript monorepo (Yarn 4 + Turborepo), automated unit/integration test suites, Electron Forge packaging verification, CodeQL (`security-extended`), Trivy SARIF scanning, `yarn npm audit`, and `jscpd` duplication gates.
+- **Production-Grade Engineering & CI/CD** — Strict TypeScript monorepo (Yarn 4 + Turborepo), automated unit/integration test suites, Electron Forge packaging verification, CodeQL (`security-extended`), Trivy SARIF scanning, and `jscpd` duplication gates.
+
+---
+
+## Status & Roadmap
+
+Squirl is a **public v0.1 engineering showcase (active WIP)**:
+
+- **Built & tested today** — Core monorepo backend (11 packages, 740+ unit & integration tests), local SQLite `Org → Project → Space → Chat → Branch` store, local MiniLM-L6 knowledge graph & MMR RAG retrieval, multi-provider router + Codex OAuth PKCE, 50+ tools, MCP OAuth 2.1 client, LSP client, Skills system, PDF/DOCX/XLSX ingestion, Electron + React 19 desktop app, and end-to-end DevSecOps + multi-OS Electron release pipelines.
+- **In progress** — UI polish & onboarding walkthrough, additional renderer component/E2E tests, and async multi-user branch sync (push/pull/merge).
 
 ---
 
