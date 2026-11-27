@@ -148,7 +148,7 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 /** Remove HTML comments and specified block elements (including whitespace in closing tags like `</script >`). */
-function stripHtmlBlocks(html: string, blockTags: readonly string[]): string {
+export function stripHtmlBlocks(html: string, blockTags: readonly string[]): string {
   const lower = html.toLowerCase();
   const out: string[] = [];
   let i = 0;
@@ -210,7 +210,7 @@ function stripHtmlBlocks(html: string, blockTags: readonly string[]): string {
 }
 
 /** Linear-time character scanner that strips all HTML tags (including unclosed trailing tags). */
-function stripHtmlTags(input: string): string {
+export function stripHtmlTags(input: string): string {
   const out: string[] = [];
   let inTag = false;
   let quote: string | null = null;
@@ -236,7 +236,7 @@ function stripHtmlTags(input: string): string {
 }
 
 /** Single-pass HTML entity decoder (never double-unescapes `&amp;lt;`). */
-function decodeHtmlEntities(input: string): string {
+export function decodeHtmlEntities(input: string): string {
   return input.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|nbsp);/gi, (match, ent: string) => {
     const low = ent.toLowerCase();
     if (low.startsWith("#x")) {
@@ -251,7 +251,7 @@ function decodeHtmlEntities(input: string): string {
   });
 }
 
-function htmlToText(html: string, _url: string): string {
+export function htmlToText(html: string, _url: string): string {
   // Remove noise blocks first
   let text = stripHtmlBlocks(html, NOISE_BLOCKS);
 

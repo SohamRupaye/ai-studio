@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            os: macos-latest
+          - platform: linux-x64
+            os: ubuntu-latest
+          - platform: windows-x64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux packaging tools (deb/rpm)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Build workspace packages
+        run: yarn turbo run build --filter='!@squirl/desktop'
+
+      - name: Build desktop installers (Electron Forge)
+        run: yarn desktop:make
+
+      - name: Collect installers and compute SHA-256 checksums
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          find apps/desktop/out/make -type f \( \
+            -name "*.dmg" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -o -name "*.exe" -o -name "*.nupkg" -o -name "RELEASES" \
+          \) -exec cp {} release-artifacts/ \;
+          cd release-artifacts
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum * > "SHA256SUMS-${{ matrix.platform }}.txt"
+          else
+            shasum -a 256 * > "SHA256SUMS-${{ matrix.platform }}.txt"
+          fi
+          ls -lh
+
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-artifacts/*
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+
+      - name: Combine checksums
+        run: |
+          cd dist-release
+          cat SHA256SUMS-*.txt > SHA256SUMS.txt
+          rm -f SHA256SUMS-*.txt
+          ls -lh
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist-release/* \
+            --title "Squirl $GITHUB_REF_NAME" \
+            --generate-notes \
+            --draft
