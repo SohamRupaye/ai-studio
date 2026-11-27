@@ -41,6 +41,7 @@ const config: ForgeConfig = {
         name: "squirl",
         bin: "squirl",
         productName: "Squirl",
+        license: "MIT",
         homepage: "https://github.com/SohamRupaye/ai-studio",
         icon: "./assets/icon.png",
       },

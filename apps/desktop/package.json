@@ -3,6 +3,7 @@
   "productName": "Squirl",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "author": "Soham Rupaye",
   "description": "Squirl Desktop Application",
   "main": ".vite/build/index.js",
