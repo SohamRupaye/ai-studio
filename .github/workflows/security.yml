@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
     branches: [main, dev]
   schedule:
@@ -73,3 +73,4 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-results.sarif
+          category: '.github/workflows/security.yml:vulnerability-scan'
