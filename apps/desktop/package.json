@@ -67,7 +67,7 @@
     "@electron-forge/maker-dmg": "7.6.0",
     "@electron-forge/maker-rpm": "7.6.0",
     "@electron-forge/maker-squirrel": "7.6.0",
-    "@electron-forge/maker-zip": "7.6.0",
+    "@electron-forge/maker-zip": "8.0.1",
     "@electron-forge/plugin-vite": "7.6.0",
     "@electron/rebuild": "3.7.1",
     "@types/node": "22.10.5",
