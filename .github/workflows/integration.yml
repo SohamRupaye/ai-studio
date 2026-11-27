@@ -1,0 +1,37 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          cache-turbo: 'true'
+
+      - name: Build packages
+        run: yarn turbo run build --filter='!@squirl/desktop'
+
+      - name: Rebuild native modules (Node ABI, for SQLite tests)
+        run: npm rebuild better-sqlite3
+
+      - name: Run integration test suite
+        run: yarn turbo run test:integration

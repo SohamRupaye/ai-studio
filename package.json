@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Squirl - Model-agnostic organizational intelligence layer",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -19,6 +19,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
     "clean": "turbo run clean",
     "dupcheck": "jscpd",
     "postinstall": "yarn workspace @squirl/desktop exec electron-rebuild -f -w better-sqlite3 || true",

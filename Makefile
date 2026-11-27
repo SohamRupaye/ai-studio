@@ -1,4 +1,4 @@
-.PHONY: help install dev build test test-summary lint typecheck clean \
+.PHONY: help install dev build test test-unit test-integration test-summary lint typecheck clean \
         desktop desktop-build desktop-package
 
 help: ## Show this help
@@ -31,8 +31,14 @@ desktop-package: ## Package the desktop app into a distributable
 
 # ── Quality ──────────────────────────────────────────────────────────────────
 
-test: ## Run all tests
+test: ## Run all tests (unit + integration)
 	yarn test
+
+test-unit: ## Run unit tests only
+	yarn test:unit
+
+test-integration: ## Run integration tests only
+	yarn test:integration
 
 test-summary: ## Run all tests (force, no cache) and print a global pass/fail summary
 	@yarn turbo run test --force 2>&1 | tee /tmp/turbo-test-out.txt; \
