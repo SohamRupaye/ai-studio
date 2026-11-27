@@ -20,7 +20,7 @@
     "test:integration": "vitest run integration.test.ts --passWithNoTests"
   },
   "dependencies": {
-    "tiktoken": "1.0.18"
+    "tiktoken": "1.0.22"
   },
   "devDependencies": {
     "typescript": "5.7.2",
