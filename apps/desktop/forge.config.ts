@@ -17,11 +17,34 @@ const config: ForgeConfig = {
     icon: "./assets/icon",
   },
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      name: "squirl",
+      authors: "Soham Rupaye",
+      exe: "squirl.exe",
+      setupExe: "Squirl-Setup.exe",
+      setupIcon: "./assets/icon.ico",
+    }),
     new MakerZIP({}, ["darwin"]),
     new MakerDMG(),
-    new MakerDeb({}),
-    new MakerRpm({}),
+    new MakerDeb({
+      options: {
+        name: "squirl",
+        bin: "squirl",
+        productName: "Squirl",
+        maintainer: "Soham Rupaye",
+        homepage: "https://github.com/SohamRupaye/ai-studio",
+        icon: "./assets/icon.png",
+      },
+    }),
+    new MakerRpm({
+      options: {
+        name: "squirl",
+        bin: "squirl",
+        productName: "Squirl",
+        homepage: "https://github.com/SohamRupaye/ai-studio",
+        icon: "./assets/icon.png",
+      },
+    }),
   ],
   plugins: [
     new VitePlugin({
