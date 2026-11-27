@@ -31,7 +31,11 @@ jobs:
 
       - name: Install Linux packaging tools (deb/rpm)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm fakeroot
+          # RPM 4.20+ (Ubuntu 24.04) changed %_builddir to BUILD/<name>-<version>-build,
+          # while @electron-forge/maker-rpm@7.x stages usr/ directly under BUILD/.
+          echo '%_builddir %{_topdir}/BUILD' >> ~/.rpmmacros
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
