@@ -53,7 +53,10 @@ export interface MemoryFact {
 }
 
 function normalizeFact(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, " ").replace(/[.!?…]+$/g, "").trim();
+  const collapsed = text.toLowerCase().replace(/\s+/g, " ");
+  let end = collapsed.length;
+  while (end > 0 && ".!?…".includes(collapsed[end - 1]!)) end--;
+  return collapsed.slice(0, end).trim();
 }
 
 function factTokens(text: string): Set<string> {

@@ -1,0 +1,49 @@
+name: Setup Workspace
+description: Install Node.js 20, enable Corepack/Yarn 4, restore caches, and install dependencies immutably.
+
+inputs:
+  cache-turbo:
+    description: Whether to cache the Turborepo .turbo directory
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Get Yarn cache directory
+      id: yarn-cache
+      shell: bash
+      run: echo "dir=$(yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Yarn
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.yarn-cache.outputs.dir }}
+        key: yarn-${{ runner.os }}-node20-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          yarn-${{ runner.os }}-node20-
+
+    - name: Cache Turbo
+      if: inputs.cache-turbo == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .turbo
+        key: turbo-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      env:
+        # Avoids an install-time 404 downloading onnxruntime-node's unused Linux CUDA binaries.
+        ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+      run: yarn install --immutable

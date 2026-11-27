@@ -29,6 +29,14 @@
       "dependsOn": ["^build"],
       "cache": true
     },
+    "test:unit": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
     "clean": {
       "cache": false
     }

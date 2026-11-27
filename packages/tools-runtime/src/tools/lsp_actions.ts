@@ -198,27 +198,31 @@ export const lspRename: ToolHandler = async (args) => {
     changes.push(`  ${relPath} — ${edits.length} change(s)`);
     totalEdits += edits.length;
 
-    if (apply && existsSync(filePath)) {
-      const fileLines = readFileSync(filePath, "utf-8").split("\n");
-      const sorted = [...edits].sort((a, b) =>
-        b.range.start.line - a.range.start.line || b.range.start.character - a.range.start.character
-      );
-      for (const edit of sorted) {
-        const startL = edit.range.start.line;
-        const startC = edit.range.start.character;
-        const endL = edit.range.end.line;
-        const endC = edit.range.end.character;
-        if (startL === endL) {
-          const l = fileLines[startL] || "";
-          fileLines[startL] = l.slice(0, startC) + edit.newText + l.slice(endC);
-        } else {
-          const before = (fileLines[startL] || "").slice(0, startC);
-          const after = (fileLines[endL] || "").slice(endC);
-          fileLines.splice(startL, endL - startL + 1, before + edit.newText + after);
+    if (apply) {
+      try {
+        const fileLines = readFileSync(filePath, "utf-8").split("\n");
+        const sorted = [...edits].sort((a, b) =>
+          b.range.start.line - a.range.start.line || b.range.start.character - a.range.start.character
+        );
+        for (const edit of sorted) {
+          const startL = edit.range.start.line;
+          const startC = edit.range.start.character;
+          const endL = edit.range.end.line;
+          const endC = edit.range.end.character;
+          if (startL === endL) {
+            const l = fileLines[startL] || "";
+            fileLines[startL] = l.slice(0, startC) + edit.newText + l.slice(endC);
+          } else {
+            const before = (fileLines[startL] || "").slice(0, startC);
+            const after = (fileLines[endL] || "").slice(endC);
+            fileLines.splice(startL, endL - startL + 1, before + edit.newText + after);
+          }
         }
+        writeFileSync(filePath, fileLines.join("\n"), "utf-8");
+        changes[changes.length - 1] += " written";
+      } catch {
+        // File disappeared or unreadable
       }
-      writeFileSync(filePath, fileLines.join("\n"), "utf-8");
-      changes[changes.length - 1] += " written";
     }
   }
 

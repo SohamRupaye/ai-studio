@@ -9,7 +9,7 @@
 // Deliberately Electron-free so it can be unit-tested directly. pdf-parse,
 // mammoth, and xlsx are loaded lazily inside their branches: the common text
 // path pulls in no heavy dependency, and none of them run at process startup.
-import { readFile, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { extname } from "node:path";
 
 export type IngestKind = "text" | "pdf" | "docx" | "xlsx";
@@ -116,13 +116,20 @@ export async function extractText(path: string): Promise<IngestResult> {
   }
 
   try {
-    const { size } = await stat(path);
-    if (size > MAX_FILE_BYTES) {
-      return { ok: false, reason: `File is too large (max ${MAX_FILE_BYTES / 1024 / 1024}MB).` };
+    let buf: Buffer;
+    const fh = await open(path, "r");
+    try {
+      const { size } = await fh.stat();
+      if (size > MAX_FILE_BYTES) {
+        return { ok: false, reason: `File is too large (max ${MAX_FILE_BYTES / 1024 / 1024}MB).` };
+      }
+      buf = await fh.readFile();
+    } finally {
+      await fh.close();
     }
 
     if (kind === "text") {
-      const text = decodeText(await readFile(path));
+      const text = decodeText(buf);
       if (text === null) {
         return { ok: false, reason: "File isn't readable text — it looks binary or uses an unsupported encoding." };
       }
@@ -137,7 +144,6 @@ export async function extractText(path: string): Promise<IngestResult> {
       const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (
         b: Buffer,
       ) => Promise<{ text: string }>;
-      const buf = await readFile(path);
       const { text } = await pdfParse(buf);
       if (!text.trim()) {
         // Scanned (image-only) PDF: nothing to extract, but the preserved
@@ -156,7 +162,6 @@ export async function extractText(path: string): Promise<IngestResult> {
     }
 
     if (kind === "xlsx") {
-      const buf = await readFile(path);
       // SheetJS happily "parses" arbitrary bytes by falling back to CSV, so
       // require a real container first: ZIP (.xlsx) or CFB (.xls).
       const isZip = buf.length >= 2 && buf[0] === 0x50 && buf[1] === 0x4b;
@@ -182,7 +187,6 @@ export async function extractText(path: string): Promise<IngestResult> {
     const mammoth = (await import("mammoth")).default as {
       extractRawText(input: { buffer: Buffer }): Promise<{ value: string }>;
     };
-    const buf = await readFile(path);
     const { value } = await mammoth.extractRawText({ buffer: buf });
     if (!value.trim()) return { ok: false, reason: "No text found in the document." };
     return { ok: true, kind, text: value, mime: mimeFor(path) };

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer, type Server } from "node:http";
@@ -8,10 +8,9 @@ import { SkillsService, parseSkillFile } from "../../skills/index.js";
 
 let root: string;
 let skillsDir: string;
-let dirCounter = 0;
 
 beforeEach(async () => {
-  root = join(tmpdir(), `skills-svc-${process.pid}-${Date.now()}-${++dirCounter}`);
+  root = mkdtempSync(join(tmpdir(), "skills-svc-"));
   skillsDir = join(root, "skills");
   mkdirSync(skillsDir, { recursive: true });
 });

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,52 +13,20 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # onnxruntime-node's postinstall only downloads extra binaries on Linux/x64, to add CUDA execution-provider
-  # support. This project never uses GPU/CUDA inference, and the v1.20.1 CUDA release asset 404s, which breaks
-  # `yarn install` on Linux runners. Skip it; see onnxruntime-node/script/install.js.
-  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-
 jobs:
-  build-and-test:
-    name: Build, Lint, Typecheck & Test
+  quality:
+    name: Build, Lint & Typecheck
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Get Yarn cache directory
-        id: yarn-cache
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ runner.os }}-node20-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-${{ runner.os }}-node20-
-
-      - name: Cache Turbo
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: yarn install --immutable
+          cache-turbo: 'true'
 
       - name: Build packages
         run: yarn turbo run build --filter='!@squirl/desktop'
@@ -69,138 +37,51 @@ jobs:
       - name: Lint
         run: yarn turbo run lint
 
-      - name: Rebuild native modules (Node ABI, for tests)
-        run: npm rebuild better-sqlite3
-
-      - name: Test
-        run: yarn turbo run test
-
-  desktop-build:
-    name: Build Desktop App
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Get Yarn cache directory
-        id: yarn-cache
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ runner.os }}-node20-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-${{ runner.os }}-node20-
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      # Verifies the actual Electron app (apps/desktop) packages successfully end to end —
-      # builds every @squirl/* package it depends on, then runs electron-forge package.
-      - name: Build & package the Electron app
-        run: yarn turbo run build --filter=@squirl/desktop
-
-  duplicate-code:
-    name: Duplicate Code Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Get Yarn cache directory
-        id: yarn-cache
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ runner.os }}-node20-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-${{ runner.os }}-node20-
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Check for duplicate code (jscpd)
+      - name: Duplicate code check (jscpd)
         run: yarn dupcheck
 
-  coverage:
-    name: Coverage Report
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    needs: build-and-test
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Get Yarn cache directory
-        id: yarn-cache
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ runner.os }}-node20-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-${{ runner.os }}-node20-
-
-      - name: Cache Turbo
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: yarn install --immutable
+          cache-turbo: 'true'
 
       - name: Build packages
         run: yarn turbo run build --filter='!@squirl/desktop'
 
-      - name: Rebuild native modules (Node ABI, for tests)
-        run: npm rebuild better-sqlite3
-
-      - name: Run tests with coverage
-        run: yarn turbo run test --filter='!@squirl/desktop' -- --coverage
+      - name: Run unit tests with coverage
+        run: yarn turbo run test:unit -- --coverage
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: packages/*/coverage/
+          name: unit-coverage-report
+          path: |
+            packages/*/coverage/
+            apps/desktop/coverage/
           retention-days: 7
+          if-no-files-found: ignore
+
+  desktop-build:
+    name: Desktop Build Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      # Verifies the Electron app (main, preload, renderer) builds and packages cleanly end to end.
+      - name: Build & package desktop app
+        run: yarn turbo run build --filter=@squirl/desktop

@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "clean": "rm -rf dist",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts' --passWithNoTests",
+    "test:integration": "vitest run integration.test.ts --passWithNoTests"
   },
   "dependencies": {
     "@huggingface/transformers": "3.4.1",
@@ -23,6 +25,6 @@
   },
   "devDependencies": {
     "typescript": "5.7.2",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.12"
   }
 }

@@ -58,13 +58,17 @@ export async function resolveReferences(text: string, projectRoot: string): Prom
 
   for (const ref of refs) {
     const absPath = resolvePath(ref, projectRoot);
+    let fh: fs.FileHandle | undefined;
     try {
-      const stat = await fs.stat(absPath);
-      if (stat.isFile() && stat.size <= MAX_FILE_SIZE) {
-        const content = await fs.readFile(absPath, "utf-8");
+      fh = await fs.open(absPath, "r");
+      const st = await fh.stat();
+      if (st.isFile() && st.size <= MAX_FILE_SIZE) {
+        const content = await fh.readFile("utf-8");
         const ext = path.extname(absPath).toLowerCase();
         results.push({ path: ref, content, language: EXT_TO_LANG[ext] });
-      } else if (stat.isDirectory()) {
+      } else if (st.isDirectory()) {
+        await fh.close();
+        fh = undefined;
         // List directory contents (shallow)
         const entries = await fs.readdir(absPath, { withFileTypes: true });
         const listing = entries
@@ -73,8 +77,22 @@ export async function resolveReferences(text: string, projectRoot: string): Prom
           .join("\n");
         results.push({ path: ref, content: listing });
       }
-    } catch {
+    } catch (err: any) {
+      if (err?.code === "EISDIR") {
+        try {
+          const entries = await fs.readdir(absPath, { withFileTypes: true });
+          const listing = entries
+            .slice(0, 50)
+            .map(e => `${e.isDirectory() ? "📁" : "📄"} ${e.name}`)
+            .join("\n");
+          results.push({ path: ref, content: listing });
+        } catch {
+          // Skip unresolvable references silently
+        }
+      }
       // Skip unresolvable references silently
+    } finally {
+      await fh?.close();
     }
   }
   return results;

@@ -303,9 +303,10 @@ export class CodexOAuthProvider implements Provider {
       server.listen(OAUTH_PORT, () => {
         console.log(`\n[codex_oauth] Opening browser for login...`);
         console.log(`[codex_oauth] If browser does not open:\n  ${authUrl}\n`);
-        import("node:child_process").then(({ exec }) => {
-          const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-          exec(`${cmd} "${authUrl}"`);
+        import("node:child_process").then(({ execFile }) => {
+          if (process.platform === "darwin") execFile("open", [authUrl]);
+          else if (process.platform === "win32") execFile("cmd", ["/c", "start", "", authUrl]);
+          else execFile("xdg-open", [authUrl]);
         });
       });
 
@@ -341,8 +342,8 @@ export class CodexOAuthProvider implements Provider {
   }
 
   private saveAuth(auth: AuthData) {
-    mkdirSync(AUTH_DIR, { recursive: true });
-    writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2));
+    mkdirSync(AUTH_DIR, { recursive: true, mode: 0o700 });
+    writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2), { mode: 0o600 });
   }
 
   private loadAuth(): AuthData | null {

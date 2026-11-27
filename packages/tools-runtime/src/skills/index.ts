@@ -11,7 +11,7 @@
  * `deny` permission when filtering.
  */
 import * as fs from "fs/promises";
-import { existsSync, watch, type FSWatcher } from "node:fs";
+import { watch, type FSWatcher } from "node:fs";
 import * as path from "path";
 
 // --- Types ---
@@ -114,8 +114,13 @@ function parseFrontmatter(raw: string): { data: Record<string, string>; content:
   if (!match) return null;
   const data: Record<string, string> = {};
   for (const line of match[1]!.split("\n")) {
-    const kv = line.match(/^(\w[\w-]*):\s*(.+)$/);
-    if (kv) data[kv[1]!] = kv[2]!.trim().replace(/^["']|["']$/g, "");
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon);
+    const val = line.slice(colon + 1).trim();
+    if (/^\w[\w-]*$/.test(key) && val.length > 0) {
+      data[key] = val.replace(/^["']|["']$/g, "");
+    }
   }
   return { data, content: match[2]! };
 }
@@ -248,22 +253,24 @@ export class SkillsService {
    * collision. Returns the installed skill's name.
    */
   async importFromPath(src: string): Promise<string> {
-    const stat = await fs.stat(src).catch(() => null);
-    if (!stat) throw new Error("File or folder not found.");
-
-    if (stat.isDirectory()) {
-      const mdPath = path.join(src, "SKILL.md");
-      const raw = await fs.readFile(mdPath, "utf-8").catch(() => null);
-      if (raw === null) throw new Error("Folder has no SKILL.md.");
-      const parsed = parseSkillFile(raw);
-      if (!parsed.ok) throw new Error(parsed.reason);
-      const dest = await this.claimDir(parsed.name);
-      await fs.cp(src, dest, { recursive: true });
-      await this.load();
-      return parsed.name;
+    let raw: string;
+    try {
+      raw = await fs.readFile(src, "utf-8");
+    } catch (err: any) {
+      if (err?.code === "EISDIR") {
+        const mdPath = path.join(src, "SKILL.md");
+        const dirRaw = await fs.readFile(mdPath, "utf-8").catch(() => null);
+        if (dirRaw === null) throw new Error("Folder has no SKILL.md.");
+        const parsed = parseSkillFile(dirRaw);
+        if (!parsed.ok) throw new Error(parsed.reason);
+        const dest = await this.claimDir(parsed.name);
+        await fs.cp(src, dest, { recursive: true });
+        await this.load();
+        return parsed.name;
+      }
+      throw new Error("File or folder not found.");
     }
 
-    const raw = await fs.readFile(src, "utf-8");
     const parsed = parseSkillFile(raw);
     if (!parsed.ok) throw new Error(parsed.reason);
     const dest = await this.claimDir(parsed.name);
@@ -552,7 +559,11 @@ export class SkillsService {
         if (bytes.byteLength > MAX_FILE_BYTES) {
           throw new Error(`"${file.rel}" exceeds ${MAX_FILE_BYTES / 1024 / 1024}MB.`);
         }
-        const filePath = path.join(dest, file.rel);
+        const resolvedDest = path.resolve(dest);
+        const filePath = path.resolve(dest, file.rel);
+        if (filePath !== resolvedDest && !filePath.startsWith(resolvedDest + path.sep)) {
+          throw new Error(`Invalid file path "${file.rel}".`);
+        }
         await fs.mkdir(path.dirname(filePath), { recursive: true });
         await fs.writeFile(filePath, bytes);
       }
@@ -565,9 +576,14 @@ export class SkillsService {
   /** Reserve <skillsDir>/<name> for a new install; throws if the name is taken. */
   private async claimDir(name: string): Promise<string> {
     if (this.skills.has(name)) throw new Error(`A skill named "${name}" is already installed.`);
+    await fs.mkdir(this.skillsDir, { recursive: true });
     const dest = path.join(this.skillsDir, name);
-    if (existsSync(dest)) throw new Error(`A skill named "${name}" is already installed.`);
-    await fs.mkdir(dest, { recursive: true });
+    try {
+      await fs.mkdir(dest);
+    } catch (err: any) {
+      if (err?.code === "EEXIST") throw new Error(`A skill named "${name}" is already installed.`);
+      throw err;
+    }
     return dest;
   }
 
