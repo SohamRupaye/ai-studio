@@ -90,6 +90,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist-release/* \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Squirl $GITHUB_REF_NAME" \
             --generate-notes \
             --draft
